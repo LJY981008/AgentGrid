@@ -19,6 +19,11 @@
 
 - [[research/2026-06-12-스택-버전-리서치|2026-06-12 스택 버전 리서치]] — Boot 4.1/Next 16/인프라/Claude Code 포맷 확정 근거
 
+## 🛠️ 구현 히스토리 (work-history/)
+
+> 모든 구현의 의도·계획(플랜 백업)·전후 비교. 인덱스: [[work-history/INDEX]]
+> 템플릿: [[templates/work-history-template]] — src 변경 커밋에 엔트리 동반 (drift 강제)
+
 ## 📓 개발 일지 (dev-log/)
 
 > 템플릿: [[templates/devlog-template]] — 막힌 것·결정·다음 할 일 기록

@@ -19,6 +19,7 @@ argument-hint: "[변경-요약?]"
 | 물리 강제 필요한 규칙 | `.claude/hooks/*.sh` + `settings.json` 등록 | "성공 조용, 실패 시끄럽게". 차단은 PreToolUse + exit 2 만 신뢰 |
 | 정책·구조·인덱스 | `CLAUDE.md` (루트/backend/frontend) | 루트 200줄 이내 유지 — 길어지면 rules/skills 로 분리 |
 | 아키텍처 결정 기록 | `docs/decisions/ADR-{n}-{제목}.md` | 왜 그렇게 했는지 |
+| 구현 의도·플랜 백업·전후 비교 | `docs/work-history/{날짜}-{작업명}.md` + INDEX 행 | 플랜 승인 직후 전문 백업. src 변경 커밋에 엔트리 동반 (drift 강제) |
 
 ## 2. 갱신 체크리스트
 
@@ -31,6 +32,7 @@ argument-hint: "[변경-요약?]"
 - [ ] 에이전트 추가/변경 시: 세션 재시작해야 등록됨을 사용자에게 고지. `name` 중복 금지 (조용히 폐기됨)
 - [ ] 커스텀 메트릭 추가 시: `infra/monitoring/grafana/dashboards/` 패널 동시 갱신 (모니터링 지속 업데이트)
 - [ ] docs/decisions·research 신규 문서 시: `docs/HOME.md` MOC 에 링크 추가 (drift 강제)
+- [ ] 구현 작업 시: `docs/work-history/` 엔트리 (의도/목적 → 계획/플랜 백업 → Before → After → 비교) + `INDEX.md` 행 — src 변경 커밋에 동반 필수 (drift 강제)
 
 ## 3. 주기 감사 (대규모 변경 후 또는 격주)
 

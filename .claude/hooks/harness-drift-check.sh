@@ -44,6 +44,9 @@ declare -a RULES=(
   'infra/monitoring/.*@@CLAUDE.md:backend/CLAUDE.md'
   'docs/plans/.*\.md@@docs/plans/PLAN_STATUS.md'
   'docs/(decisions|research)/.*\.md@@docs/HOME.md'
+  # work-history 규약: src 구현 변경은 구현 히스토리 엔트리 동반 (대상이 /로 끝나면 prefix 매칭)
+  'backend/src/.*@@docs/work-history/'
+  'frontend/src/.*@@docs/work-history/'
 )
 
 MISSING=""
@@ -55,8 +58,14 @@ for rule in "${RULES[@]}"; do
     SYNCED=0
     IFS=':' read -ra DOC_ARR <<< "$DOCS"
     for doc in "${DOC_ARR[@]}"; do
+      if [[ "$doc" == */ ]]; then
+        # 디렉토리 prefix 매칭 — 해당 디렉토리 내 아무 파일이나 diff 에 있으면 충족
+        if echo "$CHANGED" | grep -q "^${doc}"; then
+          SYNCED=1
+          break
+        fi
       # -x 정확 라인 매칭 — "CLAUDE.md" 가 backend/CLAUDE.md 에 부분 매칭되는 오탐 방지
-      if echo "$CHANGED" | grep -qxF "$doc"; then
+      elif echo "$CHANGED" | grep -qxF "$doc"; then
         SYNCED=1
         break
       fi

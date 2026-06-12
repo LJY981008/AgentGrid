@@ -14,6 +14,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 계획 수립 후 시뮬레이션 검증 — 부작용·엣지 케이스를 다른 시선에서 여러 번 검토
   - 이전 단계 완료 확인 없이 다음 단계로 넘어가지 않음
   - 사용자는 프론트 비전문가 — 프론트 결정은 백엔드 개발자가 이해할 수 있게 설명
+- **⚙️ 구현 히스토리 (work-history) 규약**: 모든 구현 작업(플랜모드/일반 불문)은 `docs/work-history/{날짜}-{작업명}.md` 엔트리 동반
+  - **플랜모드**: 사용자 승인 직후 첫 행동 = 승인된 플랜 전문 백업 + 의도/목적 + Before 실측 (post-plan-approve 훅이 리마인드)
+  - **일반 구현**: 시작 시 의도/목적 + Before, 완료 시 After(검증 출력·diff stat·커밋 SHA) + 비교/회고
+  - 템플릿: `docs/templates/work-history-template.md`, 인덱스 행 추가: `docs/work-history/INDEX.md`
+  - 물리 강제: src 변경 커밋에 엔트리 없으면 harness-drift-check 가 세션 종료 차단
 - **작업 완료 후**: 코드 수정 완료 시 아래를 자동 실행
   1. 검증 — backend: `cd backend && ./gradlew compileJava --no-daemon` / frontend: `cd frontend && npm run typecheck` (Stop 훅이 자동 보조)
   2. 커밋 (한글 메시지, 서명/Co-Authored-By 금지)
@@ -32,7 +37,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **하네스 파일 변경 시 반드시 읽을 파일** (순서대로):
 1. `.claude/settings.json` — 훅 등록 + 권한 매트릭스
-2. `.claude/hooks/` — 8종: `pre-bash-guard.sh`(위험 Bash 차단 — 셸 구분자·경로 prefix 우회 커버, **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제 — `-m`/`-am`/`--message[=]`/HEREDOC 전 형태), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지 — untracked 신규 파일 포함, 대상 문서는 정확 경로 매칭), `session-start.sh`(reloadSkills + watchPaths), `log-loaded-instructions.sh`(InstructionsLoaded — rules/skills 로드 관측, `.state/instructions-loaded.log`). 훅 수정 시 회귀 테스트 필수: `.claude/hooks/tests/run.sh` (33케이스 — exit code + stderr 단언, 케이스 추가하며 확장)
+2. `.claude/hooks/` — 9종: `pre-bash-guard.sh`(위험 Bash 차단 — 셸 구분자·경로 prefix 우회 커버, **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제 — `-m`/`-am`/`--message[=]`/HEREDOC 전 형태), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지 — untracked 포함, 정확 경로 + `/`종결 시 디렉토리 prefix 매칭, **src→work-history 강제 포함**), `session-start.sh`(reloadSkills + watchPaths), `log-loaded-instructions.sh`(InstructionsLoaded 로드 관측), `post-plan-approve.sh`(ExitPlanMode 직후 work-history 백업 리마인드). 훅 수정 시 회귀 테스트 필수: `.claude/hooks/tests/run.sh` (36케이스 — exit code + stderr 단언, 케이스 추가하며 확장)
 3. `.claude/rules/` + `.claude/skills/` + `.claude/agents/` — 인덱스는 아래 표
 4. 이 섹션 — 변경 절차 자체
 

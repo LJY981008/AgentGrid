@@ -67,6 +67,11 @@ echo "compose.yaml" | grep -qE '(docker-)?compose.*\.ya?ml'; t "drift 패턴: co
 echo ".claude/agents/new-agent.md" | grep -qE '\.claude/agents/[a-z-]+\.md'; t "drift 패턴: 신규 agent 매칭" 0 "$?"
 echo "backend/CLAUDE.md" | grep -qxF "CLAUDE.md"; t "drift 대상: 정확 매칭(-x)이 부분매칭 거부" 1 "$?"
 
+# ---- work-history 체계 (post-plan-approve + drift prefix) ----
+echo '{}' | .claude/hooks/post-plan-approve.sh | jq -e '.hookSpecificOutput.additionalContext | length > 0' >/dev/null; t "post-plan-approve JSON 유효" 0 "$?"
+echo "docs/work-history/2026-06-12-x.md" | grep -q "^docs/work-history/"; t "drift prefix: work-history 디렉토리 충족" 0 "$?"
+echo "backend/src/main/java/com/agentgrid/X.java" | grep -qE 'backend/src/.*'; t "drift 패턴: backend src 매칭" 0 "$?"
+
 # ---- session-start / log-loaded-instructions ----
 echo '{}' | .claude/hooks/session-start.sh | jq -e '.hookSpecificOutput.reloadSkills == true' >/dev/null; t "session-start JSON 유효" 0 "$?"
 printf '{"files":["CLAUDE.md"]}' | .claude/hooks/log-loaded-instructions.sh; t "log-loaded-instructions 무해" 0 "$?"
