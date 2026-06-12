@@ -25,7 +25,8 @@ CWD="$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)"
 PROJECT="${CLAUDE_PROJECT_DIR:-${CWD:-$(pwd)}}"
 cd "$PROJECT" || exit 0
 
-CHANGED="$(git -C "$PROJECT" status --porcelain 2>/dev/null | awk '{print $2}' || true)"
+# porcelain XY+공백 3글자 제거 + rename(old -> new)은 new 경로만 — 공백 경로/rename 오파싱 방지
+CHANGED="$(git -C "$PROJECT" status --porcelain 2>/dev/null | cut -c4- | sed 's/.* -> //' || true)"
 [[ -z "$CHANGED" ]] && exit 0
 
 fail() {

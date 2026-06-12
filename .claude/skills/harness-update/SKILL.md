@@ -1,7 +1,7 @@
 ---
 name: harness-update
 description: Procedure for keeping the AgentGrid Claude Code harness (CLAUDE.md, rules, skills, agents, hooks, drift mappings) synchronized with the evolving codebase. Use when adding new conventions, patterns, modules, agents, or when harness-drift-check blocks a session. Trigger phrases - 하네스 업데이트, 컨벤션 추가, 규칙 추가, 새 패턴 도입, 드리프트 매핑 추가, 하네스 점검.
-argument-hint: [변경-요약?]
+argument-hint: "[변경-요약?]"
 ---
 
 # /harness-update — 하네스 지속 업데이트 절차

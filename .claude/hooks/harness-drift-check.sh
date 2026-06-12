@@ -20,7 +20,9 @@ STOP_ACTIVE="$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/
 PROJECT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 cd "$PROJECT" || exit 0
 
-CHANGED="$(git -C "$PROJECT" diff --name-only HEAD -- ':(exclude).omc' ':(exclude).claude/hooks/.state' 2>/dev/null || true)"
+# tracked 변경 + untracked 신규 파일(예: 새 agent/skill 추가) 합집합 — 신규 하네스 요소도 동기화 감지
+CHANGED="$({ git -C "$PROJECT" diff --name-only HEAD -- ':(exclude).omc' ':(exclude).claude/hooks/.state' 2>/dev/null;
+             git -C "$PROJECT" ls-files --others --exclude-standard 2>/dev/null; } | sort -u || true)"
 [[ -z "$CHANGED" ]] && exit 0
 
 # 매핑 표: 코드 경로 패턴 @@ 동기화 대상 문서 (콜론 구분 다중 — 하나라도 diff 에 있으면 충족)
@@ -35,7 +37,7 @@ declare -a RULES=(
   'backend/build\.gradle@@backend/CLAUDE.md'
   'backend/settings\.gradle@@backend/CLAUDE.md'
   'frontend/package\.json@@frontend/CLAUDE.md'
-  'docker-compose.*\.yml@@CLAUDE.md'
+  '(docker-)?compose.*\.ya?ml@@CLAUDE.md'
   'docs/plans/.*\.md@@docs/plans/PLAN_STATUS.md'
 )
 
@@ -48,7 +50,8 @@ for rule in "${RULES[@]}"; do
     SYNCED=0
     IFS=':' read -ra DOC_ARR <<< "$DOCS"
     for doc in "${DOC_ARR[@]}"; do
-      if echo "$CHANGED" | grep -qF "$doc"; then
+      # -x 정확 라인 매칭 — "CLAUDE.md" 가 backend/CLAUDE.md 에 부분 매칭되는 오탐 방지
+      if echo "$CHANGED" | grep -qxF "$doc"; then
         SYNCED=1
         break
       fi

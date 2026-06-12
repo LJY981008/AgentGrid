@@ -1,32 +1,35 @@
 #!/usr/bin/env bash
-# PreToolUse hook: enforce conventional commit tag on `git commit -m`. (AgentGrid)
+# PreToolUse hook: enforce conventional commit tag on `git commit`. (AgentGrid)
+# -m / -am 등 결합 단축플래그 / --message=VALUE / --message VALUE / HEREDOC 전부 커버
 # stdin: JSON with tool_input.command
 # stdout: JSON with hookSpecificOutput.permissionDecision
 
-set -euo pipefail
+set -uo pipefail
 
 if [[ "${CLAUDE_HOOKS_SKIP:-}" == "1" ]]; then
   exit 0
 fi
 
-INPUT="$(cat)"
-CMD="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')"
+INPUT="$(cat || true)"
+# 파싱 실패는 fail-open (다른 훅과 일관)
+CMD="$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")"
 
 # Only act on real `git commit` invocations
 if ! printf '%s' "$CMD" | grep -qE '(^|[[:space:];&|])git[[:space:]]+commit([[:space:]]|$)'; then
   exit 0
 fi
 
-# Extract the first -m argument.
-# Priority 1: HEREDOC form `-m "$(cat <<'DELIM' ... DELIM)"` — extract the heredoc body.
-# Priority 2: quoted `-m "..."` or `-m '...'` (multi-line via slurp).
-# Priority 3: unquoted `-m word`.
+# Extract the commit message.
+# Priority 1: HEREDOC form `-m "$(cat <<'DELIM' ... DELIM)"` (결합 플래그 -am 포함)
+# Priority 2: `--message=VALUE` (quoted / unquoted)
+# Priority 3: `-m` / `-am` / `-sm` 등 결합 단축플래그 + `--message VALUE` (quoted / unquoted)
 MSG="$(printf '%s' "$CMD" | perl -0777 -ne '
-  if (/-m\s+"?\$\(\s*cat\s*<<\s*["'\'']?(\w+)["'\'']?\s*\n(.*?)\n\1/s) { print $2; exit }
-  if (/(?:^|\s)-m\s+(?:"((?:\\.|[^"\\])*)"|'\''((?:\\.|[^'\''\\])*)'\''|(\S+))/s) { print ($1 // $2 // $3); exit }
+  if (/(?:-[a-zA-Z]*m|--message)\s+"?\$\(\s*cat\s*<<\s*["'\'']?(\w+)["'\'']?\s*\n(.*?)\n\1/s) { print $2; exit }
+  if (/(?:^|\s)--message=(?:"((?:\\.|[^"\\])*)"|'\''((?:\\.|[^'\''\\])*)'\''|(\S+))/s) { print ($1 // $2 // $3); exit }
+  if (/(?:^|\s)(?:-[a-zA-Z]*m|--message)\s+(?:"((?:\\.|[^"\\])*)"|'\''((?:\\.|[^'\''\\])*)'\''|(\S+))/s) { print ($1 // $2 // $3); exit }
 ')"
 
-# No -m? Likely editor/HEREDOC commit — skip (can't check reliably)
+# No message flag? Likely editor commit — skip (can't check reliably)
 if [[ -z "$MSG" ]]; then
   exit 0
 fi

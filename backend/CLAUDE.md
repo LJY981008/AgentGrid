@@ -8,7 +8,7 @@
 - Java 21 (LTS) / Spring Boot **4.1.0** (2026-06-10 GA — 3.5는 2026-06-30 OSS 종료라 채택 안 함)
 - Spring Framework 7.0.x / Jakarta EE 11 (Servlet 6.1, JPA 3.2) / Hibernate 7 / **Jackson 3 (`tools.jackson` 패키지 — 2.x와 다름 주의)**
 - Gradle wrapper (start.spring.io 동봉 버전, 9.x 호환)
-- 의존성: web, data-jpa, postgresql, data-redis, amqp(RabbitMQ), validation, actuator, lombok, flyway
+- 의존성: webmvc(구 web — Boot 4 명칭), data-jpa, postgresql, data-redis, amqp(RabbitMQ), validation, actuator, lombok, flyway
 
 ## ⚠️ Boot 4.x 주의사항
 

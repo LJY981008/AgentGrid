@@ -29,7 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **하네스 파일 변경 시 반드시 읽을 파일** (순서대로):
 1. `.claude/settings.json` — 훅 등록 + 권한 매트릭스
-2. `.claude/hooks/` — 7종: `pre-bash-guard.sh`(위험 Bash 차단 — **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지), `session-start.sh`(reloadSkills + watchPaths)
+2. `.claude/hooks/` — 7종: `pre-bash-guard.sh`(위험 Bash 차단 — 셸 구분자·경로 prefix 우회 커버, **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제 — `-m`/`-am`/`--message[=]`/HEREDOC 전 형태), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지 — untracked 신규 파일 포함, 대상 문서는 정확 경로 매칭), `session-start.sh`(reloadSkills + watchPaths). 훅 수정 시 회귀 테스트 필수: `.claude/hooks/tests/run.sh` (19케이스 — 케이스 추가하며 확장)
 3. `.claude/rules/` + `.claude/skills/` + `.claude/agents/` — 인덱스는 아래 표
 4. 이 섹션 — 변경 절차 자체
 
