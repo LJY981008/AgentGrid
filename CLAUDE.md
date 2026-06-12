@@ -111,13 +111,26 @@ cd frontend && npm run typecheck                      # 타입 검증 (Stop 훅 
 
 ## Subagents 인덱스 (.claude/agents/)
 
-> 역할 분리 원칙: 기획↔구현↔스키마↔감사는 반드시 해당 에이전트로 위임. 결과만 메인으로.
+> 역할 분리 원칙: 기획↔구현↔스키마↔검증↔감사는 반드시 해당 에이전트로 위임. 결과만 메인으로.
 
+**설계·구현**:
 - `product-planner` — 기획 구체화·요구사항·마일스톤 (코드 작성 금지)
 - `backend-expert` — Spring Boot 설계·구현·리뷰 (Outbox/MQ/Redis/신뢰성 지표)
 - `frontend-expert` — Next.js/React 설계·구현 (비전문가 친화 설명 의무)
 - `db-architect` — PostgreSQL 스키마·ERD·인덱스·Flyway (마이그레이션 파일만)
+- `devops-engineer` — compose/Dockerfile/CI/모니터링 (이미지 3중 일치·대시보드 동시 갱신 규약)
+
+**검증·품질** (코드 수정 금지, 보고만):
+- `test-engineer` — 테스트 전략·작성·flaky 안정화 (Testcontainers 패턴) ※구현형 예외
+- `convention-reviewer` — rules 3종 기준 컨벤션 위반 전수 검사 (로직 리뷰는 superpowers:code-reviewer)
+- `security-reviewer` — 위협 모델·보안 리뷰 (외부 repo 분석 플랫폼 특화: SSRF·비실행 원칙·LLM 인젝션)
+- `qa-tester` — 실동작 검증 (Playwright E2E·API 스모크·시나리오)
 - `harness-auditor` — 하네스 문서↔코드 정합성 감사 (격주 또는 대규모 변경 후)
+
+**리서치**:
+- `tech-researcher` — 버전/호환성/라이브러리 리서치 (학습데이터 불신 — 웹 실측, docs/research/ 아카이브)
+
+> 도메인 분석 계열(outbox-analyzer, pipeline-diagnostician 류)은 의도적 보류 — "같은 분석 2회 반복 후 생성" 원칙 ([harness-update §4](.claude/skills/harness-update/SKILL.md) 로드맵)
 
 ## Skills 인덱스 (.claude/skills/)
 
