@@ -27,8 +27,10 @@ argument-hint: "[변경-요약?]"
 - [ ] **`harness-drift-check.sh` 매핑 표에 신규 매핑 추가** — 새 코드 영역 ↔ 문서 대응이 생겼다면 필수
   - 형식: `'코드경로패턴@@문서1:문서2'` (grep -E 패턴 @@ 콜론 구분 대상)
   - 예: 새 Consumer 도입 시 `'backend/.*Consumer\.java@@.claude/rules/backend-conventions.md'`
-- [ ] 훅 변경 시 스모크 테스트: 샘플 JSON 주입 → 기대 exit code 확인
-- [ ] 에이전트 추가/변경 시: 세션 재시작해야 등록됨을 사용자에게 고지
+- [ ] 훅 변경 시 회귀 테스트: `.claude/hooks/tests/run.sh` 실행 + 신규 케이스 추가 (exit code + stderr 단언)
+- [ ] 에이전트 추가/변경 시: 세션 재시작해야 등록됨을 사용자에게 고지. `name` 중복 금지 (조용히 폐기됨)
+- [ ] 커스텀 메트릭 추가 시: `infra/monitoring/grafana/dashboards/` 패널 동시 갱신 (모니터링 지속 업데이트)
+- [ ] docs/decisions·research 신규 문서 시: `docs/HOME.md` MOC 에 링크 추가 (drift 강제)
 
 ## 3. 주기 감사 (대규모 변경 후 또는 격주)
 
@@ -38,13 +40,22 @@ Agent(subagent_type="harness-auditor", prompt="하네스 전수 감사 — 문�
 
 ## 4. 성장 로드맵 (아직 미도입 — 시점 도달 시 이 스킬 갱신)
 
-| 시점 | 도입 항목 | 참고 |
+> 2026-06-12 tbbe-hub 대비 갭 분석으로 검증·확장된 표. "단계에 안 맞는 선제 도입"을 막는 장치이기도 함.
+
+| 시점 (트리거) | 도입 항목 | 참고 |
 |---|---|---|
 | 백엔드 코드 누적 시 | Spotless + Checkstyle (정적분석 승격) + PostToolUse 포맷 훅 | `/home/code/project/claude-setting/guide/phase-f-static-analysis.md` |
-| 분석 에이전트 활동 누적 시 | `recommend-agent-on-stop.sh` (경로→에이전트 추천) | tbbe-hub `.claude/hooks/` 동명 스크립트 |
+| 분석 에이전트 활동 누적 + 산출물 포맷 계약 정의 시 | `recommend-agent-on-stop.sh` + `subagent-stop-check.sh` (SubagentStop 검증) **세트** | tbbe-hub `.claude/hooks/` 동명 |
+| 첫 read-only 분석 에이전트 추가 시 | 에이전트 `model` 핀(저비용) + `skills` preload 세트 적용 | tbbe-hub agents (model: sonnet 핀 13종) |
+| 같은 구조물 2회째 작성 시 (첫 Consumer 2번째 등) | `.claude/rules/checklists.md` — 첫 구현의 실측 파일 목록을 체크리스트로 승격 | tbbe-hub `.claude/rules/checklists.md` |
+| 동일 지시문 3회+ 복붙하는 일괄 작업 발생 시 | `.claude/prompts/` 재사용 프롬프트 | tbbe-hub `.claude/prompts/` |
+| 첫 통합 테스트 패턴 다양화 시 | CLAUDE.md "통합 테스트 선택 기준" 절 (로컬 vs CI 위임) | tbbe-hub CLAUDE.md L23-28 |
+| 환경 종속 allow(원격 IP·자격증명·MCP) 첫 필요 시 | settings.local.json 분리 운용 (정책=settings.json / 환경=local) | tbbe-hub 패턴 — **local 은 gitignore 유지** |
+| worktree 작업 첫 권한 프롬프트 시 | `permissions.additionalDirectories` 1줄 | tbbe-hub settings.json L16 |
+| MVP 세로 슬라이스 1개 완성 시 | `docs/onboarding/` 2-3종 (아키텍처·DB) + Repository 쿼리 20개 시 QUERY_CATALOG | tbbe-hub `docs/onboarding/` |
+| 운영(스테이징) 배포 + 첫 인시던트 시 | 운영 진단 slash 매크로 (첫 장애 분석 명령을 매크로로 승격) | tbbe-hub `/prod-log`, `/dlq-check` 류 |
 | 도메인 지식 누적 시 | 도메인 skills (flow-diagrams, status-lifecycle, scenarios 류) | tbbe-hub `.claude/skills/` |
-| CI 구축 시 | 주간 GC (schedule + 알림) | `claude-setting/guide/phase-h-weekly-gc.md` |
-| 훅 7종+ 시 | `.claude/hooks/tests/` 회귀 테스트 디렉토리 | tbbe-hub `.claude/hooks/tests/run.sh` |
+| CI 안정화 후 | 주간 GC (schedule + 알림) | `claude-setting/guide/phase-h-weekly-gc.md` |
 
 ## 5. 참고 레퍼런스
 

@@ -36,9 +36,14 @@ declare -a RULES=(
   '\.claude/hooks/[a-z-]+\.sh@@CLAUDE.md'
   'backend/build\.gradle@@backend/CLAUDE.md'
   'backend/settings\.gradle@@backend/CLAUDE.md'
+  'backend/Dockerfile@@backend/CLAUDE.md'
+  'backend/src/test/java/com/agentgrid/TestcontainersConfiguration\.java@@backend/CLAUDE.md'
   'frontend/package\.json@@frontend/CLAUDE.md'
+  'frontend/Dockerfile@@frontend/CLAUDE.md'
   '(docker-)?compose.*\.ya?ml@@CLAUDE.md'
+  'infra/monitoring/.*@@CLAUDE.md:backend/CLAUDE.md'
   'docs/plans/.*\.md@@docs/plans/PLAN_STATUS.md'
+  'docs/(decisions|research)/.*\.md@@docs/HOME.md'
 )
 
 MISSING=""

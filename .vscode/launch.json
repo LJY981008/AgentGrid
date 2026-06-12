@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Backend 디버그 (인프라 compose 필요)",
+      "request": "launch",
+      "mainClass": "com.agentgrid.AgentgridBackendApplication",
+      "projectName": "backend",
+      "cwd": "${workspaceFolder}/backend"
+    },
+    {
+      "type": "java",
+      "name": "Backend 디버그 (Testcontainers — compose 불필요)",
+      "request": "launch",
+      "mainClass": "com.agentgrid.TestAgentgridBackendApplication",
+      "projectName": "backend",
+      "cwd": "${workspaceFolder}/backend"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Frontend 디버그 (next dev)",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
+    }
+  ]
+}

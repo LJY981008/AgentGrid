@@ -17,8 +17,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **작업 완료 후**: 코드 수정 완료 시 아래를 자동 실행
   1. 검증 — backend: `cd backend && ./gradlew compileJava --no-daemon` / frontend: `cd frontend && npm run typecheck` (Stop 훅이 자동 보조)
   2. 커밋 (한글 메시지, 서명/Co-Authored-By 금지)
-  3. **여기서 멈춤** (push는 사용자 요청 시에만 — 권한은 열려 있으나 정책상 대기)
+  3. **작업 요약 리포트 출력** (아래 포맷) — 문서 파일 생성 금지, 채팅으로만
+  4. **여기서 멈춤** (push는 사용자 요청 시에만 — 권한은 열려 있으나 정책상 대기)
+- **작업 요약 리포트 포맷 (필수, 5단)**: **원인**(왜 필요했나) / **분석**(무엇을 실측했고 어떤 엣지를 발견했나) / **대응**(어떤 파일을 어떻게) / **이유**(대안 대비 선택 근거) / **결과 & 지표**(커밋 SHA·변경 라인 수·테스트/빌드 시간 — 정량 지표 테이블, 지표 없는 작업도 파일·라인 수는 필수)
 - **커밋 태그**: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf` (verify-commit-msg 훅이 강제)
+- **VS Code 하이브리드 제어권**: 사용자는 IDE(tasks/launch — `.vscode/`)로 실행·디버그, Claude 는 CLI+훅으로 검증. 동일 명령 매핑이므로 어느 쪽 실행이든 결과 동등. Claude 가 dev 서버를 띄울 땐 백그라운드로, 종료는 사용자 확인 후
 
 ---
 
@@ -29,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **하네스 파일 변경 시 반드시 읽을 파일** (순서대로):
 1. `.claude/settings.json` — 훅 등록 + 권한 매트릭스
-2. `.claude/hooks/` — 7종: `pre-bash-guard.sh`(위험 Bash 차단 — 셸 구분자·경로 prefix 우회 커버, **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제 — `-m`/`-am`/`--message[=]`/HEREDOC 전 형태), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지 — untracked 신규 파일 포함, 대상 문서는 정확 경로 매칭), `session-start.sh`(reloadSkills + watchPaths). 훅 수정 시 회귀 테스트 필수: `.claude/hooks/tests/run.sh` (19케이스 — 케이스 추가하며 확장)
+2. `.claude/hooks/` — 8종: `pre-bash-guard.sh`(위험 Bash 차단 — 셸 구분자·경로 prefix 우회 커버, **git 은 전부 허용이 사용자 정책**), `verify-commit-msg.sh`(커밋 태그 exit 2 강제 — `-m`/`-am`/`--message[=]`/HEREDOC 전 형태), `pre-edit-guard.sh`(Read 없는 편집 차단), `post-work-check.sh`(변경 스택 한정 빌드 검증, asyncRewake), `spawn-reviewer-on-stop.sh`(diff 30줄+ 리뷰 유도), `harness-drift-check.sh`(코드↔문서 동기화 감지 — untracked 신규 파일 포함, 대상 문서는 정확 경로 매칭), `session-start.sh`(reloadSkills + watchPaths), `log-loaded-instructions.sh`(InstructionsLoaded — rules/skills 로드 관측, `.state/instructions-loaded.log`). 훅 수정 시 회귀 테스트 필수: `.claude/hooks/tests/run.sh` (33케이스 — exit code + stderr 단언, 케이스 추가하며 확장)
 3. `.claude/rules/` + `.claude/skills/` + `.claude/agents/` — 인덱스는 아래 표
 4. 이 섹션 — 변경 절차 자체
 
@@ -50,11 +53,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 작업 트리거 | 자동 로드 경로 | 핵심 내용 |
 |---|---|---|
-| 백엔드 Java 작성·수정 (모든 경우) | [.claude/rules/backend-conventions.md](.claude/rules/backend-conventions.md) | import/Entity/DTO/ApiResult/신뢰성 원칙 |
+| 백엔드 Java 작성·수정 (모든 경우) | [.claude/rules/backend-conventions.md](.claude/rules/backend-conventions.md) + [logging-rules.md](.claude/rules/logging-rules.md) | import/Entity/DTO/ApiResult/신뢰성 원칙 + 로그 레벨·placeholder |
 | 프론트 작성·수정 (모든 경우) | [.claude/rules/frontend-conventions.md](.claude/rules/frontend-conventions.md) + `frontend/AGENTS.md` | 서버 컴포넌트 기본, Next 동봉 문서 우선 |
+| 버그·빌드 실패·테스트 실패 | [debugging-discipline](.claude/skills/debugging-discipline/SKILL.md) | 추측성 수정 금지, 단일 가설, 3회 중단 |
 | 하네스 변경·컨벤션 추가 | [harness-update](.claude/skills/harness-update/SKILL.md) | 분류→배치→drift 매핑 추가 |
-| 기획 작업 | `docs/plans/` 전체 (현재 기준: `1st_plan.md`) | 기획은 product-planner 에이전트 |
+| 기획 작업 | `docs/plans/` (현황: [PLAN_STATUS.md](docs/plans/PLAN_STATUS.md)) | 기획은 product-planner 에이전트 |
 | 스키마 변경 | Flyway 마이그레이션 파일로만 | 직접 DDL 은 pre-bash-guard 차단 |
+| 커스텀 메트릭 추가 | Grafana 대시보드 동시 갱신 (`infra/monitoring/grafana/dashboards/`) | 모니터링 지속 업데이트 규약 |
 
 **위반 시**: 매핑 문서를 안 읽고 추측 답변 시 사용자가 거부함
 
@@ -78,12 +83,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 docker compose up -d                                  # 로컬 인프라 (PG 18 / Redis 8 / RabbitMQ 4.3 + mgmt UI :15672)
-cd backend && ./gradlew bootRun                       # 백엔드 실행 (:8080)
-cd backend && ./gradlew compileJava --no-daemon       # 컴파일 검증 (Stop 훅 자동)
-cd backend && ./gradlew test --no-daemon              # 테스트
+docker compose --profile monitoring up -d             # + Prometheus(:9090) / Grafana(:3001, admin/agentgrid-local)
+docker compose --profile app up -d --build            # + 백엔드/프론트 컨테이너 (풀스택)
+cd backend && ./gradlew bootRun                       # 백엔드 실행 (:8080) — compose 인프라 필요
+cd backend && ./gradlew bootTestRun                   # 백엔드 실행 — compose 불필요 (Testcontainers 자동)
+cd backend && ./gradlew test --no-daemon              # 통합 테스트 (Testcontainers: PG/MQ/Redis 자동 기동)
 cd frontend && npm run dev                            # 프론트 개발 서버 (:3000)
 cd frontend && npm run typecheck                      # 타입 검증 (Stop 훅 자동)
-cd frontend && npm run build                          # 프로덕션 빌드
+.claude/hooks/tests/run.sh                            # 훅 회귀 테스트 (33케이스)
 ```
 
 ---
@@ -94,8 +101,11 @@ cd frontend && npm run build                          # 프로덕션 빌드
 |---|---|---|
 | `backend/` | Spring Boot API + 비동기 파이프라인 | [backend/CLAUDE.md](backend/CLAUDE.md) |
 | `frontend/` | Next.js 공개 디렉토리/검색 UI | [frontend/CLAUDE.md](frontend/CLAUDE.md) |
-| `docs/plans/` | 기획 문서 (버전 넘버링, 덮어쓰기 금지) | |
-| `docs/decisions/` | ADR (아키텍처 결정 기록) | |
+| `docs/` | **옵시디언 볼트** — 기획(plans)·ADR(decisions)·리서치(research)·일지(dev-log) | MOC: [docs/HOME.md](docs/HOME.md). 신규 문서는 HOME 에 링크 (drift 강제) |
+| `infra/monitoring/` | Prometheus 설정 + Grafana 프로비저닝/대시보드 | 커스텀 메트릭 추가 시 대시보드 동시 갱신 |
+| `.vscode/` | 하이브리드 제어 — tasks(인프라/빌드/테스트)·launch(디버그 3종) | |
+| `.github/` | CI (backend+frontend+훅 회귀) · Dependabot 주간 | |
+| `AGENTS.md` | Codex/Gemini 용 얇은 포인터 (본문 복제 금지) | |
 
 ---
 
@@ -112,3 +122,12 @@ cd frontend && npm run build                          # 프로덕션 빌드
 ## Skills 인덱스 (.claude/skills/)
 
 - `/harness-update [변경-요약?]` — 하네스 갱신 절차 + drift 매핑 추가 + 성장 로드맵
+- `debugging-discipline` — 버그/빌드 실패 시 자동 매칭 (추측성 수정 금지 프로토콜 + Boot 4/Next 16 함정)
+
+---
+
+## 환경 점검 (스킬/룰 자동 로드 실패 시 진단 기준)
+
+- 세션은 git 루트(`/home/code/project/AgentGrid`)에서 시작 권장 — subagent 발견은 CWD walking-up
+- 검증: `What skills are available?` 에 harness-update·debugging-discipline 노출 / rules 로드는 `.claude/hooks/.state/instructions-loaded.log` 실측
+- 에이전트/훅 변경은 **세션 재시작 후 반영**, 스킬은 `/reload-skills` 핫리로드 (2026-06-12 기준)

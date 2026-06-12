@@ -19,8 +19,11 @@ frontend/*.tsbuildinfo
 
 # IDE
 .idea/
-.vscode/
 *.iml
+
+# Obsidian (개인 워크스페이스 설정 — 볼트 구조는 커밋, 설정은 제외)
+.obsidian/
+docs/.obsidian/
 
 # OS / etc
 .DS_Store

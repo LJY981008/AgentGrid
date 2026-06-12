@@ -21,6 +21,9 @@ npm run build        # 프로덕션 빌드
 npm run lint         # ESLint
 ```
 
+- 환경변수: `.env.example` 참조 (`API_URL` — 서버 컴포넌트 fetch 용). `.env` 는 gitignore
+- 배포: `Dockerfile` (Next standalone — `next.config.ts` 의 `output: "standalone"` 전제) — 루트 `docker compose --profile app`
+
 ## 구조 (App Router)
 
 - `src/app/` — 파일시스템 라우팅 (`page.tsx` = 페이지, `layout.tsx` = 공통 레이아웃)

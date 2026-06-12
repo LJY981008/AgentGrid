@@ -19,12 +19,28 @@
 
 ```bash
 docker compose up -d          # 루트에서 — PG(:5432)/Redis(:6379)/RabbitMQ(:5672, UI :15672)
-./gradlew bootRun             # backend/ 에서 — :8080
+./gradlew bootRun             # backend/ 에서 — :8080 (compose 인프라 필요)
+./gradlew bootTestRun         # compose 불필요 — Testcontainers 자동 기동 (TestAgentgridBackendApplication)
+./gradlew test --no-daemon    # 통합 테스트 — TC 로 PG/MQ/Redis 기동 후 컨텍스트 검증 (~50s)
 ```
 
 - DB 접속: `agentgrid` / `agentgrid-local` @ `localhost:5432/agentgrid` (compose.yaml 정의)
 - `application.yml`: `ddl-auto: validate` — **스키마는 Flyway 로만** (`src/main/resources/db/migration/V{n}__{desc}.sql`)
 - `open-in-view: false` — 트랜잭션 경계 밖 lazy 로딩 금지
+
+## 자가 검증 루프 (Testcontainers 2.x)
+
+- 구성: `src/test/java/com/agentgrid/TestcontainersConfiguration.java` — `@ServiceConnection` 으로 PG/RabbitMQ/Redis 자동 배선
+- **컨테이너 이미지 = compose.yaml 과 버전 일치 의무** (postgres:18-alpine / rabbitmq:4.3-management-alpine / redis:8-alpine) — 환경 차이 거짓 통과 방지. 이미지 변경 시 양쪽 + 이 문서 동시 갱신
+- TC 2.x 신명칭 주의: 아티팩트 `testcontainers-postgresql`, 패키지 `org.testcontainers.postgresql.*`
+- 테스트 자동 실행은 opt-in: Stop 훅은 컴파일만, `CLAUDE_HOOK_TEST=1` 시 test 포함. CI 는 항상 full test
+
+## 모니터링 (Actuator + Prometheus + Grafana)
+
+- `/actuator/prometheus` 노출 (micrometer-registry-prometheus). 태그: `application=agentgrid-backend`
+- 스택 기동: 루트에서 `docker compose --profile monitoring up -d` → Prometheus :9090 / Grafana :3001
+- **지속 업데이트 규약**: 커스텀 메트릭(Counter/Timer/Gauge/@Timed) 추가 시 `infra/monitoring/grafana/dashboards/agentgrid-backend.json` 에 패널 동시 추가. 대시보드 7번 패널(RabbitMQ)은 도메인 코드 생기면 활성화됨
+- 배포: `backend/Dockerfile` (multi-stage, JRE 21 alpine) — `--profile app`
 
 ## 아키텍처 방향 (기획서 4절 — 구현하며 구체화)
 

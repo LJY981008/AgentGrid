@@ -1,3 +1,8 @@
+# Agent Grid 로컬 오케스트레이션
+# - 기본(프로파일 없음):       docker compose up -d                      → 인프라만 (PG/Redis/RabbitMQ)
+# - 모니터링 포함:             docker compose --profile monitoring up -d  → + Prometheus/Grafana
+# - 풀스택(앱 컨테이너):        docker compose --profile app up -d --build → + backend/frontend 컨테이너
+#   (평소 개발은 인프라만 띄우고 backend 는 bootRun, frontend 는 npm run dev 가 기본)
 name: agentgrid
 
 services:
@@ -44,5 +49,64 @@ services:
       timeout: 5s
       retries: 10
 
+  # ---- profile: app — 컨테이너로 풀스택 실행 ----
+  backend:
+    profiles: ["app"]
+    build: ./backend
+    container_name: agentgrid-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/agentgrid
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  frontend:
+    profiles: ["app"]
+    build: ./frontend
+    container_name: agentgrid-frontend
+    environment:
+      # 서버 컴포넌트(fetch)가 사용할 백엔드 주소
+      API_URL: http://backend:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  # ---- profile: monitoring — Prometheus + Grafana ----
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v3.12.0
+    container_name: agentgrid-prometheus
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 호스트에서 bootRun 중인 백엔드 스크랩용
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:13.0.2
+    container_name: agentgrid-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: agentgrid-local
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"   # frontend(:3000) 충돌 회피
+    depends_on:
+      - prometheus
+
 volumes:
   postgres-data:
+  prometheus-data:
+  grafana-data:

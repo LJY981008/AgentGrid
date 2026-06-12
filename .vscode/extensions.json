@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "anthropic.claude-code",
+    "vscjava.vscode-java-pack",
+    "vmware.vscode-boot-dev-pack",
+    "dbaeumer.vscode-eslint",
+    "bradlc.vscode-tailwindcss",
+    "redhat.vscode-yaml",
+    "ms-azuretools.vscode-docker"
+  ]
+}

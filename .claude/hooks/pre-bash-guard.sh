@@ -50,8 +50,8 @@ if [[ "$CMD" =~ git[[:space:]]+commit ]] && ! [[ "$CMD" =~ psql ]]; then
 fi
 if [[ "$SKIP_DDL" -eq 0 ]]; then
   shopt -s nocasematch
-  [[ "$CMD" =~ (DROP[[:space:]]+(DATABASE|SCHEMA)|TRUNCATE[[:space:]]+TABLE|TRUNCATE[[:space:]]+[a-zA-Z_]+\.) ]] \
-    && deny "DDL(DROP DATABASE/SCHEMA)/TRUNCATE 직접 실행 금지 (마이그레이션 파일로 처리)"
+  [[ "$CMD" =~ (DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE[[:space:]]+TABLE|TRUNCATE[[:space:]]+[a-zA-Z_]+\.) ]] \
+    && deny "DDL(DROP DATABASE/SCHEMA/TABLE)/TRUNCATE 직접 실행 금지 (마이그레이션 파일로 처리)"
   shopt -u nocasematch
 fi
 
