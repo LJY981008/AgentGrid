@@ -1,0 +1,29 @@
+# Claude Code (로컬 전용)
+.claude/settings.local.json
+.claude/hooks/.state/
+.claude/agent-memory-local/
+.omc/
+
+# Backend (Gradle / Java)
+backend/build/
+backend/.gradle/
+backend/out/
+*.class
+
+# Frontend (Node / Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS / etc
+.DS_Store
+*.log
+.env
+.env.local
