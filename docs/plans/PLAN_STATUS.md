@@ -45,4 +45,6 @@
 - **수정주가 통일** = Tiingo adjClose/Sharadar closeadj 기준, 원주가+adj_factor 분리, 분할표본 교차검증
 - **데이터 신뢰성 게이트** = M1은 넓게 수집 + 종목·기간별 품질 꼬리표 저장(단일 임계로 파기 안 함). 표준(1%)·엄격(0.5%) 임계는 **M2 백테스트 민감도 분석**(두 시나리오 gap = 강건성 진단, gap으로 임계 골라잡기=과적합 금지)
 
-**다음 단계**: M0 완료(2026-06-16) → M1 S0·S1 완료(결정·ADR·계약 Decimal 교정) → **M1 S2(종목마스터 적재)**. 단 alembic+런타임 의존성은 pip 실측 고정·devops 조율 후. M1 데이터 신뢰성 게이트 통과 없이 M2 백테스트 착수 금지.
+**진행 현황**: M0 ✅ → M1 S0·S1 ✅(결정·ADR·계약 Decimal) → 미장 전환·ADR-002 ✅ → **B-env** ✅(Docker+uv 재현환경) → **B-contract** ✅(types.py 미국 재설계: `Exchange` StrEnum·`Stock` cik+ticker·`DataSource` Protocol, M1 §3 스키마 8테이블=ticker_history 추가).
+
+**다음 단계**: **B-pipeline**(Tiingo 어댑터 구현 → 파일럿 10~15종목 → Parquet 적재 → 검증 게이트). 선결: 런타임 의존성(tiingo·pandas·pyarrow·duckdb)을 컨테이너에서 `uv add` 실측 고정. 병행: db-architect 가 stock(cik PK)·ticker_history·daily_bar alembic 마이그레이션. M1 데이터 신뢰성 게이트 통과 없이 M2 백테스트 착수 금지.
