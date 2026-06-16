@@ -1,0 +1,46 @@
+{
+  "section": "general-connecting",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/general/connecting",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 verbatim 확보. 직접 WebFetch는 SPA라 <title>만 반환됨)",
+  "auth": "두 가지 방식 택1 (페이지 기재): ① URL 쿼리 파라미터 — `?token=YOUR_TOKEN` (예: https://api.tiingo.com/api/test?token=YOUR_TOKEN) ② HTTP 헤더 — `\"Authorization\": \"Token YOUR_TOKEN\"` (헤더 값 앞에 \"Token \" 접두사 필수, Bearer 아님)",
+  "base_url": "https://api.tiingo.com/",
+  "notes": "이 페이지(general/connecting)는 데이터 엔드포인트 명세가 아니라 API \"연결 방법\"을 설명하는 일반 페이지다. 핵심 내용(페이지 기재 그대로):\n\n1) 인증: 토큰을 (a) URL 쿼리 `?token=YOUR_TOKEN` 또는 (b) HTTP 헤더 `\"Authorization\": \"Token YOUR_TOKEN\"` 로 전달. 두 방식 모두 지원.\n\n2) 응답 포맷: \"the data will be returned via JSON or CSV\" (JSON 또는 CSV로 반환). 단, 이 페이지에는 CSV를 요청하는 구체적 방법(예: format 파라미터)은 기재되어 있지 않다.\n\n3) REST 연결 테스트 예시 (Python, verbatim):\n```python\nimport requests\nheaders = {\n        'Content-Type': 'application/json'\n        }\nrequestResponse = requests.get(\"https://api.tiingo.com/api/test?token=YOUR_TOKEN\", headers=headers)\nprint(requestResponse.json())\n```\n기대 응답: {'message': 'You successfully sent a request'}\n\n4) WebSocket API: 실시간 양방향 통신 지원. wss URL 패턴은 `wss://api.tiingo.com/test` (test 서비스 예시). subscribe 페이로드 형식(verbatim):\n```\n{\n    'eventName': 'subscribe',\n    'eventData': {\n        'authToken': 'YOUR_TOKEN',\n        'service': 'test'\n    }\n}\n```\n응답에는 활성 구독 관리에 쓰는 subscriptionId가 포함된다.\n- 메시지 타입: \"A\"(new data), \"U\"(updates), \"D\"(deletions), \"I\"(metadata), \"E\"(errors), \"H\"(heartbeats).\n- HeartBeat 메시지는 연결 유지를 위해 30초마다 전송된다.\n\n(이 페이지에는 supported_tickers zip URL이나 티커 심볼 표기 규칙(대시 vs 점)은 기재되어 있지 않다 — 그 내용은 별도 페이지(overview 등) 소관.)",
+  "endpoints": [
+    {
+      "name": "API 연결 테스트 (test endpoint)",
+      "method": "GET",
+      "url_pattern": "/api/test/",
+      "description": "API 연결 및 토큰 인증이 정상 동작하는지 확인하는 테스트 엔드포인트. 성공 시 확인 메시지를 반환한다.",
+      "example": "https://api.tiingo.com/api/test?token=YOUR_TOKEN → {'message': 'You successfully sent a request'}",
+      "query_params": [
+        {
+          "name": "token",
+          "type": "string",
+          "required": false,
+          "description": "API 토큰. 쿼리 파라미터로 전달하는 방식(예시에 사용). 대안으로 Authorization 헤더(\"Token YOUR_TOKEN\")로 전달 가능."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "message",
+          "type": "string",
+          "description": "연결 성공 시 \"You successfully sent a request\" 반환"
+        }
+      ]
+    }
+  ],
+  "rate_limits": "이 페이지(general/connecting)에는 rate limit 수치가 기재되어 있지 않음 (프록시 본문에서 확인). rate limit 관련 일반 규약은 별도 페이지(general/overview, pricing) 소관.",
+  "pricing_notes": "이 페이지에는 무료/유료 티어 차이가 기재되어 있지 않음. 가격·플랜 차이는 별도 페이지 소관.",
+  "caveats": [
+    "대상 페이지 tiingo.com/documentation/* 는 JS 렌더링 SPA — WebFetch 직접 호출 시 본문이 비고 <title>만 반환됨. 본 추출은 r.jina.ai 렌더 프록시 경유로 확보했다.",
+    "이 페이지는 엔드포인트 명세 페이지가 아니라 '연결/인증 방법' 안내 페이지다. 유일하게 등장하는 REST 엔드포인트는 연결 테스트용 GET /api/test/ 뿐 — 실제 데이터(daily/iex/fx/news 등)는 사이드바의 별도 URL 페이지에 명세되어 있다.",
+    "응답 포맷이 'JSON 또는 CSV'라고만 언급되고, CSV를 요청하는 구체적 방법(format 쿼리 파라미터 등)은 이 페이지에 적혀 있지 않다 — 각 데이터 엔드포인트 문서를 확인해야 한다.",
+    "Authorization 헤더 값은 'Token YOUR_TOKEN' 형식(접두사 'Token ' 필수). OAuth Bearer 토큰 형식이 아님에 주의.",
+    "Python 예시에서 헤더에 Content-Type: application/json 을 넣었으나, 토큰은 헤더가 아닌 URL ?token= 으로 전달한 케이스 — 두 인증 방식을 혼동하지 말 것.",
+    "rate limit·가격·티어 차이·티커 심볼 규칙은 이 페이지에 없음 — 추측 금지, 별도 페이지 실측 필요."
+  ]
+}

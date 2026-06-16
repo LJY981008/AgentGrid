@@ -1,0 +1,199 @@
+{
+  "section": "mutual-fund-and-etf-fees",
+  "category": "fees",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/mutual-fund-and-etf-fees",
+  "fetch_status": "ok — r.jina.ai 렌더 프록시 경유로 본문(엔드포인트 표·수수료 필드 스키마·접근제한) verbatim 확보. 직접 WebFetch는 SPA라 미시도/불가. 2회 교차 fetch 일치.",
+  "auth": "페이지 기재: \"you will need your token in order to connect\" — 토큰 필요만 명시, 싣는 위치(헤더 vs ?token=)는 이 페이지에 미기재. (Tiingo 공통 규약상 ?token= 또는 Authorization: Token 헤더이나 본 페이지 인용 아님 — caveats 참조)",
+  "base_url": "https://api.tiingo.com (펀드 네임스페이스: https://api.tiingo.com/tiingo/funds)",
+  "notes": "Tiingo Mutual Fund and ETF Fee Data API. 커버리지: 36,000+ Mutual Funds and ETFs. 수수료의 상세 분해 데이터 제공 — 커스텀 수수료(custom fees)까지 포함. 데이터 갱신: \"Fee data is updated intraday as new data comes online\"(신규 데이터 입수 시 인트라데이 갱신). 과거(historical) 및 현재 수수료 데이터 모두 제공. 접근 제한: \"This endpoint is for enterprise and institutional clients only. Please reach out to Sales@tiingo.com for licensing and pricing.\" (엔터프라이즈·기관 고객 전용 — 무료/Basic/Power 일반 가입으로는 접근 불가로 보임). 인증: \"Just remember, you will need your token in order to connect. Keep it safe.\" 엔드포인트 2종: 펀드 개요(/tiingo/funds/<ticker>)와 수수료 메트릭(/tiingo/funds/<ticker>/metrics). 응답 필드는 endpoints에 스키마로 수록.",
+  "endpoints": [
+    {
+      "name": "Fund Overview",
+      "method": "GET (페이지에 GET 명시 없음 — REST 조회로 추정 표기)",
+      "url_pattern": "/tiingo/funds/{ticker}",
+      "description": "펀드(뮤추얼펀드/ETF) 개요 — 티커·명칭·설명·share class·top-level net expense ratio 및 관련 다른 share class 목록 반환",
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회할 펀드 티커 심볼 (URL에 <ticker> 자리표시)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "펀드 관련 티커"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "펀드 전체 명칭(full-length name)"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "펀드 장문 설명(long-form description)"
+        },
+        {
+          "name": "shareClass",
+          "type": "string",
+          "description": "모(parent) 펀드사가 기술한 펀드 share class"
+        },
+        {
+          "name": "netExpense",
+          "type": "float",
+          "description": "top-level net expense ratio (순보수율 최상위 값)"
+        },
+        {
+          "name": "otherShareClasses",
+          "type": "object[]",
+          "description": "관련 다른 share class 목록 (중첩 객체 배열): 각 항목 필드 = ticker(string, 펀드 관련 티커), name(string, 펀드 전체 명칭), shareClass(string, 펀드 share class), netExpense(float, net expense ratio)"
+        }
+      ],
+      "example": "https://api.tiingo.com/tiingo/funds/<ticker>"
+    },
+    {
+      "name": "Fund Fee Metrics (Historical and Current Fee Data)",
+      "method": "GET (페이지에 GET 명시 없음 — REST 조회로 추정 표기)",
+      "url_pattern": "/tiingo/funds/{ticker}/metrics",
+      "description": "펀드의 수수료 메트릭 — prospectus 일자별 net/gross expense, management fee, 12b-1, load, redemption, account, shareholder, custom fee 등 상세 분해. 과거 및 현재 데이터 제공",
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회할 펀드 티커 심볼 (URL에 <ticker> 자리표시)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "prospectusDate",
+          "type": "date",
+          "description": "해당 펀드 비용 데이터가 공시된 prospectus 일자"
+        },
+        {
+          "name": "netExpense",
+          "type": "float",
+          "description": "펀드 net expense ratio (순보수, 펀드 관련 순비용)"
+        },
+        {
+          "name": "grossExpense",
+          "type": "float",
+          "description": "펀드 gross expense ratio (총보수, 펀드 운용 관련 비용)"
+        },
+        {
+          "name": "managementFee",
+          "type": "float",
+          "description": "펀드 운용보수 — 매니저/어드바이저에게 지급되는 수수료"
+        },
+        {
+          "name": "12b1",
+          "type": "float",
+          "description": "마케팅 비용 관련 12b-1 수수료"
+        },
+        {
+          "name": "non12b1",
+          "type": "float",
+          "description": "배포(distribution) 및 유사 non 12b-1 수수료"
+        },
+        {
+          "name": "otherExpenses",
+          "type": "float",
+          "description": "법무·관리·수탁(custodial) 등 관련 비용"
+        },
+        {
+          "name": "acquiredFundFees",
+          "type": "float",
+          "description": "acquired fund fees — 기초(underlying) 사업 관련 비용"
+        },
+        {
+          "name": "feeWaiver",
+          "type": "float",
+          "description": "수수료 면제(fee waiver), 수수료 할인"
+        },
+        {
+          "name": "exchangeFeeUSD",
+          "type": "float",
+          "description": "USD로 부과되는 교환(exchange) 수수료"
+        },
+        {
+          "name": "exchangeFeePercent",
+          "type": "float",
+          "description": "비율(%)로 부과되는 교환 수수료"
+        },
+        {
+          "name": "frontLoad",
+          "type": "float",
+          "description": "front load fee — 투자 시 선취 수수료"
+        },
+        {
+          "name": "backLoad",
+          "type": "float",
+          "description": "back load fee — 환매 시 후취 수수료"
+        },
+        {
+          "name": "dividendLoad",
+          "type": "float",
+          "description": "dividend load fee — 재투자 배당에 대한 부과"
+        },
+        {
+          "name": "shareholderFee",
+          "type": "float",
+          "description": "shareholder fee — 매수/매도 시 잠재 수수료"
+        },
+        {
+          "name": "accountFeeUSD",
+          "type": "float",
+          "description": "USD로 부과되는 계좌 수수료"
+        },
+        {
+          "name": "accountFeePercent",
+          "type": "float",
+          "description": "비율(%)로 부과되는 계좌 수수료"
+        },
+        {
+          "name": "redemptionFeeUSD",
+          "type": "float",
+          "description": "USD로 부과되는 환매 수수료"
+        },
+        {
+          "name": "redemptionFeePercent",
+          "type": "float",
+          "description": "비율(%)로 부과되는 환매 수수료"
+        },
+        {
+          "name": "portfolioTurnover",
+          "type": "float",
+          "description": "포트폴리오 회전율(portfolio turnover)"
+        },
+        {
+          "name": "miscFees",
+          "type": "float",
+          "description": "기타(miscellaneous) 수수료"
+        },
+        {
+          "name": "customFees",
+          "type": "object[]",
+          "description": "커스텀 수수료 목록 (중첩 객체 배열): 각 항목 = label(string, 커스텀 수수료 라벨), value(float, 값), units(char, '$' 달러 또는 '%' 비율), parentFee(string, 해당 커스텀 수수료가 속하는 상위 수수료)"
+        }
+      ],
+      "example": "https://api.tiingo.com/tiingo/funds/<ticker>/metrics"
+    }
+  ],
+  "rate_limits": "이 페이지에 rate limit 미기재. (Tiingo 공통: 시간/일/월 기준이나 본 페이지 인용 아님)",
+  "pricing_notes": "무료 티어 없음. 페이지 명시: \"This endpoint is for enterprise and institutional clients only. Please reach out to Sales@tiingo.com for licensing and pricing.\" — 엔터프라이즈/기관 고객 전용, 라이선스·가격은 Sales@tiingo.com 문의. stockpick(개인용)으로는 이 펀드 수수료 엔드포인트 접근 불가로 판단됨(개인 투자 한국주식 분석 도메인과도 무관 — 미국 뮤추얼펀드/ETF 수수료 데이터).",
+  "caveats": [
+    "HTTP 메서드(GET/POST)가 페이지에 명시되지 않음 — REST 조회 관행상 GET 추정. 코드에 단정 금지.",
+    "인증 토큰을 싣는 위치(Authorization: Token 헤더 vs ?token= 쿼리)가 이 페이지에 미기재. 다른 Tiingo 문서(general/connecting)의 공통 규약을 적용해야 하며 본 페이지 근거 아님.",
+    "query 파라미터(예: format, 날짜 범위)가 이 페이지에 전혀 문서화되지 않음 — 다른 엔드포인트의 format=json/csv가 적용되는지 본 페이지로는 확인 불가.",
+    "예시 요청 URL 문자열은 <ticker> 자리표시 형태만 제공, 실제 샘플(예: AAPL 등 구체 티커)·예시 JSON 응답 스니펫 없음.",
+    "엔터프라이즈/기관 전용 — 개인 계정으로 접근 시 권한 오류 가능. 도메인(한국주식)과 무관한 미국 펀드 데이터.",
+    "문서가 JS 렌더 SPA라 직접 WebFetch는 빈 <title>만 반환 — r.jina.ai 프록시 경유로 확보함. 향후 재검증 시 동일 우회 필요.",
+    "field명 '12b1'은 숫자로 시작 — JSON 키로는 유효하나 일부 언어/직렬화에서 식별자 접근 시 주의(딕셔너리 키로 접근 권장)."
+  ]
+}

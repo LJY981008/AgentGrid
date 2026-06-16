@@ -1,0 +1,213 @@
+{
+  "section": "iex",
+  "category": "iex-intraday",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/iex",
+  "fetch_status": "ok — r.jina.ai 렌더 프록시 경유로 본문 확보(2회 일관 반환). WebFetch 직접 호출은 SPA라 <title>만 반환(공지된 함정). web.archive.org는 환경에서 차단되어 미사용.",
+  "auth": "IEX 페이지 자체엔 인증 방법 미기재. 공통 규약(tiingo.com/documentation/general/connecting, 별도 페이지)에 따르면 2가지 택1: ① URL 쿼리 ?token=YOURTOKEN ② 헤더 Authorization: Token YOURTOKEN (\"Token \" 접두사 필수, Bearer 아님). 이 항목은 IEX 페이지 인용이 아니라 공통 규약 출처임.",
+  "base_url": "https://api.tiingo.com",
+  "notes": "개요: Tiingo IEX는 두 경로를 제공한다 — (1) IEX 등록 고객은 전체 TOPS 데이터 직접 수신, (2) 미등록 고객은 거래소 컴플라이언스 요건 없이 받을 수 있는 파생 참조 가격(derived reference price) 피드. 정책 변경(2025-02-01 기재): \"IEX Exchange가 마켓 데이터 정책을 변경하여, FULL TOPS Feed를 받으려면 IEX Exchange와 마켓 데이터 계약(market data agreement)을 서명해야 한다.\" 따라서 실시간 응답의 quoteTimestamp/lastSaleTimestamp/last/lastSize/bid*/ask* 필드는 IEX entitlement가 있어야 노출되고, tngoLast/open/high/low/mid 등은 Tiingo가 계산하는 값이라 미등록 고객도 사용 가능하다. tngoLast 정의는 \"Tiingo Last는 last price 또는 mid price 중 하나\"다. 인증·base_url·format(json/csv)·rate limit은 IEX 페이지에 명시되지 않아 공통 규약(별도 페이지)에서 보강한 것이며 본 페이지 인용이 아니다.",
+  "endpoints": [
+    {
+      "name": "All tickers top-of-book/last",
+      "method": "GET",
+      "url_pattern": "/iex",
+      "description": "전 티커의 top-of-book(호가) 및 last(마지막 체결) 실시간 데이터. 미등록 고객은 Tiingo 계산값(tngoLast 등)만, entitlement 보유 시 quote/last/bid/ask 필드까지.",
+      "example": "https://api.tiingo.com/iex",
+      "query_params": [],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "자산 식별자"
+        },
+        {
+          "name": "timestamp",
+          "type": "datetime",
+          "description": "마지막 갱신 시각"
+        },
+        {
+          "name": "quoteTimestamp",
+          "type": "datetime",
+          "description": "마지막 호가 수신 시각 (IEX entitlement 필요)"
+        },
+        {
+          "name": "lastSaleTimestamp",
+          "type": "datetime",
+          "description": "마지막 체결 수신 시각 (IEX entitlement 필요)"
+        },
+        {
+          "name": "last",
+          "type": "float",
+          "description": "IEX에서의 마지막 체결가 (IEX entitlement 필요)"
+        },
+        {
+          "name": "lastSize",
+          "type": "int32",
+          "description": "마지막 가격에서의 거래 주식 수 (IEX entitlement 필요)"
+        },
+        {
+          "name": "tngoLast",
+          "type": "float",
+          "description": "Tiingo Last — last price 또는 mid price 중 하나 (Tiingo 계산값)"
+        },
+        {
+          "name": "prevClose",
+          "type": "float",
+          "description": "전일 종가"
+        },
+        {
+          "name": "open",
+          "type": "float",
+          "description": "당일 시가 (Tiingo 계산값)"
+        },
+        {
+          "name": "high",
+          "type": "float",
+          "description": "당일 고가 (Tiingo 계산값)"
+        },
+        {
+          "name": "low",
+          "type": "float",
+          "description": "당일 저가 (Tiingo 계산값)"
+        },
+        {
+          "name": "mid",
+          "type": "float",
+          "description": "(bidPrice + askPrice)/2.0 (Tiingo 계산값)"
+        },
+        {
+          "name": "volume",
+          "type": "int64",
+          "description": "장중에는 IEX 거래량, 종가 시점엔 전체 거래소 거래량"
+        },
+        {
+          "name": "bidSize",
+          "type": "float",
+          "description": "매수 호가 주식 수 (IEX entitlement 필요)"
+        },
+        {
+          "name": "bidPrice",
+          "type": "float",
+          "description": "현재 매수 호가 (IEX entitlement 필요)"
+        },
+        {
+          "name": "askSize",
+          "type": "float",
+          "description": "매도 호가 주식 수 (IEX entitlement 필요)"
+        },
+        {
+          "name": "askPrice",
+          "type": "float",
+          "description": "현재 매도 호가 (IEX entitlement 필요)"
+        }
+      ]
+    },
+    {
+      "name": "Specific ticker top-of-book/last",
+      "method": "GET",
+      "url_pattern": "/iex/{ticker}",
+      "description": "특정 티커의 top-of-book 및 last 실시간 데이터. 응답 필드는 전체 티커 엔드포인트와 동일.",
+      "example": "https://api.tiingo.com/iex/<ticker>",
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회할 자산 티커"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(전체 티커 엔드포인트 /iex 와 동일)",
+          "type": "object",
+          "description": "ticker, timestamp, quoteTimestamp, lastSaleTimestamp, last, lastSize, tngoLast, prevClose, open, high, low, mid, volume, bidSize, bidPrice, askSize, askPrice"
+        }
+      ]
+    },
+    {
+      "name": "Historical intraday prices",
+      "method": "GET",
+      "url_pattern": "/iex/{ticker}/prices",
+      "description": "특정 티커의 과거 인트라데이 OHLCV. resampleFreq로 리샘플 주기 지정.",
+      "example": "https://api.tiingo.com/iex/<ticker>/prices?startDate=2019-01-02&resampleFreq=5min",
+      "query_params": [
+        {
+          "name": "startDate",
+          "type": "date",
+          "required": false,
+          "description": "조회 시작일. 예시 2019-01-02. (페이지에 필수여부·기본값 명시 없음, 예시 URL에 등장)",
+          "default": ""
+        },
+        {
+          "name": "resampleFreq",
+          "type": "string",
+          "required": false,
+          "description": "리샘플 주기. 예시 값 5min. (허용값 전체 열거는 IEX 페이지에 없음 — 추측 금지)",
+          "default": ""
+        },
+        {
+          "name": "columns",
+          "type": "string",
+          "required": false,
+          "description": "반환 컬럼 지정. volume 필드는 columns 파라미터로 명시 요청해야만 노출됨 (예: columns=open,high,low,close,volume)",
+          "default": ""
+        }
+      ],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회할 자산 티커"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "datetime",
+          "description": "데이터 일자/시각"
+        },
+        {
+          "name": "open",
+          "type": "float",
+          "description": "시가"
+        },
+        {
+          "name": "high",
+          "type": "float",
+          "description": "고가"
+        },
+        {
+          "name": "low",
+          "type": "float",
+          "description": "저가"
+        },
+        {
+          "name": "close",
+          "type": "float",
+          "description": "종가"
+        },
+        {
+          "name": "volume",
+          "type": "int64",
+          "description": "거래량 — columns 요청 파라미터로 명시 전달해야만 노출됨"
+        }
+      ]
+    }
+  ],
+  "rate_limits": "IEX 페이지에 미기재. 공통 규약(별도 페이지) 기준: 시간당/일일(자정 EST 리셋)/월 대역폭(매월 1일 자정 EST 리셋) 제한. 분·초 단위 제한 없음. 구체 수치는 pricing 페이지 참조(문서엔 미기재). — 본 IEX 페이지 인용 아님.",
+  "pricing_notes": "IEX 페이지 명시: FULL TOPS Feed 수신은 IEX Exchange와 마켓 데이터 계약 서명을 요구(2025-02-01 정책 변경). 계약 없는(미등록) 고객은 파생 참조 가격 피드만 받으며 quote/last/bid/ask 등 entitlement 필드는 비노출, tngoLast/open/high/low/mid 등 Tiingo 계산값만 사용 가능. Tiingo 플랜별(Basic/Power 등) 한도 차이는 IEX 페이지에 별도 명시 없음 — 공통 pricing 페이지 영역.",
+  "caveats": [
+    "인증·base_url(api.tiingo.com)·format(json/csv)·rate limit은 IEX 페이지에 명시되지 않음 — 공통 규약(general/connecting·overview) 페이지에서 보강한 것이며 본 페이지 인용이 아님.",
+    "resampleFreq의 허용값은 IEX 페이지에 5min 예시 외 전체 열거가 없음. 1min/1hour 등 다른 값은 페이지 근거 없으므로 코드에서 추측 금지 — 실호출 또는 daily 페이지로 별도 검증 필요.",
+    "Historical intraday prices에서 volume은 columns 파라미터로 명시 요청해야만 응답에 포함됨(기본 미노출).",
+    "endDate/format/afterHours/forceFill 등 daily prices 페이지에 흔한 파라미터는 IEX 페이지에 기재되지 않음 — 지어내지 말 것.",
+    "quoteTimestamp/lastSaleTimestamp/last/lastSize/bidPrice/bidSize/askPrice/askSize는 IEX entitlement(마켓 데이터 계약) 보유자에게만 노출됨. 미등록 고객 응답에서는 누락될 수 있음.",
+    "startDate의 필수 여부·기본값은 페이지에 명시 없음(예시 URL에만 등장).",
+    "문서가 JS 렌더링 SPA라 WebFetch 직접 호출 시 본문 비고 <title>(\"Stock Market Tools | Tiingo\")만 반환됨 — 렌더 프록시(r.jina.ai) 경유 필수. web.archive.org는 본 환경에서 차단됨.",
+    "stockpick은 과거 30년 한국주식 백테스트가 주목적 — IEX는 미국 실시간/인트라데이 데이터라 한국 코스피/코스닥 커버리지와 무관. 적용 시 도메인 적합성 재검토."
+  ]
+}

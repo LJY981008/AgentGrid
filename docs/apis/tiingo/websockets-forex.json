@@ -1,0 +1,114 @@
+{
+  "section": "websockets-forex",
+  "category": "websockets",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/websockets/forex",
+  "fetch_status": "partial — 대상 페이지(JS SPA)는 r.jina.ai 렌더 프록시로 메시지 구조/필드표 본문을 verbatim 확보(service, messageType, FX data 배열 8필드 인덱스). 단 프록시가 반환한 본문에 '연결(Connecting)'·subscribe JSON·thresholdLevel 허용값·rate limit 섹션은 포함되지 않음. 해당 부분은 공식 페이지를 직접 인용한 WebSearch 결과(wss://api.tiingo.com/fx, eventName/authorization/thresholdLevel=5) + 공식 reference client(hydrosquall/tiingo-python wsclient.py)로 교차검증. web.archive.org는 이 환경에서 접근 차단됨.",
+  "auth": "WebSocket. API 키를 HTTP 헤더가 아니라 subscribe 메시지 JSON 본문의 최상위 키 \"authorization\" 에 평문으로 싣는다. 예: {\"eventName\":\"subscribe\",\"authorization\":\"<API_KEY>\",...}. (REST 의 'Authorization: Token ...' 헤더나 ?token= 방식과 다름.) 출처: 공식 페이지 WebSearch 인용 + reference client wsclient.py.",
+  "base_url": "wss://api.tiingo.com (FX 엔드포인트 = wss://api.tiingo.com/fx). 형제 서비스 /iex, /crypto.",
+  "notes": "Tiingo Real-time Forex Websocket API. 단일 WebSocket 엔드포인트 wss://api.tiingo.com/fx 로 연결한 뒤 subscribe 메시지를 보내 top-of-book(및 last trade) FX 스트림을 받는다. 응답 메시지는 JSON 객체 {service, messageType, data} 이며 data 는 위치 기반(positional) 값 배열(키-값 객체 아님).\n\n[연결/구독 — 공식 페이지 WebSearch 직접 인용 + reference client 교차검증]\n- 구독 메시지: {\"eventName\":\"subscribe\",\"authorization\":\"<API_KEY>\",\"eventData\":{\"thresholdLevel\":5}}\n- eventName 은 'subscribe'. authorization 은 본인 API 키. eventData.thresholdLevel 로 수신 데이터 양 조절.\n- 공식 문구(인용): \"To request top-of-book and last trade data, use the following Websocket endpoint: wss://api.tiingo.com/fx\" / \"A 'thresholdLevel' of 5 means you will get ALL Top-of-Book updates\" / \"you can control how much data you would like to receive with the 'thresholdLevel' request parameter.\"\n- reference client(wsclient.py): base = wss://api.tiingo.com, endpoint 검증값 = iex|fx|crypto, 예시 thresholdLevel=5. client 예시 eventData 에는 thresholdLevel 만 있고 tickers 키는 없음.\n\n[응답 메시지 구조 — 대상 페이지 본문 verbatim]\n- 최상위: service, messageType, data.\n- service: 항상 \"fx\" (\"The value returned by this will always be 'fx'\").\n- messageType: 항상 \"A\" = new price quotes (\"Will always return 'A' meaning new price quotes\"). FX 페이지엔 'A' 외 코드 미기재.\n- data: Top-of-Book(Quote) Update 1건, 인덱스 순서 [0 updateType=\"Q\", 1 ticker, 2 datetime(ISO), 3 bidSize, 4 bidPrice, 5 midPrice=(bidPrice+askPrice)/2.0, 6 askPrice, 7 askSize].\n\n[형제 IEX WS 페이지 참고(이 페이지 아님, 대조용)] IEX 페이지는 thresholdLevel 0/5/6 정의를 명시하나 FX 페이지는 5만 인용 확보됨. FX 의 thresholdLevel 전체 허용값/기본값은 이 페이지에서 미확인.\n\n출처: 대상 페이지 본문(r.jina.ai 프록시 verbatim) — https://r.jina.ai/https://www.tiingo.com/documentation/websockets/forex ; 연결/엔드포인트 인용 — WebSearch(공식 페이지 직접 인용) ; 와이어 프로토콜 교차검증 — https://raw.githubusercontent.com/hydrosquall/tiingo-python/master/tiingo/wsclient.py",
+  "endpoints": [
+    {
+      "name": "Forex Realtime Websocket (Top-of-Book / Last Trade)",
+      "method": "WSS (WebSocket)",
+      "url_pattern": "wss://api.tiingo.com/fx",
+      "description": "FX 실시간 top-of-book 및 last trade 스트림. 연결 후 subscribe 메시지(JSON)를 전송하여 구독. authorization 키에 API 키를 싣고 eventData.thresholdLevel 로 데이터 양 조절. 서버는 service='fx', messageType='A', data=배열 형태의 메시지를 스트리밍.",
+      "example": "// 구독(클라이언트→서버), 공식 페이지 인용 + reference client 교차검증\n{\n  \"eventName\": \"subscribe\",\n  \"authorization\": \"<API_KEY>\",\n  \"eventData\": { \"thresholdLevel\": 5 }\n}\n// 응답(서버→클라이언트) 구조\n{ \"service\": \"fx\", \"messageType\": \"A\", \"data\": [ \"Q\", \"<ticker>\", \"<ISO datetime>\", <bidSize>, <bidPrice>, <midPrice>, <askPrice>, <askSize> ] }",
+      "query_params": [
+        {
+          "name": "eventName",
+          "type": "string (subscribe 메시지 JSON 필드)",
+          "required": true,
+          "description": "구독 액션. 값 = 'subscribe'.",
+          "default": "subscribe"
+        },
+        {
+          "name": "authorization",
+          "type": "string (subscribe 메시지 JSON 최상위 필드)",
+          "required": true,
+          "description": "본인 Tiingo API 키. 헤더가 아니라 메시지 본문 최상위 'authorization' 키에 평문으로 싣는다."
+        },
+        {
+          "name": "eventData.thresholdLevel",
+          "type": "integer (subscribe 메시지 JSON eventData 하위 필드)",
+          "required": false,
+          "description": "수신 데이터 양 제어. 공식 페이지 인용: thresholdLevel=5 이면 모든 Top-of-Book 업데이트를 받는다. 전체 허용값/기본값은 이 FX 페이지에서 미확인.",
+          "default": "(페이지 미명시; reference client 예시는 5)"
+        }
+      ],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "service",
+          "type": "string",
+          "description": "FX 데이터임을 알리는 식별자. 항상 'fx' 반환 (페이지 verbatim)."
+        },
+        {
+          "name": "messageType",
+          "type": "string",
+          "description": "FX 피드의 데이터 패킷 종류. 항상 'A' 반환 = 새 가격 quote (new price quotes) (페이지 verbatim). FX 페이지엔 'A' 외 코드 미기재."
+        },
+        {
+          "name": "data",
+          "type": "array",
+          "description": "Top-of-Book(Quote) 업데이트 1건. 아래 인덱스 순서의 값 배열."
+        },
+        {
+          "name": "data[0] updateType",
+          "type": "string",
+          "description": "업데이트 종류. 'Q' = quote (Top-of-Book/Quote 업데이트)."
+        },
+        {
+          "name": "data[1] ticker",
+          "type": "string",
+          "description": "FX 페어 티커 심볼."
+        },
+        {
+          "name": "data[2] date",
+          "type": "string (ISO datetime)",
+          "description": "호가 시각. JSON ISO 포맷 datetime."
+        },
+        {
+          "name": "data[3] bidSize",
+          "type": "number",
+          "description": "매수 호가 잔량(Bid Size)."
+        },
+        {
+          "name": "data[4] bidPrice",
+          "type": "number",
+          "description": "매수 호가(Bid Price)."
+        },
+        {
+          "name": "data[5] midPrice",
+          "type": "number",
+          "description": "중간가(Mid Price). 페이지 정의: (bidPrice + askPrice)/2.0 로 계산."
+        },
+        {
+          "name": "data[6] askPrice",
+          "type": "number",
+          "description": "매도 호가(Ask Price)."
+        },
+        {
+          "name": "data[7] askSize",
+          "type": "number",
+          "description": "매도 호가 잔량(Ask Size)."
+        }
+      ]
+    }
+  ],
+  "rate_limits": "이 FX 페이지에서 미확인(NOT ON PAGE). rate limit·동시 연결 수 명시 없음. 일반 Tiingo rate limit(시간/일/월)은 별도 overview·pricing 페이지 소관.",
+  "pricing_notes": "이 FX 페이지에서 무료/유료 구분은 확보된 본문에 명시되지 않음(NOT ON PAGE). 일반 Tiingo 플랜(Basic/Power/Commercial)·약관(개인용 OK, 재배포 제한)은 별도 overview 문서 소관 — 본 페이지 인용 아님.",
+  "caveats": [
+    "fetch_status=partial: 대상 페이지가 JS SPA여서 r.jina.ai 프록시로 메시지 구조/필드표는 verbatim 확보했으나, 같은 프록시 응답에 '연결'·subscribe JSON·thresholdLevel 허용값·rate limit 섹션이 비어 있었음. 해당 부분은 (a) 공식 페이지를 직접 인용한 WebSearch 결과와 (b) 공식 reference client(hydrosquall/tiingo-python wsclient.py)로 교차검증한 것 — 대상 페이지 본문에서 직접 verbatim 인용한 것이 아님.",
+    "subscribe 메시지의 authorization 은 HTTP 헤더가 아니라 메시지 JSON 본문 최상위 'authorization' 키에 API 키를 평문으로 싣는다. REST 의 Authorization: Token 헤더/?token= 방식과 혼동 금지.",
+    "thresholdLevel 의 전체 허용값과 기본값은 이 FX 페이지에서 미확인. 인용으로 확인된 것은 '5 = 모든 Top-of-Book 업데이트' 하나뿐. (형제 IEX 페이지는 0/5/6 을 정의하나 FX 와 동일하다는 보장 없음 — 추측 금지.)",
+    "data 는 키 없는 위치 기반 배열. 인덱스 순서 [updateType, ticker, date, bidSize, bidPrice, midPrice, askPrice, askSize] 를 코드에 하드코딩 시 향후 Tiingo 가 순서/필드를 바꾸면 깨짐. 파싱 전 재확인 권장.",
+    "midPrice 는 서버 제공값이지만 정의상 (bidPrice+askPrice)/2.0 의 단순 계산값 — 독립 정보 아님.",
+    "messageType 은 FX 페이지상 'A'만 명시. heartbeat('H') 등 keep-alive/오류('E')·구독확인 메시지는 이 페이지에 미기재(WS overview/connecting 페이지 소관) → 클라이언트는 'A' 외 메시지 타입 수신 가능성에 대비해야 함.",
+    "FX subscribe 에서 특정 페어만 구독하는 tickers 파라미터의 지원 여부·형식은 이 페이지/확보 본문에서 미확인. reference client 예시 eventData 엔 thresholdLevel 만 존재.",
+    "unsubscribe·subscriptionId·재연결 프로토콜은 이 페이지에서 미확인.",
+    "MOC 반영 필요: docs/HOME.md 에 본 리서치 링크 추가 권고(agent-memory 에는 research-tiingo-ws-forex.md 추가함)."
+  ]
+}

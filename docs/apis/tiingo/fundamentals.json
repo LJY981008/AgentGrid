@@ -1,0 +1,448 @@
+{
+  "section": "fundamentals",
+  "category": "fundamentals",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/fundamentals",
+  "fetch_status": "ok — JS렌더 SPA라 WebFetch 직접 호출은 빈 본문/잘못된 title만 회수되나, r.jina.ai 렌더 프록시(https://r.jina.ai/https://www.tiingo.com/documentation/fundamentals)로 본문(엔드포인트·파라미터·응답필드·커버리지) 정상 확보. 2회 독립 fetch 일관 확인.",
+  "auth": "이 Fundamentals 페이지 본문에는 인증 방식이 명시되지 않음(헤더/쿼리 어느 쪽인지 미기재). Tiingo API 공통 규약상 토큰은 HTTP 헤더 `Authorization: Token <apiKey>` 또는 쿼리스트링 `?token=<apiKey>` 둘 다 사용 가능 — 단 이는 본 페이지가 아닌 Tiingo 공통 연결 문서 기준(본 페이지 인용 아님).",
+  "base_url": "https://api.tiingo.com",
+  "notes": "Tiingo Fundamentals(재무) API. 페이지 기재 사실:\n- 커버리지: \"5,500+ Equities Covered\", \"Data goes back over 20 years\". SEC가 공개한 후 보통 12~24시간 이내 갱신.\n- 통화: 모든 값은 USD로 반환. 회사가 타 통화로 보고 시 time-appropriate FX-rate(시점 적합 환율)로 USD 환산.\n- 폐지/재활용(delisted/recycled) 심볼은 ticker 대신 Tiingo permaTicker(안정 식별자)로 접근 — /fundamentals/<permaTicker>/statements, /fundamentals/<permaTicker>/daily. (생존편향 회피 경로)\n- asReported 차원: false(Most-Recent, 기본 추정) vs true(As-Reported). Most-Recent에서는 직전 기간(prior period) 데이터가 최신 보고서에서 가져온 값(정정 반영). As-Reported는 보고 당시 값 그대로.\n- quarter 필드: 0 = 연간 보고서(Annual Report), 1~4 = 해당 회계 분기.\n- 직접 WebFetch는 SPA라 본문 비어옴 → r.jina.ai 프록시 경유로만 본문 확보됨(미래 재실측 시 동일 우회 필요).",
+  "endpoints": [
+    {
+      "name": "Definitions (메타데이터 정의)",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/definitions",
+      "description": "사용 가능한 모든 펀더멘털 지표(dataCode)의 정의 목록. 어떤 dataCode가 어느 재무제표(statementType)에 속하고 단위가 무엇인지 매핑.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/definitions",
+      "query_params": [],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "dataCode",
+          "type": "string",
+          "description": "지표 식별자 (예: peRatio)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "사람이 읽는 필드 이름"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "필드 설명"
+        },
+        {
+          "name": "statementType",
+          "type": "string",
+          "description": "소속 재무제표 — balanceSheet, incomeStatement, cashFlow, overview 4종 중 하나"
+        },
+        {
+          "name": "units",
+          "type": "string",
+          "description": "단위 — \"$\", \"%\" 또는 빈 값"
+        }
+      ]
+    },
+    {
+      "name": "Statements — 활성 심볼 (재무제표)",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/{ticker}/statements",
+      "description": "지정 종목의 과거 재무제표(대차대조표/손익/현금흐름/overview). asReported 차원으로 보고시점 그대로(true) 또는 정정반영(false) 선택.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/<ticker>/statements?startDate=2019-06-30",
+      "query_params": [
+        {
+          "name": "startDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 시작일. 예: startDate=2019-06-30"
+        },
+        {
+          "name": "endDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 종료일 (페이지에 언급되나 상세 미기재)"
+        },
+        {
+          "name": "asReported",
+          "type": "boolean",
+          "required": false,
+          "description": "true=As-Reported(보고 당시 값 그대로), false=Most-Recent(직전 기간을 최신 보고서 값으로 정정 반영). 룩어헤드 관점에서 true가 시점정합. 기본값 본 페이지 미명시"
+        },
+        {
+          "name": "fmt / format",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷 (json/csv). 페이지에 언급되나 상세 미기재"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "종목 티커 (활성 심볼)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "datetime",
+          "description": "보고/공개 일자"
+        },
+        {
+          "name": "quarter",
+          "type": "integer",
+          "description": "회계 분기. 0 = 연간 보고서(Annual Report), 1~4 = 해당 분기"
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "회계 연도"
+        },
+        {
+          "name": "statementData",
+          "type": "object",
+          "description": "재무 데이터 컨테이너. 하위 4개 객체(balanceSheet, incomeStatement, cashFlow, overview) 각각이 {dataCode, value} 쌍 배열"
+        },
+        {
+          "name": "statementData.balanceSheet",
+          "type": "array<{dataCode,value}>",
+          "description": "대차대조표 항목들"
+        },
+        {
+          "name": "statementData.incomeStatement",
+          "type": "array<{dataCode,value}>",
+          "description": "손익계산서 항목들"
+        },
+        {
+          "name": "statementData.cashFlow",
+          "type": "array<{dataCode,value}>",
+          "description": "현금흐름표 항목들"
+        },
+        {
+          "name": "statementData.overview",
+          "type": "array<{dataCode,value}>",
+          "description": "요약/파생 지표 항목들"
+        }
+      ]
+    },
+    {
+      "name": "Statements — 폐지/재활용 심볼",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/{permaTicker}/statements",
+      "description": "폐지(delisted) 또는 재활용(recycled) 심볼의 재무제표 — 안정 식별자 permaTicker로 접근(생존편향 회피). 응답 구조는 활성 statements와 동일.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/<permaTicker>/statements",
+      "query_params": [
+        {
+          "name": "startDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 시작일"
+        },
+        {
+          "name": "endDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 종료일 (상세 미기재)"
+        },
+        {
+          "name": "asReported",
+          "type": "boolean",
+          "required": false,
+          "description": "true=As-Reported / false=Most-Recent"
+        },
+        {
+          "name": "fmt / format",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷 (상세 미기재)"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "permaTicker",
+          "type": "string",
+          "description": "Tiingo의 안정 식별자 — 폐지/재활용 심볼 접근용"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "datetime",
+          "description": "보고/공개 일자"
+        },
+        {
+          "name": "quarter",
+          "type": "integer",
+          "description": "0=연간, 1~4=분기"
+        },
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "회계 연도"
+        },
+        {
+          "name": "statementData",
+          "type": "object",
+          "description": "balanceSheet/incomeStatement/cashFlow/overview 하위 객체, {dataCode,value} 쌍"
+        }
+      ]
+    },
+    {
+      "name": "Daily — 활성 심볼 (일일 지표)",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/{ticker}/daily",
+      "description": "일일 갱신되는 시장가치 기반 지표(시가총액·기업가치·PER·PBR 등). columns로 반환 필드 지정 가능.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/<ticker>/daily?columns=marketCap,peRatio",
+      "query_params": [
+        {
+          "name": "startDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 시작일 (언급되나 상세 미기재)"
+        },
+        {
+          "name": "endDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 종료일 (언급되나 상세 미기재)"
+        },
+        {
+          "name": "columns",
+          "type": "string(쉼표구분)",
+          "required": false,
+          "description": "반환할 필드 지정. 예: columns=marketCap,peRatio"
+        },
+        {
+          "name": "fmt / format",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷 (json/csv, 상세 미기재)"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "종목 티커 (활성 심볼)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "datetime",
+          "description": "일자"
+        },
+        {
+          "name": "marketCap",
+          "type": "float",
+          "description": "시가총액"
+        },
+        {
+          "name": "enterpriseVal",
+          "type": "float",
+          "description": "기업가치(Enterprise Value)"
+        },
+        {
+          "name": "peRatio",
+          "type": "float",
+          "description": "주가수익비율(PER)"
+        },
+        {
+          "name": "pbRatio",
+          "type": "float",
+          "description": "주가순자산비율(PBR)"
+        },
+        {
+          "name": "trailingPEG1Y",
+          "type": "float",
+          "description": "1년 트레일링 PEG 비율"
+        }
+      ]
+    },
+    {
+      "name": "Daily — 폐지/재활용 심볼",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/{permaTicker}/daily",
+      "description": "폐지/재활용 심볼의 일일 지표 — permaTicker로 접근. 응답 구조는 활성 daily와 동일.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/<permaTicker>/daily",
+      "query_params": [
+        {
+          "name": "startDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 시작일"
+        },
+        {
+          "name": "endDate",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 종료일"
+        },
+        {
+          "name": "columns",
+          "type": "string(쉼표구분)",
+          "required": false,
+          "description": "반환할 필드 지정"
+        },
+        {
+          "name": "fmt / format",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "permaTicker",
+          "type": "string",
+          "description": "Tiingo 안정 식별자 — 폐지/재활용 심볼 접근용"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "datetime",
+          "description": "일자"
+        },
+        {
+          "name": "marketCap",
+          "type": "float",
+          "description": "시가총액"
+        },
+        {
+          "name": "enterpriseVal",
+          "type": "float",
+          "description": "기업가치"
+        },
+        {
+          "name": "peRatio",
+          "type": "float",
+          "description": "PER"
+        },
+        {
+          "name": "pbRatio",
+          "type": "float",
+          "description": "PBR"
+        },
+        {
+          "name": "trailingPEG1Y",
+          "type": "float",
+          "description": "1년 트레일링 PEG"
+        }
+      ]
+    },
+    {
+      "name": "Meta (종목 메타데이터)",
+      "method": "GET",
+      "url_pattern": "/tiingo/fundamentals/meta",
+      "description": "펀더멘털 커버리지에 포함된 종목들의 메타데이터(식별자·섹터·산업·갱신시각 등). columns로 반환 필드 지정 가능.",
+      "example": "https://api.tiingo.com/tiingo/fundamentals/meta",
+      "query_params": [
+        {
+          "name": "columns",
+          "type": "string(쉼표구분)",
+          "required": false,
+          "description": "반환할 필드 지정 (페이지 표기 — 단 6.항 fetch에서는 meta query param 미문서화로도 나옴, 불확실)"
+        }
+      ],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "permaTicker",
+          "type": "string",
+          "description": "Tiingo 안정 식별자(PK) — 폐지/재활용 심볼 접근 키"
+        },
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "현재 티커"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "회사명"
+        },
+        {
+          "name": "isActive",
+          "type": "boolean",
+          "description": "현재 활성 여부"
+        },
+        {
+          "name": "isADR",
+          "type": "boolean",
+          "description": "ADR 여부"
+        },
+        {
+          "name": "sector",
+          "type": "string",
+          "description": "섹터"
+        },
+        {
+          "name": "industry",
+          "type": "string",
+          "description": "산업"
+        },
+        {
+          "name": "sicCode",
+          "type": "string/integer",
+          "description": "SIC 코드"
+        },
+        {
+          "name": "sicSector",
+          "type": "string",
+          "description": "SIC 섹터"
+        },
+        {
+          "name": "sicIndustry",
+          "type": "string",
+          "description": "SIC 산업"
+        },
+        {
+          "name": "reportingCurrency",
+          "type": "string",
+          "description": "보고 통화"
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "description": "소재지"
+        },
+        {
+          "name": "companyWebsite",
+          "type": "string",
+          "description": "회사 웹사이트"
+        },
+        {
+          "name": "secFilingWebsite",
+          "type": "string",
+          "description": "SEC 공시 페이지"
+        },
+        {
+          "name": "statementLastUpdated",
+          "type": "datetime",
+          "description": "재무제표 마지막 갱신 시각"
+        },
+        {
+          "name": "dailyLastUpdated",
+          "type": "datetime",
+          "description": "일일 지표 마지막 갱신 시각"
+        }
+      ]
+    }
+  ],
+  "rate_limits": "본 Fundamentals 페이지에는 구체적 rate limit 수치 미기재. (전반 Tiingo rate limit은 별도 공통 문서 기준이며 본 페이지 인용 아님 — pricing/connecting 페이지 재확인 필요.)",
+  "pricing_notes": "페이지 기재: \"3 Years of the DOW 30 tickers are available for free/evaluation\" — 무료/평가용은 DOW 30 종목의 최근 3년만 제공. 전체 5,500+ 종목 20년+ 데이터는 유료(Power user add-on, 단 add-on 명칭은 본 페이지 본문 직접 인용 아님). 무료 일반 플랜에는 펀더멘털 미포함으로 알려짐(공통 pricing 기준).",
+  "caveats": [
+    "인증 방식이 이 Fundamentals 페이지 본문에 명시돼 있지 않음 — 헤더 Authorization: Token / 쿼리 ?token= 여부는 Tiingo 공통 연결 문서로 별도 확인 필요(본 페이지 인용 아님).",
+    "asReported=false(Most-Recent)는 직전 기간을 최신(정정된) 보고서 값으로 덮어씀 → 백테스트에서 룩어헤드(look-ahead) 편향 위험. 시점정합(PIT)이 필요하면 asReported=true 사용. (금융 BLOCKING 관련)",
+    "페이지 경고: 컬럼·필드가 특정 순서로 온다고 가정하는 파싱 코드 작성 금지 — 지표가 계속 추가되므로 순서 의존 금지.",
+    "JSON 응답은 nested(중첩) 구조, CSV는 flat 2-D 구조 — 동일 데이터라도 포맷별 형태가 다름.",
+    "startDate/endDate/asReported/fmt 등 일부 파라미터는 페이지에 '존재'는 언급되나 타입·기본값 등 상세는 미기재 — 본 추출의 해당 타입/기본값은 페이지에 적힌 범위 내 보수적 표기이며 일부는 불확실.",
+    "meta 엔드포인트의 columns 파라미터 지원 여부가 fetch 회차별로 엇갈림(한 회차는 'no query params')—불확실, 코드 적용 전 실호출 검증 권장.",
+    "tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 본문 비어옴/잘못된 <title>만 회수. r.jina.ai 프록시 경유로만 본문 확보됨. web.archive.org timetravel은 과거 차단 이력.",
+    "통화: 비 USD 보고기업은 time-appropriate FX로 USD 환산 — 원시 보고통화값이 아님(reportingCurrency 필드로 원 통화 확인 가능)."
+  ]
+}

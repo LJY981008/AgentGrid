@@ -1,0 +1,281 @@
+{
+  "section": "crypto",
+  "category": "crypto",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/crypto",
+  "fetch_status": "partial — r.jina.ai 렌더 프록시가 대상 SPA 페이지의 상단 'Top-of-Book' 섹션만 렌더해 반환했고(여러 차례 재시도·캐시우회·URL변형 모두 동일), /tiingo/crypto/prices · /tiingo/crypto(메타데이터) · websocket 등 하단 섹션 본문은 확보 실패. web.archive.org 는 WebFetch 가 차단(unable to fetch). 따라서 top-of-book 응답필드는 대상 페이지 직접 인용이나, /prices·메타데이터 엔드포인트의 URL/파라미터/응답필드는 공식 클라이언트 소스(hydrosquall/tiingo-python api.py, business-science/riingo)로 보강한 것으로 '대상 페이지 직접 인용 아님'. WebFetch 도구가 6회 실패 한도에 도달해 추가 프록시 시도 중단됨.",
+  "auth": "공통 규약(별도 overview/connecting 페이지 기재): 인증 2가지 택1 — ① URL 쿼리 ?token=YOURTOKEN ② HTTP 헤더 Authorization: Token YOURTOKEN (접두사 \"Token \" 필수, Bearer 아님). crypto 페이지 본문에서는 인증 부분 텍스트를 프록시로 확보하지 못함(상속 규약으로 기재).",
+  "base_url": "https://api.tiingo.com",
+  "notes": "대상 페이지 제목: \"Real-time & Historical CryptoCurrency (Crypto) Price API Documentation | Tiingo\". \n\n[대상 페이지 직접 인용 — Top-of-Book 섹션] 페이지 상단에 top-of-book 엔드포인트가 DEPRECATED 됨이 명시: \"After much consideration, we have made the decision to deprecate the top-of-book endpoint\" — 사유는 crypto 거래소 피드가 일관된 best bid/ask 를 구성하기에 신뢰할 수 없는 것으로 확인됐기 때문(feed 불일치·timestamp 문제). last price 는 /prices 엔드포인트에서 제공된다고 안내됨.\n\n[보강 — 대상 페이지 인용 아님, 공식 클라이언트 소스 hydrosquall/tiingo-python api.py 및 business-science/riingo] crypto 엔드포인트 3종 URL 경로: 메타데이터=tiingo/crypto, OHLCV(historical+intraday)=tiingo/crypto/prices, top-of-book=tiingo/crypto/top. 전부 GET. resampleFreq 는 인트라데이('5min','1Hour') 및 일/주/월/연 단위 지원(riingo 문서 기재). \n\n[추출 한계] 본 페이지가 JS 렌더링 SPA 라 직접 WebFetch 시 <title>만 반환되어 렌더 프록시(r.jina.ai)를 경유했으나, 프록시도 페이지 상단(top-of-book)까지만 렌더해 /prices·메타데이터·websocket 하단 섹션의 파라미터 표·응답필드 표·예시 JSON 은 verbatim 확보 불가. 정확한 필수여부·기본값·전체 응답스키마는 미확인(아래 caveats 참조).",
+  "endpoints": [
+    {
+      "name": "Crypto Metadata",
+      "method": "GET",
+      "url_pattern": "/tiingo/crypto",
+      "description": "암호화폐 티커 메타데이터 조회. [보강: 대상 페이지 본문 verbatim 미확보 — URL/파라미터는 공식 클라이언트 소스(tiingo-python api.py)에서 확인]",
+      "query_params": [
+        {
+          "name": "tickers",
+          "type": "string",
+          "required": false,
+          "description": "조회할 crypto 티커(쉼표구분). [클라이언트 소스 기준 — 대상 페이지 인용 아님]"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷(json/csv 추정 — 공통 규약). [클라이언트 소스 기준]"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "json (공통 규약 기준, 대상 페이지 본문 미확보)",
+      "example": ""
+    },
+    {
+      "name": "Crypto Price Data (historical + intraday OHLCV)",
+      "method": "GET",
+      "url_pattern": "/tiingo/crypto/prices",
+      "description": "암호화폐 OHLCV 가격 데이터(과거 및 인트라데이). last price 도 이 엔드포인트에서 제공(대상 페이지가 top-of-book deprecation 안내에서 언급). [URL/파라미터 표는 대상 페이지 본문 verbatim 미확보 — 공식 클라이언트 소스(tiingo-python api.py)로 보강]",
+      "query_params": [
+        {
+          "name": "tickers",
+          "type": "string",
+          "required": false,
+          "description": "crypto 티커(예: BTCUSD). [클라이언트 소스 기준 — 대상 페이지 인용 아님]"
+        },
+        {
+          "name": "baseCurrency",
+          "type": "string",
+          "required": false,
+          "description": "기준 통화. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "startDate",
+          "type": "string(date)",
+          "required": false,
+          "description": "조회 시작일. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "endDate",
+          "type": "string(date)",
+          "required": false,
+          "description": "조회 종료일. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "exchanges",
+          "type": "string",
+          "required": false,
+          "description": "거래소 필터. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "consolidateBaseCurrency",
+          "type": "boolean",
+          "required": false,
+          "description": "기준 통화 통합 여부. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "includeRawExchangeData",
+          "type": "boolean",
+          "required": false,
+          "description": "거래소별 원시 데이터 포함 여부. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "resampleFreq",
+          "type": "string",
+          "required": false,
+          "description": "리샘플 빈도. 예: 5min, 1Hour, 1day(인트라데이/일·주·월·연). [클라이언트/riingo 소스 기준 — 대상 페이지 표 미확보]"
+        },
+        {
+          "name": "convertCurrency",
+          "type": "string",
+          "required": false,
+          "description": "통화 변환 대상. [클라이언트 소스 기준]"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회한 crypto 티커. [riingo/클라이언트 소스 기준 — 대상 페이지 표 verbatim 미확보]"
+        },
+        {
+          "name": "baseCurrency",
+          "type": "string",
+          "description": "기준 통화(예: btc). [클라이언트 소스 기준]"
+        },
+        {
+          "name": "quoteCurrency",
+          "type": "string",
+          "description": "호가 통화(예: usd). [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].date",
+          "type": "datetime",
+          "description": "캔들 시각. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].open",
+          "type": "float",
+          "description": "시가. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].high",
+          "type": "float",
+          "description": "고가. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].low",
+          "type": "float",
+          "description": "저가. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].close",
+          "type": "float",
+          "description": "종가. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].volume",
+          "type": "float",
+          "description": "거래량(기준통화 단위). [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].volumeNotional",
+          "type": "float",
+          "description": "명목 거래대금(호가통화 단위). [클라이언트 소스 기준]"
+        },
+        {
+          "name": "priceData[].tradesDone",
+          "type": "float",
+          "description": "체결 건수. [클라이언트 소스 기준]"
+        }
+      ],
+      "response_format": "json (csv 가능 추정 — 공통 규약). 대상 페이지 응답표 verbatim 미확보",
+      "example": ""
+    },
+    {
+      "name": "Crypto Top-of-Book / Last Price (DEPRECATED)",
+      "method": "GET",
+      "url_pattern": "/tiingo/crypto/top",
+      "description": "[대상 페이지 직접 인용] top-of-book(최우선 호가)/last price 엔드포인트. 페이지에 deprecation 명시: 'we have made the decision to deprecate the top-of-book endpoint' — crypto 거래소 피드가 일관된 best bid/ask 구성에 신뢰할 수 없다고 확인됐기 때문. last price 는 /prices 엔드포인트에서 제공. (URL 경로 /tiingo/crypto/top 및 파라미터는 클라이언트 소스로 확인)",
+      "query_params": [
+        {
+          "name": "tickers",
+          "type": "string",
+          "required": false,
+          "description": "crypto 티커. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "exchanges",
+          "type": "string",
+          "required": false,
+          "description": "거래소 필터. [클라이언트 소스 기준]"
+        },
+        {
+          "name": "includeRawExchangeData",
+          "type": "boolean",
+          "required": false,
+          "default": "false",
+          "description": "true 시 응답에 exchangeData(거래소별 원시 데이터) 포함. [대상 페이지가 exchangeData 가 'requires includeRawExchangeData=true' 라고 기재]"
+        },
+        {
+          "name": "convertCurrency",
+          "type": "string",
+          "required": false,
+          "description": "통화 변환 대상. [클라이언트 소스 기준]"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "[대상 페이지 인용] 자산 관련 티커"
+        },
+        {
+          "name": "baseCurrency",
+          "type": "string",
+          "description": "[대상 페이지 인용] 기준 페어(예: btc)"
+        },
+        {
+          "name": "quoteCurrency",
+          "type": "string",
+          "description": "[대상 페이지 인용] 호가 페어(예: usd)"
+        },
+        {
+          "name": "topOfBookData",
+          "type": "object",
+          "description": "[대상 페이지 인용] bid/ask 데이터를 담는 객체"
+        },
+        {
+          "name": "exchangeData",
+          "type": "object",
+          "description": "[대상 페이지 인용] 선택적; includeRawExchangeData=true 필요"
+        },
+        {
+          "name": "quoteTimestamp",
+          "type": "datetime",
+          "description": "[대상 페이지 인용] 마지막 호가(quote) 갱신 시각"
+        },
+        {
+          "name": "lastSaleTimestamp",
+          "type": "datetime",
+          "description": "[대상 페이지 인용] 마지막 체결(trade) 갱신 시각"
+        },
+        {
+          "name": "lastPrice",
+          "type": "float",
+          "description": "[대상 페이지 인용] 마지막 체결 가격"
+        },
+        {
+          "name": "lastSize",
+          "type": "float",
+          "description": "[대상 페이지 인용] 마지막 가격에서의 거래량"
+        },
+        {
+          "name": "bidPrice",
+          "type": "float",
+          "description": "[대상 페이지 인용] 매수 호가"
+        },
+        {
+          "name": "bidSize",
+          "type": "float",
+          "description": "[대상 페이지 인용] 매수 호가 수량"
+        },
+        {
+          "name": "bidExchange",
+          "type": "string",
+          "description": "[대상 페이지 인용] 매수 호가 거래소"
+        },
+        {
+          "name": "askPrice",
+          "type": "float",
+          "description": "[대상 페이지 인용] 매도 호가"
+        },
+        {
+          "name": "askSize",
+          "type": "float",
+          "description": "[대상 페이지 인용] 매도 호가 수량"
+        },
+        {
+          "name": "askExchange",
+          "type": "string",
+          "description": "[대상 페이지 인용] 매도 호가 거래소"
+        }
+      ],
+      "response_format": "json",
+      "example": ""
+    }
+  ],
+  "rate_limits": "crypto 페이지 본문에서 rate limit 텍스트는 프록시로 확보 못함. 공통 규약(overview 페이지): 시간당/일일(자정 EST 리셋)/월 대역폭(매월 1일 자정 EST 리셋) 기준 제한. 구체 수치는 pricing 페이지 참조. [대상 페이지 직접 인용 아님 — 미확인]",
+  "pricing_notes": "crypto 페이지 본문에서 무료/유료 티어 구분 텍스트는 프록시로 확보 못함(미확인). 공통: 모든 계정 가입 무료, 상위 플랜(Power/Commercial)은 한도 상향. 약관상 Basic/Power 는 개인·내부용·재배포 금지(stockpick 개인용 OK). [대상 페이지 직접 인용 아님]",
+  "caveats": [
+    "⚠️ fetch_status=partial: 대상 SPA 페이지 본문을 r.jina.ai 프록시로 상단 'Top-of-Book' 섹션까지만 확보. /tiingo/crypto/prices·/tiingo/crypto(메타데이터)·websocket 섹션의 파라미터 표·응답필드 표·예시 JSON 은 verbatim 미확보.",
+    "Top-of-Book(/tiingo/crypto/top)의 응답필드 13개만 대상 페이지 직접 인용. 나머지 엔드포인트(URL 경로·파라미터·응답필드)는 공식 클라이언트 소스(hydrosquall/tiingo-python api.py, business-science/riingo)로 보강 = 대상 페이지 직접 인용 아님. 권위 명세로 쓰기 전 공식 문서 본문 재확인 권장.",
+    "Top-of-Book 엔드포인트는 DEPRECATED(대상 페이지 명시). 신규 코드에서 사용 금지 — last price 는 /tiingo/crypto/prices 사용.",
+    "파라미터의 필수여부(required)·기본값은 대상 페이지 표를 못 읽어 대부분 미확인(false 로 추정 표기). 실제 호출 전 공식 문서/실측 검증 필요.",
+    "stockpick 도메인은 한국주식(코스피/코스닥). crypto API 는 현 기획과 직접 무관 — 우선순위 낮음.",
+    "web.archive.org 스냅샷은 이 환경 WebFetch 가 차단(unable to fetch)되어 폴백 불가. WebFetch 도구가 6회 실패 한도 도달.",
+    "응답 통화/거래소 통합 의미(consolidateBaseCurrency, exchanges, convertCurrency 의 정확한 동작)는 대상 페이지 설명 미확보."
+  ]
+}

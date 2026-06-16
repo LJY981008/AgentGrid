@@ -19,6 +19,12 @@
 - [[decisions/ADR-001-마이그레이션-도구-alembic|ADR-001 마이그레이션 도구 = alembic]] — 승인(2026-06-16). PG18 파티션/BRIN/ENUM 은 raw SQL 보강
 - [[decisions/ADR-002-미국-데이터소스-아키텍처|ADR-002 미국 데이터소스 아키텍처]] — 승인(2026-06-16). 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·RabbitMQ·LLM정규화 기각
 
+## 📡 API 명세 (apis/) — 환각 방지 권위 레퍼런스
+
+> 외부 API 실제 명세를 구조화 JSON 캡처(코드가 추측 아닌 실측 참조). 6개월 주기 재캡처.
+
+- [[apis/README|API 명세 인덱스]] — **Tiingo**(미국 가격 소스) 16섹션/34엔드포인트. 핵심: end-of-day(raw OHLCV+adjClose+divCash)·corporate-actions·fundamentals. 인증 `Token`(Bearer 아님)·심볼 대시(-)·재배포 금지
+
 ## 🔬 리서치 (research/)
 
 - [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **현행** 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 기준선

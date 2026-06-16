@@ -1,0 +1,24 @@
+{
+  "section": "general-changelog",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/general/changelog",
+  "fetch_status": "ok (jina 렌더 프록시 r.jina.ai 경유로 본문 확보. 직접 WebFetch는 SPA라 빈 <title>만 반환. web.archive.org는 환경에서 fetch 차단됨. 프록시 모델이 저작권 제약으로 문구 verbatim 인용은 거부 → 항목별 요약 형태로 전체 changelog 엔트리 추출. 개별 엔트리에 절대 날짜는 거의 표기되지 않고 분기/제품영역 헤딩 순으로 역연대 나열됨)",
+  "auth": "이 changelog 페이지 자체에는 인증 방식이 기재되지 않음. 페이지가 언급하는 토큰 위치만: API Token rotation은 Token Page(www.tiingo.com/account/api/token, 일부 항목은 api.tiingo.com/account/token)에서 제공. (참고: Tiingo 공통 규약은 Authorization: Token <key> 헤더 또는 ?token=<key> 쿼리 — 단 이 페이지에 명시된 내용은 아님)",
+  "base_url": "이 changelog 페이지에 base_url 직접 기재 없음. 페이지가 참조하는 도메인: www.tiingo.com(문서/계정), api.tiingo.com(account/token·pricing), status.tiingo.com(상태). (참고: API base_url은 api.tiingo.com — 이 페이지 명시 아님)",
+  "notes": "이 페이지는 changelog(변경 이력)로 REST 엔드포인트 명세가 아님 → endpoints=[]. 변경 항목은 절대 날짜 없이 제품영역(General / EOD Composite / IEX REST·WebSocket / FX / Crypto API·Benchmark·Synthetics / News / Dividend·Split Corporate Actions / Fundamentals / Fund Fees / Security Master / Search / Company Descriptions)별 헤딩으로 역연대 나열됨.\n\n코드 참조에 유의미한 주요 changelog 사실(페이지 기재):\n- 운영 방식: 분기별(quarterly) changelog 업데이트로 전환. 상태 모니터링 status.tiingo.com 런칭. API Token rotation 기능을 Token Page에서 제공. 잘못된 날짜(malformed date) 입력 시 에러 메시지 개선.\n- 인프라: 거래소 인접 데이터센터로 대규모 마이그레이션, 인트라데이 캐싱 엔진 O(1) 쿼리 최적화(Crypto·IEX).\n- WebSocket: 구독 시 심볼 자동 정규화(대소문자 무시) 적용.\n- IEX 정책: 2025-02-01 IEX 마켓데이터 정책 변경 대응 — REST/WebSocket에 임계(threshold) 옵션, 15ms 지연 컴플라이언스 구현. PermaTicker로 과거 데이터 쿼리 가능. 인트라데이 과거 데이터에 volume 필드 추가. 1분봉 OHLCV WebSocket 옵션.\n- EOD Composite: CSV 포맷 export, 주/월/연(weekly/monthly/annual) 리샘플링, endDate 기본값=오늘. 국제주식을 USD가 아닌 native currency로 보고. crypto 페어 쿼리 가능. PermaTicker 쿼리 지원. sort 요청 필드 추가. ADR FX 환산 개선.\n- IEX API: 멀티 티커 쿼리(콤마 구분 또는 리스트). after-hours 쿼리·timeseries gap-fill 옵션.\n- Fundamentals: beta 졸업(정식화). asReported(as-reported) 일별 메트릭 계산 추가. permaTicker 쿼리 지원. statements·daily 엔드포인트에 sort 필드. DOW 30을 3년치 샘플 평가 데이터셋으로 제공. sector·industry·location 등 메타데이터 대폭 확장. Daily Incremental Bulk Download. 시가총액 계산 버그 수정, 날짜 경계(extra day) 버그 수정.\n- Dividend/Split Corporate Actions: 신규 제품 런칭(beta → 개선), 티커별(per-ticker) 쿼리, announcement 추적·신규 date 필드, 타임존 수정.\n- Crypto: 160+ DEX/CEX 커버리지(40+ → 140+ → 160+ 단계적 확장), Crypto Synthetics 신규 제품(크로스 페어 마이크로초 지연 벤치마크), top-of-book quote WebSocket.\n- News API: 35M → 40M → 70M+ 기사로 확장, ASX(호주) 주식 커버리지, Power 유저 1개월 과거 쿼리.\n- Fund Fees: 41,000+ 펀드 커버리지.\n- 가격/티어: New Power Plans 가격 업데이트, usage tier 변경, Free/Power 고객 대상 조정(구체 수치는 이 페이지에 없음). api.tiingo.com/pricing에서 업그레이드.\n- Search: 타입어헤드용 티커 검색 제품. Company Descriptions: 회사 설명 변경 감성분석 대체데이터 제품.\n\n(주의: 절대 날짜가 거의 없어 변경 시점 특정 불가 — 위는 제품영역별 누적 요약. 정확한 문구는 저작권 제약으로 프록시가 verbatim 인용 거부.)",
+  "endpoints": [],
+  "rate_limits": "이 changelog 페이지에 rate limit 수치 기재 없음. usage tier(사용 등급) 변경이 여러 차례 있었다는 언급만 존재(구체 한도 미기재). (참고: Tiingo 공통 rate limit은 별도 문서 — 이 페이지 인용 아님)",
+  "pricing_notes": "이 페이지 기재: \"New Power Plans\"와 함께 가격 업데이트가 있었고, Free/Power 고객 대상 pricing tier 조정 및 usage tier 변경이 여러 차례 적용됨. 업그레이드는 api.tiingo.com/pricing에서 가능. Fundamentals는 DOW 30을 3년치 샘플(무료 평가용) 데이터셋으로 제공. 단, 구체적 무료 vs 유료 한도 수치는 이 changelog 페이지에 명시되지 않음.",
+  "caveats": [
+    "이 페이지는 changelog로 REST 엔드포인트 명세(URL 경로·query/path 파라미터·응답 필드 스키마)를 담지 않음 → endpoints=[]. 실제 엔드포인트 명세는 각 데이터 제품 문서(예: /tiingo/daily, /iex, /fx, /crypto, fundamentals, corporate-actions) 페이지를 별도 참조해야 함.",
+    "인증 방식(Token 헤더 vs ?token=)·base_url·rate limit 수치는 이 페이지에 직접 기재되지 않음. auth/base_url/rate_limits 필드의 '참고' 표기는 Tiingo 공통 규약(별도 문서·메모리)이며 이 페이지 인용이 아님 — 코드에서 권위 근거로 쓰지 말 것.",
+    "개별 changelog 엔트리에 절대 날짜가 거의 없음(대부분 제품영역 헤딩으로 역연대 나열). 명시 확인된 유일한 절대 날짜는 IEX 정책 관련 '2025-02-01'. 따라서 특정 기능의 도입/변경 시점을 changelog만으로 단정 불가.",
+    "tiingo.com/documentation/*는 JS 렌더 SPA — 직접 WebFetch 시 본문 비고 <title>='Stock Market Tools | Tiingo'만 반환됨(검증됨). 반드시 r.jina.ai 등 렌더 프록시 경유 필요.",
+    "jina 프록시의 요약 모델이 저작권 제약으로 verbatim(원문 그대로) 인용을 거부함 → 본 추출은 항목별 의역 요약. 정확한 문구가 필요하면 브라우저로 직접 확인 권장.",
+    "web.archive.org는 본 실행 환경에서 WebFetch 차단(unable to fetch)되어 교차검증 스냅샷 확보 실패 — 단일 프록시(jina) 출처. 페이지 정책상 교차검증 2출처 원칙 미충족(한 페이지를 한 프록시로만 확보).",
+    "Fundamentals·Dividend/Split·Crypto Synthetics 등은 한때 beta였다가 졸업/정식화됨 — 과거 코드/문서가 beta 게이팅을 가정했다면 현행과 불일치 가능."
+  ]
+}

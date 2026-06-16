@@ -1,0 +1,146 @@
+{
+  "section": "websockets-crypto",
+  "category": "websockets",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/websockets/crypto",
+  "fetch_status": "partial — r.jina.ai 렌더 프록시로 대상 페이지의 하단(data 필드 표: service/messageType, Trade(T)/Top-of-Book(Q) 응답 필드)만 verbatim 확보. 페이지 상단(연결 방법·wss URL·subscribe/unsubscribe JSON·thresholdLevel 표·rate limit)은 jina가 일관되게 렌더 누락. web.archive.org는 WebFetch 차단. 누락분은 공식 reference client(hydrosquall/tiingo-python tiingo/wsclient.py)로 보강 — 대상 페이지 직접 인용 아님(notes 명시).",
+  "auth": "authorization 토큰(=API 키)을 구독 메시지 JSON 본문의 \"authorization\" 필드에 실어 전송(연결 직후 on_open 시 ws.send). HTTP 헤더나 ?token= 쿼리가 아님 — WebSocket 메시지 페이로드에 포함. (출처: 공식 reference client wsclient.py — 대상 페이지에서 직접 확인 못함)",
+  "base_url": "wss://api.tiingo.com (WebSocket. crypto 엔드포인트 경로 = /crypto → wss://api.tiingo.com/crypto). 출처: wsclient.py(base_url=\"wss://api.tiingo.com\", 경로 \"{base}/{endpoint}\", endpoint∈{iex,fx,crypto}) — 보강 출처",
+  "notes": "[대상 페이지에서 verbatim 확보된 내용 — data 필드 표]\n이 페이지는 Tiingo Crypto WebSocket 피드가 보내는 메시지의 필드 구조를 설명한다.\n\n최상위(top-level) 필드:\n- service: \"이것이 crypto 데이터임을 알려주는 식별자. 항상 'crypto_data' 반환.\"\n- messageType: \"crypto 피드에서 온 데이터 패킷의 종류를 알려주는 값. 항상 'A'(=새 가격 호가) 반환.\" (참고: heartbeat는 'H' — wsclient 보강)\n- data: 메시지 종류에 따라 배열(아래 T/Q 구조).\n\nTrade Update Message (배열 [0] type == \"T\"):\n- [0] Update Message Type: \"어떤 종류의 가격 업데이트인지 전달. 마지막 체결 메시지는 항상 'T'.\"\n- [1] Ticker: \"해당 자산의 티커.\"\n- [2] Date: \"이 체결/호가가 들어온 시각을 나타내는 문자열(datetime).\"\n- [3] Exchange: \"체결이 이뤄진 거래소.\"\n- [4] Last Size: \"마지막 가격에 체결된 암호화폐 거래량(base currency 기준).\"\n- [5] Last Price: \"마지막 체결이 실행된 가격.\"\n\nTop-of-Book Quote Update Message (배열 [0] type == \"Q\"):\n- [0] Update Message Type: \"어떤 종류의 가격 업데이트인지 전달.\"\n- [1] Ticker: \"해당 자산의 티커.\"\n- [2] Date: \"해당 호가가 들어온 시각을 나타내는 문자열(datetime).\"\n- [3] Exchange: \"이 top-of-book 업데이트가 해당하는 거래소.\"\n- [4] Bid Size: \"매수 호가(bid price)에 있는 암호화폐 수량(base currency 기준).\"\n- [5] Bid Price: \"현재 가장 높은 매수 호가.\"\n- [6] Mid Price: \"bidPrice와 askPrice가 둘 다 not-null일 때 현재 timestamp의 중간가. mid = (bidPrice + askPrice)/2.0.\"\n- [7] Ask Size: \"매도 호가(ask price)에 있는 암호화폐 수량(base currency 기준).\"\n- [8] Ask Price: \"현재 가장 낮은 매도 호가.\"\n\n[보강 출처(대상 페이지 직접 인용 아님) — 공식 reference client hydrosquall/tiingo-python tiingo/wsclient.py]\n- 연결: WebSocket을 wss://api.tiingo.com/crypto 로 열고, on_open 시 구독(config) JSON을 ws.send 로 1회 전송.\n- 구독 메시지 형식: {\"eventName\":\"subscribe\", \"authorization\":\"<API_KEY>\", \"eventData\":{\"thresholdLevel\":5}}\n- eventData.thresholdLevel: 예시값 5 (코드상 명시적 기본값 없음, eventData 내에서 설정). IEX/FX 문서 기준 thresholdLevel은 업데이트 빈도/종류 게이팅(높을수록 적게). crypto 페이지의 thresholdLevel 표 자체는 본 추출에서 확보 못함.\n- 클라이언트 코드는 별도의 unsubscribe 구현 없음(subscribe JSON만 전송).\n- endpoint 검증: iex/fx/crypto 만 허용.\n\n[프록시 한계 메모] r.jina.ai 프록시가 이 SPA 페이지의 data 필드 표(하단)만 안정적으로 렌더링하고 상단 연결/구독/threshold/rate-limit 섹션은 반복 시도에도 누락됨. 따라서 subscribe 형식·wss URL·인증 위치는 보강 출처 기반이며, 코드에서 의존하기 전 공식 페이지 재확인 권장.",
+  "endpoints": [
+    {
+      "name": "Crypto WebSocket (실시간 체결/호가 스트림)",
+      "method": "WSS (WebSocket subscribe 메시지)",
+      "url_pattern": "wss://api.tiingo.com/crypto",
+      "description": "WebSocket 연결을 열고 subscribe 메시지를 보내면 crypto 실시간 데이터(messageType 'A')를 푸시받는다. 메시지는 service='crypto_data', messageType, data 배열 형태. data 배열은 Trade([0]='T') 또는 Top-of-Book Quote([0]='Q') 구조. (base/경로·subscribe 형식은 공식 reference client 보강; data 필드 구조는 대상 페이지 verbatim)",
+      "example": "구독(on_open 시 전송, 출처=wsclient.py): {\"eventName\":\"subscribe\",\"authorization\":\"API_KEY_GOES_HERE\",\"eventData\":{\"thresholdLevel\":5}}",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "eventName",
+          "type": "string",
+          "required": true,
+          "description": "구독 메시지의 이벤트명. 'subscribe' (출처: reference client — 대상 페이지 미확인). WebSocket 메시지 본문 필드(쿼리 아님)."
+        },
+        {
+          "name": "authorization",
+          "type": "string",
+          "required": true,
+          "description": "Tiingo API 키. WebSocket 구독 메시지 본문 authorization 필드에 실음(헤더/쿼리 아님). (출처: reference client)"
+        },
+        {
+          "name": "eventData.thresholdLevel",
+          "type": "integer",
+          "required": false,
+          "default": "5 (코드 예시값; 명시적 기본값 없음)",
+          "description": "업데이트 빈도/종류를 게이팅하는 임계 레벨. crypto 페이지의 레벨 값 표는 본 추출에서 확보 못함(IEX/FX 문서상 높을수록 적은 업데이트). (출처: reference client eventData)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "service",
+          "type": "string",
+          "description": "crypto 데이터 식별자. 항상 'crypto_data'. (대상 페이지 verbatim)"
+        },
+        {
+          "name": "messageType",
+          "type": "string",
+          "description": "데이터 패킷 종류. 항상 'A'(새 가격 호가). heartbeat는 'H'(연결 유지, reference client 보강). (대상 페이지 verbatim)"
+        },
+        {
+          "name": "data",
+          "type": "array",
+          "description": "체결/호가 정보 + 타임스탬프 배열. [0] 요소가 'T'=Trade 또는 'Q'=Top-of-Book Quote. (대상 페이지 verbatim)"
+        },
+        {
+          "name": "data[T][0] Update Message Type",
+          "type": "string",
+          "description": "Trade 메시지. 항상 'T' (마지막 체결). (대상 페이지)"
+        },
+        {
+          "name": "data[T][1] Ticker",
+          "type": "string",
+          "description": "해당 자산의 티커. (대상 페이지)"
+        },
+        {
+          "name": "data[T][2] Date",
+          "type": "string(datetime)",
+          "description": "체결/호가가 들어온 시각 문자열. (대상 페이지)"
+        },
+        {
+          "name": "data[T][3] Exchange",
+          "type": "string",
+          "description": "체결이 이뤄진 거래소. (대상 페이지)"
+        },
+        {
+          "name": "data[T][4] Last Size",
+          "type": "number",
+          "description": "마지막 가격에 체결된 거래량(base currency 기준). (대상 페이지)"
+        },
+        {
+          "name": "data[T][5] Last Price",
+          "type": "number",
+          "description": "마지막 체결 실행 가격. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][0] Update Message Type",
+          "type": "string",
+          "description": "Top-of-Book 메시지. 'Q'. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][1] Ticker",
+          "type": "string",
+          "description": "해당 자산의 티커. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][2] Date",
+          "type": "string(datetime)",
+          "description": "호가가 들어온 시각 문자열. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][3] Exchange",
+          "type": "string",
+          "description": "이 top-of-book 업데이트가 해당하는 거래소. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][4] Bid Size",
+          "type": "number",
+          "description": "매수 호가에 있는 수량(base currency 기준). (대상 페이지)"
+        },
+        {
+          "name": "data[Q][5] Bid Price",
+          "type": "number",
+          "description": "현재 가장 높은 매수 호가. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][6] Mid Price",
+          "type": "number",
+          "description": "bidPrice/askPrice가 둘 다 not-null일 때 중간가 = (bidPrice+askPrice)/2.0. (대상 페이지)"
+        },
+        {
+          "name": "data[Q][7] Ask Size",
+          "type": "number",
+          "description": "매도 호가에 있는 수량(base currency 기준). (대상 페이지)"
+        },
+        {
+          "name": "data[Q][8] Ask Price",
+          "type": "number",
+          "description": "현재 가장 낮은 매도 호가. (대상 페이지)"
+        }
+      ]
+    }
+  ],
+  "rate_limits": "대상 페이지에서 확보 못함(상단 섹션 렌더 누락). Tiingo 공통 규약상 WebSocket은 동시 연결 수 제한이 있으나 이 crypto 페이지에 기재된 구체 수치는 본 추출에 없음 — 미확인.",
+  "pricing_notes": "이 crypto WebSocket 페이지에서 무료/유료 차이 문구를 verbatim 확보하지 못함(상단 렌더 누락). Tiingo crypto 데이터는 일반적으로 무료 티어에 포함되나(별도 메모 research-tiingo-crypto 참조), 본 페이지 기재 사실로는 미확인.",
+  "caveats": [
+    "fetch_status=partial: 대상 페이지에서 직접 확보한 것은 data 필드 표(service/messageType, Trade(T) 6필드, Top-of-Book(Q) 9필드)뿐. wss URL·subscribe JSON·authorization 위치·thresholdLevel 표·rate limit·pricing은 모두 공식 reference client(wsclient.py) 보강이며 대상 페이지 직접 인용 아님 — 코드 의존 전 공식 페이지 재확인 필요.",
+    "프록시 함정: r.jina.ai는 이 SPA의 하단 표만 안정 렌더, 상단(연결/구독) 섹션은 반복 시도에도 일관 누락. web.archive.org는 WebFetch 차단됨. 직접 WebFetch는 빈 <title>만 반환(SPA).",
+    "data 배열 인덱스 순서는 대상 페이지의 위치 명시를 따랐으나(T: type/ticker/date/exchange/lastSize/lastPrice; Q: type/ticker/date/exchange/bidSize/bidPrice/midPrice/askSize/askPrice), Mid Price가 askSize/askPrice 앞 인덱스 [6]에 위치하는 점 주의 — 직관과 다를 수 있어 실제 메시지로 검증 권장.",
+    "프록시 추출 중 Q 메시지 [0] 설명 텍스트가 'T for last trade'로 잘못 표기된 케이스가 있었음(프록시 렌더 노이즈 가능성). messageType 식별은 실제 스트림에서 확인 권장.",
+    "authorization을 메시지 본문에 싣는 방식은 REST(Token 헤더/?token=)와 다름 — research-tiingo-api(REST 인증)와 혼동 주의.",
+    "thresholdLevel의 crypto별 허용값·의미 표는 미확보. IEX 페이지(research-tiingo-websockets-iex: 0/5/6)와 동일하다고 가정하지 말 것 — crypto 페이지 기준 미확인.",
+    "메모리 인덱스 MEMORY.md에 본 항목 라인 추가 시도 중 동시 쓰기 경합으로 반복 실패(메모리 파일 research-tiingo-websockets-crypto.md 자체는 생성 완료). 인덱스 라인은 수동 추가 필요할 수 있음 — docs/HOME.md MOC 링크도 별도 추가 권고."
+  ]
+}

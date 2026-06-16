@@ -1,0 +1,151 @@
+{
+  "section": "corporate-actions-splits",
+  "category": "corporate-actions",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "source_url": "https://www.tiingo.com/documentation/corporate-actions/splits",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 직접 WebFetch는 SPA라 title만 반환되어 우회함)",
+  "auth": "페이지 본문에는 \"you will need your token in order to connect\" 만 명시 — 헤더/쿼리 위치를 이 페이지에서는 명시하지 않음. (Tiingo 공통 connecting 규약상 `Authorization: Token <token>` 헤더 또는 `?token=<token>` 쿼리 둘 다 가능하나, 이 페이지 자체에는 미기재. 교차 출처는 메모리 research-tiingo-api 참조 — 대상 페이지 인용 아님)",
+  "base_url": "https://api.tiingo.com (경로 prefix: /tiingo/corporate-actions)",
+  "notes": "Corporate Actions Splits API는 주식 분할(splits) 데이터를 제공한다. 두 개의 GET 엔드포인트로 구성: (1) 배치 — 특정 ex-Date의 전체 종목 분할 조회, (2) 종목별 — 특정 티커의 분할 이력 조회. 커버리지는 주식(stocks), ETF, 뮤추얼펀드를 포함하며 historical/current/future 분할 일자를 모두 지원한다. 가용성: \"Currently available to Beta-enabled customers and enterprise customers\" + \"Included for all customers with the End-of-Day endpoint entitlement\" — 즉 베타 활성화 고객·엔터프라이즈 고객·EOD 엔드포인트 권한 보유 고객에게 제공. splitFactor = splitTo/splitFrom 으로 계산되며 분할 가격 조정 계산에 활용. splitStatus는 'a'(Active) 또는 'c'(Cancelled).",
+  "endpoints": [
+    {
+      "name": "Batch Splits (전체 종목, ex-Date 기준)",
+      "method": "GET",
+      "url_pattern": "/tiingo/corporate-actions/splits",
+      "description": "특정 ex-Date에 해당하는 전체 종목의 분할 정보를 조회. exDate 미지정 시 당일(current day)을 기본값으로 사용.",
+      "query_params": [
+        {
+          "name": "exDate",
+          "type": "datetime",
+          "required": false,
+          "default": "current day (당일)",
+          "description": "조회할 분할의 ex-Date (the ex-Date of the split)"
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰 (페이지상 위치 미명시)"
+        }
+      ],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "permaTicker",
+          "type": "string",
+          "description": "The Tiingo permaticker (폐지종목 추적용 영구 식별자)"
+        },
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "Ticker related to the asset"
+        },
+        {
+          "name": "exDate",
+          "type": "datetime",
+          "description": "The ex-Date of the split (splitFactor != 1.0)"
+        },
+        {
+          "name": "splitFrom",
+          "type": "float",
+          "description": "The prior split ratio (분할 전 비율)"
+        },
+        {
+          "name": "splitTo",
+          "type": "float",
+          "description": "The new split ratio — splitFrom 1주당 지급되는 splitTo 주식 수"
+        },
+        {
+          "name": "splitFactor",
+          "type": "float",
+          "description": "splitTo/splitFrom 으로 계산. 분할 가격 조정 계산에 유용"
+        },
+        {
+          "name": "splitStatus",
+          "type": "string",
+          "description": "분할 상태 코드: a (Active) 또는 c (Cancelled)"
+        }
+      ],
+      "response_format": "json"
+    },
+    {
+      "name": "Ticker-Specific Splits (종목별 분할 이력)",
+      "method": "GET",
+      "url_pattern": "/tiingo/corporate-actions/{ticker}/splits",
+      "description": "특정 티커의 분할 이력을 조회. startExDate로 조회 시작 ex-date(미래/과거 일자) 지정 가능, 미지정 시 당일 기본.",
+      "query_params": [
+        {
+          "name": "startExDate",
+          "type": "datetime",
+          "required": false,
+          "default": "current day (당일)",
+          "description": "명시적으로 지정한 ex-date (미래 또는 과거 일자) — the ex-date explicitly specified"
+        },
+        {
+          "name": "token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰 (페이지상 위치 미명시)"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "조회 대상 자산의 티커 심볼"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "permaTicker",
+          "type": "string",
+          "description": "The Tiingo permaticker"
+        },
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "Ticker related to the asset"
+        },
+        {
+          "name": "exDate",
+          "type": "datetime",
+          "description": "The ex-Date of the split (splitFactor != 1.0)"
+        },
+        {
+          "name": "splitFrom",
+          "type": "float",
+          "description": "The prior split ratio"
+        },
+        {
+          "name": "splitTo",
+          "type": "float",
+          "description": "The new split ratio — splitFrom 1주당 지급되는 splitTo 주식 수"
+        },
+        {
+          "name": "splitFactor",
+          "type": "float",
+          "description": "splitTo/splitFrom 으로 계산. 분할 가격 조정 계산에 유용"
+        },
+        {
+          "name": "splitStatus",
+          "type": "string",
+          "description": "분할 상태 코드: a (Active) 또는 c (Cancelled)"
+        }
+      ],
+      "response_format": "json"
+    }
+  ],
+  "rate_limits": "이 페이지에는 rate limit 미기재. (Tiingo 공통 규약상 시간/일/월 단위 제한이 존재하나 이 페이지 자체에는 명시 없음 — 대상 페이지 인용 아님)",
+  "pricing_notes": "이 페이지에 명시적 가격 티어/무료 티어 언급은 없음. 가용성 게이팅만 기재: 베타 활성화 고객 + 엔터프라이즈 고객에게 현재 제공되며, End-of-Day 엔드포인트 권한(entitlement)을 가진 모든 고객에게 포함됨. 즉 EOD 권한이 접근 게이트. 무료 플랜 명시는 없음.",
+  "caveats": [
+    "인증 방식(헤더 vs ?token=)이 이 페이지 본문에는 명시되지 않음 — 'you will need your token' 만 기재. 구체 위치는 Tiingo 공통 connecting 문서를 별도 확인 필요",
+    "페이지에 응답 JSON 예시 블록·예시 요청 URL이 없음 (필드 표만 존재)",
+    "rate limit·구체 가격 티어가 이 페이지에 미기재",
+    "직접 WebFetch는 JS 렌더 SPA라 본문이 비고 <title>만 반환됨 — 반드시 r.jina.ai 렌더 프록시 경유 필요 (검증됨)",
+    "자매 엔드포인트로 dividends, distributions 가 동일 corporate-actions 패밀리에 존재 (이 페이지는 splits 전용)",
+    "splitStatus의 'c'(Cancelled)는 취소된 분할 — 코드에서 active만 필터링하지 않으면 잘못된 가격 조정 위험",
+    "permaTicker 제공은 폐지종목/티커 변경 추적에 유리 (생존편향 완화 측면)"
+  ]
+}

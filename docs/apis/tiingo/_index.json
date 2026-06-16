@@ -1,0 +1,140 @@
+{
+  "source": "Tiingo official documentation",
+  "captured_at": "2026-06-16",
+  "capture_method": "r.jina.ai 렌더 프록시 경유(tiingo.com/documentation/* 는 JS 렌더 SPA — WebFetch 직접 호출 시 <title>만 반환). 워크플로우 tiingo-spec-capture(스키마 강제).",
+  "base_url": "https://api.tiingo.com",
+  "auth": "Authorization: Token <KEY>  또는  ?token=<KEY> (Bearer 아님). 키=.env TIINGO_API_KEY",
+  "total_sections": 16,
+  "total_endpoints": 34,
+  "note": "비관련(crypto/forex/iex/websockets/fees) 섹션은 참고용. stockpick 핵심 = end-of-day·fundamentals·corporate-actions·utilities-search·general.",
+  "sections": [
+    {
+      "section": "general-overview",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "general-overview.json"
+    },
+    {
+      "section": "general-connecting",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "general-connecting.json"
+    },
+    {
+      "section": "general-changelog",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "general-changelog.json"
+    },
+    {
+      "section": "end-of-day",
+      "category": "equities-eod",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "end-of-day.json"
+    },
+    {
+      "section": "news",
+      "category": "news",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "news.json"
+    },
+    {
+      "section": "crypto",
+      "category": "crypto",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 3,
+      "file": "crypto.json"
+    },
+    {
+      "section": "forex",
+      "category": "forex",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 4,
+      "file": "forex.json"
+    },
+    {
+      "section": "iex",
+      "category": "iex-intraday",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "iex.json"
+    },
+    {
+      "section": "fundamentals",
+      "category": "fundamentals",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 6,
+      "file": "fundamentals.json"
+    },
+    {
+      "section": "mutual-fund-and-etf-fees",
+      "category": "fees",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "mutual-fund-and-etf-fees.json"
+    },
+    {
+      "section": "corporate-actions-dividends",
+      "category": "corporate-actions",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "corporate-actions-dividends.json"
+    },
+    {
+      "section": "corporate-actions-splits",
+      "category": "corporate-actions",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "corporate-actions-splits.json"
+    },
+    {
+      "section": "websockets-crypto",
+      "category": "websockets",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 1,
+      "file": "websockets-crypto.json"
+    },
+    {
+      "section": "websockets-forex",
+      "category": "websockets",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 1,
+      "file": "websockets-forex.json"
+    },
+    {
+      "section": "websockets-iex",
+      "category": "websockets",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "websockets-iex.json"
+    },
+    {
+      "section": "utilities-search",
+      "category": "utilities",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "utilities-search.json"
+    }
+  ]
+}
