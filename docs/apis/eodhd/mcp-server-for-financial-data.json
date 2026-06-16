@@ -1,0 +1,25 @@
+{
+  "section": "mcp-server-for-financial-data",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/mcp-server-for-financial-data-by-eodhd",
+  "fetch_status": "ok — eodhd.com 이 JS SPA 라 WebFetch 직접 호출은 빈 본문. r.jina.ai 렌더 프록시(https://r.jina.ai/https://eodhd.com/...) 경유로 본문 확보. 2회 fetch 로 교차 보강.",
+  "auth": "두 가지 방식이 페이지에 명시됨. (1) MCP v1: API 키를 URL 쿼리 파라미터로 전달 — `https://mcpv2.eodhd.dev/v1/mcp?apikey=YOUR_API_KEY`. (2) MCP v2: OAuth 2.1 (서버 빌트인 OAuth 서버) — `https://mcpv2.eodhd.dev/v2/mcp`. 로컬 stdio 실행 시에는 환경변수 `EODHD_API_KEY` 로 키 주입. ⚠️ 이 페이지는 일반 EODHD REST 의 ?api_token=<KEY> 쿼리 방식과 다름 — MCP 서버는 apikey(쿼리) 또는 OAuth.",
+  "base_url": "MCP 서버 호스트: https://mcpv2.eodhd.dev (v1: /v1/mcp, v2: /v2/mcp). ⚠️ 일반 EODHD REST base_url(https://eodhd.com/api)이 아니라 별도 MCP 서버 도메인. 이 페이지 자체는 REST 엔드포인트를 정의하지 않고, 77개 MCP 툴이 각 EODHD REST API 문서 페이지로 링크될 뿐.",
+  "notes": "이 페이지는 REST API 명세 페이지가 아니라 EODHD 의 MCP(Model Context Protocol) 서버 개요·설정 페이지다. 따라서 HTTP method/path/query 파라미터/응답 스키마를 갖춘 REST 엔드포인트 정의는 페이지에 없으며, endpoints 는 비워둔다. 페이지에 실제 적힌 사실은 다음과 같다.\n\n[목적] EODHD 금융 데이터를 MCP 프로토콜로 AI 에이전트(Claude Desktop, Claude Code 등)에 노출하는 서버.\n\n[제공 표면] \"77개 read-only 툴\"을 3개 카테고리로 노출 — (1) EODHD 본 데이터셋, (2) UnicornBay 마켓플레이스 제품, (3) 서드파티 제공처. 페이지에 명시 언급된 툴 이름 예시: resolve_ticker, retrieve_description_by_id, get_historical_stock_prices, get_live_price_data, get_technical_indicators, get_support_resistance_levels. (전체 77개 목록은 페이지 표 형태이며 각 행이 해당 EODHD API 문서 페이지로 링크됨 — 개별 엔드포인트 상세는 그 링크된 페이지에 있음, 본 페이지엔 없음.)\n\n[프롬프트 템플릿 3종] analyze_stock(ticker) = 단일 종목 풀 분석(fundamentals → historical prices → support/resistance → technicals → news), compare_stocks(ticker1, ticker2) = 나란히 비교, market_overview(exchange) = 일일 시장 스냅샷.\n\n[전송(transport)] streamable-http(기본), SSE(Server-Sent Events), stdio(Claude Desktop/Claude Code 용).\n\n[문서 임베드] \"100+ 페이지의 EODHD API 문서가 MCP 리소스로 직접 임베드\"되어 AI 에이전트가 엔드포인트 상세를 조회할 때 API 콜을 소비하지 않음.\n\n[입력 정규화] \"Input formatters\" 가 30+ 날짜 포맷을 자동 정규화.\n\n[오픈소스/품질] 두 서버 버전 모두 오픈소스, 로컬 다운로드·실행 가능(GitHub 저장소 참조). 197개 자동 테스트, Python 3.10–3.13 CI.\n\n[로컬 실행 설정 예시(Claude Desktop, 소스 체크아웃)]\n{\"mcpServers\": {\"eodhd-mcp\": {\"command\": \"python3\", \"args\": [\"/home/user/EODHD-MCP-Server/server.py\", \"--stdio\"], \"env\": {\"EODHD_API_KEY\": \"YOUR_EODHD_API_KEY\"}}}}\n\nstockpick(한국주식) 관점: 이 페이지에는 KRX/코스피·코스닥 커버리지나 MCP 를 통한 한국 데이터 가용성에 대한 별도 언급이 전혀 없다. MCP 는 EODHD REST 데이터를 래핑할 뿐이므로 실제 데이터 커버리지·생존편향·수정주가 정의·약관은 각 하위 EODHD REST API 문서(기존 EODHD 시리즈 리서치)를 따른다.",
+  "endpoints": [],
+  "rate_limits": "페이지는 MCP 서버 자체의 호출 한도나 툴별 API 콜 소비량을 명시하지 않음. 단, \"임베드된 100+ 페이지 문서를 조회할 때는 API 콜을 소비하지 않는다\"고만 기재. 실제 데이터 툴 호출 시의 콜 소비량은 각 하위 EODHD REST API 의 콜 소비 규칙을 따르는 것으로 추정되나 페이지엔 미기재(추측 금지 — 미확인).",
+  "pricing_notes": "페이지는 MCP 서버 사용에 필요한 정확한 EODHD 구독 티어를 명시하지 않음. 기재 사실은 \"무료 플랜은 limited data 접근을 부여하며, 접근 수준은 pricing 페이지에서 비교하라\"는 것뿐. 즉 MCP 는 별도 유료 add-on 이 아니라 기존 구독의 데이터 접근 권한을 그대로 노출하는 인터페이스로 보이나(추정), 정확한 티어 매핑은 페이지 미확인.",
+  "caveats": [
+    "⚠️ 이 페이지는 REST 명세 페이지가 아니라 MCP 서버 개요/설정 페이지 — 코드가 직접 호출할 REST 엔드포인트(method/path/query/응답 스키마)는 여기서 추출 불가. 개별 데이터 명세는 77개 툴이 링크하는 각 EODHD REST API 문서 페이지(기존 EODHD 시리즈 리서치)를 봐야 함.",
+    "⚠️ 인증·base_url 이 일반 EODHD REST 와 다름: 일반은 https://eodhd.com/api + ?api_token=, MCP 는 https://mcpv2.eodhd.dev + ?apikey=(v1) 또는 OAuth2.1(v2). 혼동 금지.",
+    "전체 77개 툴 이름·각 툴의 파라미터·응답은 본 페이지에 표 링크 형태로만 있어 verbatim 전체 목록 미확보(렌더 프록시가 표 일부만 추출). 필요 시 각 링크 문서 별도 실측 필요.",
+    "MCP 서버 자체의 한도·툴별 콜 소비량 미명시 — 추측 금지.",
+    "필요 구독 티어 미명시 — '무료=limited data' 외 정확한 매핑 불명.",
+    "PyPI 패키지명/pip·uvx 설치 명령은 페이지 미기재(오픈소스 GitHub 참조만). 로컬 실행 예시는 소스 체크아웃 후 python3 server.py --stdio 방식.",
+    "stockpick(한국주식) 직접 관련성 낮음: KRX 커버리지·한국 데이터 가용성 언급 없음. EODHD 의 한국 데이터 한계는 기존 리서치(research-eodhd 등) 참조.",
+    "수집 방식 한계: eodhd.com SPA 라 r.jina.ai 렌더 프록시로만 본문 확보 — 동적 렌더 누락 가능성 잔존(시점 민감)."
+  ]
+}

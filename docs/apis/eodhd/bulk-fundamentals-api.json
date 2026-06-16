@@ -1,0 +1,89 @@
+{
+  "section": "bulk-fundamentals-api",
+  "category": "fundamentals",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/bulk-fundamentals-api-via-extended-fundamentals-plan",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 단, 응답 개별 필드명/CSV 컬럼 헤더는 원문에 표로 명시되지 않고 예시 CSV 다운로드 링크로만 제공 — 필드 스키마 부분은 partial)",
+  "auth": "쿼리 파라미터 api_token={YOUR_API_TOKEN}. 무료 가입은 https://eodhd.com/register",
+  "base_url": "https://eodhd.com/api/",
+  "notes": "Bulk Fundamentals API는 거래소 단위로 여러 종목의 펀더멘털 데이터를 한 번의 호출로 일괄(bulk) 조회하는 엔드포인트다. Extended Fundamentals 구독 플랜에서만 접근 가능. 단일 종목 Fundamentals API와 달리 응답에 포함되는 필드 수가 적다(\"The bulk output contains fewer fields than the single-symbol fundamentals response\"). 페이지는 개별 응답 필드명을 표로 나열하지 않고, AAPL.US/MSFT.US 예시 CSV 파일을 다운로드 링크로만 제공하므로 정확한 컬럼 스키마는 본 페이지만으로는 확정 불가.\n\n주요 동작 사실(원문 기재):\n- 출력 포맷 기본값은 CSV. JSON 은 &fmt=json 권장.\n- 페이지네이션: offset(시작 위치, 기본 0) + limit(반환 종목 수, 기본 500, 최대 500). limit 이 500 초과면 자동으로 500 으로 리셋됨.\n- symbols 파라미터(콤마구분, 예 AAPL.US,MSFT.US)를 주면 거래소 코드 대신 지정 종목만 조회(거래소 코드를 override).\n- version=1.2 파라미터: 출력이 현행 단일 Fundamentals API 템플릿에 더 가깝게(예: Earnings Trends 포함). 단 JSON 전용이며, 과거 데이터 제한(최근 4분기/4년)은 동일하게 유지.\n- 지원 대상은 주식(stocks)만. ETF·뮤추얼펀드 미지원.\n- 과거 데이터 범위는 최근 4분기 + 최근 4년으로 제한됨.\n- 미국 거래소(NASDAQ, NYSE, BATS, AMEX)는 각각 별도 코드로 접근 가능하고, 그 외 비미국 거래소도 지원.",
+  "endpoints": [
+    {
+      "name": "Bulk Fundamentals (거래소 단위 일괄 펀더멘털)",
+      "method": "GET",
+      "url_pattern": "/api/bulk-fundamentals/{exchange_code}",
+      "description": "지정한 거래소(또는 symbols 로 지정한 종목들)의 펀더멘털 데이터를 일괄 조회. 단일 종목 Fundamentals API보다 적은 수의 필드를 반환하며, 과거 데이터는 최근 4분기/4년으로 제한. Extended Fundamentals 플랜 전용. 주식만 지원(ETF/뮤추얼펀드 제외).",
+      "path_params": [
+        {
+          "name": "exchange_code",
+          "type": "string",
+          "description": "거래소 식별자. 예: NASDAQ, NYSE, BATS, AMEX 및 기타 지원 거래소 코드. 미국 거래소는 각각 별도 코드로 접근, 비미국 거래소도 지원."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "출력 포맷. JSON 출력은 json 지정. 기본값은 CSV. version=1.2 사용 시 JSON 전용."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "페이지네이션 시작 종목 위치"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "default": "500",
+          "description": "반환할 종목 수. 최대 500. 500 초과 지정 시 자동으로 500 으로 리셋됨."
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "콤마구분 종목 목록(예: AAPL.US,MSFT.US). 지정 시 거래소 코드를 override 하여 해당 종목만 조회."
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "required": false,
+          "description": "1.2 지정 시 출력이 현행 단일 Fundamentals API 템플릿에 더 가까워짐(Earnings Trends 등 포함). JSON 전용. 과거 데이터 제한(4분기/4년)은 동일."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(필드 목록)",
+          "type": "-",
+          "description": "페이지에 개별 응답 필드명이 표로 명시되지 않음. 단일 종목 Fundamentals 응답보다 적은 필드를 반환한다고만 기술. 정확한 컬럼은 페이지가 링크한 AAPL.US/MSFT.US 예시 CSV 파일에서만 확인 가능."
+        }
+      ],
+      "response_format": "CSV (기본) 또는 JSON (&fmt=json). version=1.2 는 JSON 전용.",
+      "example": "https://eodhd.com/api/bulk-fundamentals/NASDAQ?api_token={YOUR_API_TOKEN}&fmt=json  (거래소 전체) | https://eodhd.com/api/bulk-fundamentals/NASDAQ?offset=1000&limit=200&api_token={YOUR_API_TOKEN}&fmt=json  (페이지네이션) | https://eodhd.com/api/bulk-fundamentals/NASDAQ?symbols=AAPL.US,MSFT.US&api_token={YOUR_API_TOKEN}&fmt=json  (특정 종목)"
+    }
+  ],
+  "rate_limits": "API 콜 소비량(원문 기재): 표준 단일 Fundamentals 요청 = 10 API 콜. Bulk 요청(symbols 없음) = 100 API 콜. Bulk 요청(symbols 지정) = \"100 + 심볼 개수\" (예: 3개 심볼 조회 시 103 API 콜). 일일 한도 수치는 본 페이지에 명시되지 않음.",
+  "pricing_notes": "Extended Fundamentals 구독 플랜에서만 접근 가능. 세부 사항은 support@eodhistoricaldata.com 문의로 안내된다고 기재. 무료 가입(api_token 발급) 자체는 https://eodhd.com/register 에서 가능하나, 이 엔드포인트 자체는 Extended Fundamentals 플랜 필요.",
+  "caveats": [
+    "응답 개별 필드명/CSV 컬럼 헤더가 페이지에 표로 명시되지 않음 — 예시 CSV(AAPL.US/MSFT.US) 다운로드로만 확인 가능. 코드에서 컬럼명을 하드코딩하기 전 실제 예시 파일 또는 단일 Fundamentals API 스키마로 교차 검증 필요.",
+    "단일 종목 Fundamentals 대비 '필드 수가 적다(fewer fields)'고만 기술 — 어떤 필드가 누락되는지 구체 목록 없음.",
+    "과거 데이터가 최근 4분기/4년으로 제한 → 30년 백테스트 목적에는 부적합. 장기 PIT 펀더멘털은 단일 종목 Fundamentals API(또는 별도 히스토리)로 별도 수집 검토 필요.",
+    "ETF·뮤추얼펀드 미지원 — 주식 종목만.",
+    "version=1.2 는 JSON 전용이며 fmt 와 상호작용(version=1.2 지정 시 CSV 불가)에 주의.",
+    "Extended Fundamentals 플랜 가격이 페이지에 수치로 없음(문의 안내) — 1인 사용 비용 산정은 별도 가격 페이지 실측 필요.",
+    "이 엔드포인트는 미국·해외 주식 대상. 한국 코스피/코스닥 종목 커버리지는 본 페이지에서 확인 불가 — stockpick 도메인(한국 주식) 적용 전 EODHD 한국 거래소 코드/커버리지 별도 검증 필요.",
+    "일일 API 콜 한도 수치가 본 페이지에 없음 — 플랜별 한도는 EODHD 가격/한도 페이지에서 별도 확인 필요."
+  ]
+}

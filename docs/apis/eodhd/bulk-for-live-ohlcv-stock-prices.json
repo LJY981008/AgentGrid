@@ -1,0 +1,64 @@
+{
+  "section": "bulk-for-live-ohlcv-stock-prices",
+  "category": "intraday",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/bulk-for-live-ohlcv-stock-prices-api-us-exchanges-only",
+  "fetch_status": "partial — r.jina.ai 렌더 프록시로 본문 확보 성공(엔드포인트·파라미터·콜소비·플랜·코드예시 추출). 단 web.archive.org 폴백은 \"Claude Code is unable to fetch\" 로 차단. 페이지 자체가 JSON 응답 예시/응답필드 스키마를 게재하지 않아 response_fields 는 미확보(추측 금지로 비움).",
+  "auth": "쿼리 파라미터 api_token=<KEY>. 테스트용 데모 토큰 api_token=demo 사용 가능. 예: ?api_token=demo. 가입(무료 옵션 포함) 시 토큰 발급.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지는 \"Bulk for Live (delayed) OHLCV Stock Prices API — US Exchanges Only\" 를 설명한다. 별도의 신규 엔드포인트가 아니라, 기존 Live(Delayed) 실시간 엔드포인트 /api/real-time/{SYMBOL}.US 에 ex=US 파라미터를 붙여 \"미국 전 거래소를 단일 요청으로 집계(aggregated U.S. exchanges live data)\" 하여 받는 사용법이다. 핵심은 ex=US 가 미국 거래소 통합 라이브 데이터를 한 번에 가져오는 스위치라는 점, 그리고 이 한 요청이 100 API 콜로 과금된다는 점이다. 코드 예시는 cURL / PHP(curl_init) / Python(requests) / R(httr+jsonlite) 4종으로 제공되며, 노코드 접근으로 Excel 애드온·Google Sheets 애드온·ChatGPT assistant 도 안내된다. 이 페이지에는 JSON 응답 예시나 응답 필드 표가 게재되어 있지 않다(실측 3회 일관). 응답 필드 명세가 필요하면 EODHD 의 일반 Live/Delayed(real-time) API 문서를 별도로 확인해야 한다.",
+  "endpoints": [
+    {
+      "name": "Live (Delayed) OHLCV — Bulk US Exchanges (ex=US)",
+      "method": "GET",
+      "url_pattern": "/real-time/{SYMBOL}.US",
+      "description": "미국 전 거래소를 단일 요청으로 집계한 라이브(지연) OHLCV 를 가져온다. ex=US 파라미터로 'aggregated U.S. exchanges live data' 를 받는다. 이 한 요청은 100 API 콜로 과금된다.",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "티커 심볼 + .US 거래소 접미사. 예: AAPL.US. 미국 거래소 전용(US exchanges only)."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "ex",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "US 로 설정하면 미국 전 거래소를 집계한 라이브 데이터를 가져온다('Set to US to fetch aggregated U.S. exchanges live data'). 이 페이지의 벌크 동작을 활성화하는 핵심 파라미터."
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "API 인증 토큰. 테스트용 데모 토큰 'demo' 사용 가능."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "응답 포맷. 예시에서 json 사용(fmt=json)."
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json). 페이지에 JSON 응답 예시/필드 스키마는 미게재 — 추측 금지로 응답 필드 비움.",
+      "example": "curl --location \"https://eodhd.com/api/real-time/AAPL.US?ex=US&api_token=demo&fmt=json\"  /  Python: import requests; url = 'https://eodhd.com/api/real-time/AAPL.US?ex=US&api_token=demo&fmt=json'; data = requests.get(url).json(); print(data)"
+    }
+  ],
+  "rate_limits": "이 요청 1건 = 100 API 콜 소비('This request consumes as 100 API calls'). API 콜 한도 상세는 https://eodhd.com/financial-apis/api-limits 참조(이 페이지에 일일 총 한도 수치는 명시되지 않음).",
+  "pricing_notes": "포함 플랜(페이지 명시): All-In-One, EOD Historical Data: All World, EOD+Intraday: All World Extended, 그리고 Free 플랜. (무료 플랜에서도 접근 가능하다고 기재 — 단 콜당 100콜 소비이므로 무료 일일 한도를 빠르게 소진할 수 있음에 유의.)",
+  "caveats": [
+    "미국 거래소 전용(US exchanges only) — KRX/코스피·코스닥 미지원. stockpick(한국주식) 도메인에 직접 사용 불가. 미국주식 데이터소스 후보로만 의미.",
+    "요청 1건당 100 API 콜 과금 — 라이브(지연) 데이터이며 종목별로 호출하면 콜 소비가 매우 큼. 무료/저가 플랜 일일 한도 빠른 소진 위험.",
+    "이 데이터는 '라이브(지연, delayed)' 시세이지 EOD 과거 30년 벌크 다운로드가 아님. 백테스트용 과거 데이터(생존편향·룩어헤드 검토 대상)와는 별개 — 운영 실시간 갱신용 성격.",
+    "페이지에 JSON 응답 예시·응답 필드 스키마가 없어 응답 필드(open/high/low/close/volume/previousClose/change/change_p/timestamp 등 추정)는 미확정. 코드에서 환각 방지하려면 EODHD Live/Delayed(real-time) 일반 문서를 별도 실측 필요.",
+    "엔드포인트가 신규가 아니라 기존 /api/real-time/{SYMBOL}.US 의 ex=US 사용법 문서. 'bulk' 라는 명칭이지만 EOD 일괄 다운로드 엔드포인트(/api/eod-bulk-last-day/)와는 다름 — 혼동 주의.",
+    "web.archive.org 폴백 차단으로 교차검증 2소스 미달. r.jina.ai 단일 경로 3회 fetch 로 동일 결과 확인했으나 원본 직접 교차검증은 미완 — 코드 의존 전 공식 페이지 원본 1회 재확인 권장.",
+    "fmt 파라미터 기본값·csv 지원 여부는 페이지에 명시 없음(json 예시만). api_limits 일일 한도 수치도 이 페이지엔 없음(링크만)."
+  ]
+}

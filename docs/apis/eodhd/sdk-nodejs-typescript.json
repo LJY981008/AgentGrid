@@ -1,0 +1,1018 @@
+{
+  "section": "sdk-nodejs-typescript",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/node-js-typescript-sdk-for-eodhd-financial-apis",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 단, 이 페이지는 raw REST 명세가 아니라 Node.js/TypeScript SDK 메서드 레퍼런스 — 아래 endpoints 는 REST 엔드포인트가 아니라 SDK 메서드 시그니처임. 프록시 LLM 요약 과정에서 일부 메서드 시그니처/필드 목록이 정규화·축약됐을 가능성 있어 caveats 참고)",
+  "auth": "SDK 인증: EODHDClient 생성자에 apiToken 전달(`new EODHDClient({ apiToken: 'YOUR_API_TOKEN' })`) 또는 환경변수 `EODHD_API_TOKEN` 설정 후 `new EODHDClient({})`. 내부적으로 EODHD REST 표준인 ?api_token=<KEY> 쿼리로 전송됨(페이지는 SDK 추상화 수준에서 apiToken 옵션만 명시). apiToken 미지정·무효 시 EODHDAuthError(401/403, 재시도 불가).",
+  "base_url": "https://eodhd.com/api (SDK 기본값. EODHDClient 의 baseUrl 옵션으로 재정의 가능, 기본 https://eodhd.com/api)",
+  "notes": "이 페이지는 EODHD 의 공식 Node.js/TypeScript SDK(`npm install eodhd`) 레퍼런스다. REST 엔드포인트를 직접 기술하는 페이지가 아니라, REST API 를 감싼 클라이언트 메서드(client.eod, client.fundamentals 등)를 나열한다. 따라서 아래 endpoints 배열의 각 항목은 HTTP path 가 아니라 SDK 메서드 시그니처이며, url_pattern 필드에는 메서드 호출 형태를 기재했다.\n\n[설치] `npm install eodhd`. 런타임 의존성 0(zero runtime dependencies). Node.js WebSocket 지원 시 선택적 peer 의존성 `npm install ws` 필요.\n\n[설정 옵션 EODHDClient] apiToken(string, 기본 EODHD_API_TOKEN 환경변수, 필수 인증 자격) / baseUrl(string, 기본 https://eodhd.com/api) / timeout(number, 기본 30000ms) / maxRetries(number, 기본 2, 일시적 오류 재시도) / logger(Logger, 기본 undefined, 커스텀 로깅).\n\n[에러 클래스] EODHDAuthError(토큰 무효/누락 401·403, 재시도 불가) / EODHDRateLimitError(429, 재시도 가능) / EODHDNetworkError(네트워크, 재시도 가능) / EODHDTimeoutError(타임아웃, 재시도 가능) / EODHDError(모든 API 오류 베이스, 상태코드에 따라 재시도). 일시적(transient) 오류는 지수 백오프로 자동 재시도.\n\n[TypeScript 응답 타입] import 가능 주요 타입: EodDataPoint(date·open·high·low·close·adjusted_close·volume 의 OHLCV), RealTimeQuote(code·close·change_p), SearchResult, FundamentalsData, NewsArticle. 페이지는 각 타입의 전체 필드를 나열하지 않고 대표 필드만 예시.\n\n[플랫폼 지원] Node.js >= 20(native fetch 사용) / Deno·Bun 네이티브 지원 / 모던 브라우저(fetch) / ESM·CommonJS 듀얼 발행 / tree-shaking 지원.\n\n[커버리지] SDK 가 70+ 거래소 150,000+ 티커 커버(역사 가격·펀더멘털·실시간 스트리밍·옵션·뉴스·스크리닝·거시지표 등).\n\n[로고 메서드] client.logo(ticker) → ArrayBuffer(PNG), client.logoSvg(ticker) → ArrayBuffer(SVG).\n\n[stockpick 관련성] 이 SDK 는 Node.js/TypeScript 전용 — stockpick 의 데이터 수집 스택은 Python(FDR/pykrx/KRX OpenAPI)이라 직접 채택 대상 아님. EODHD 자체 채택 시에도 Python 에서는 별도 공식 python 라이브러리/직접 REST 호출을 사용해야 함. 본 페이지는 EODHD 의 전체 데이터 표면(EOD·fundamentals·calendar·macro·treasury·ws·marketplace)을 메서드 단위로 일람하는 데 참고용. KRX/한국 주식 커버리지는 이 페이지에 별도 명시 없음(거래소 일반론만).",
+  "endpoints": [
+    {
+      "name": "client.eod (End-of-Day Prices)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.eod(ticker, options)",
+      "description": "일별/주별/월별 종가(EOD) 가격 조회. REST 의 /api/eod 래퍼.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date string",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "period",
+          "type": "'d'|'w'|'m'",
+          "required": false,
+          "description": "주기(일/주/월)"
+        },
+        {
+          "name": "order",
+          "type": "'a'|'d'",
+          "required": false,
+          "description": "정렬(오름/내림)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "EodDataPoint",
+          "type": "object",
+          "description": "date, open, high, low, close, adjusted_close, volume 의 OHLCV 데이터포인트"
+        }
+      ],
+      "response_format": "JSON (EodDataPoint[])",
+      "example": "client.eod('AAPL.US', { from: '2020-01-01', period: 'd', order: 'a' })"
+    },
+    {
+      "name": "client.intraday (Intraday Data)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.intraday(ticker, options)",
+      "description": "인트라데이 가격 데이터.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "interval",
+          "type": "'1m'|'5m'|'1h'",
+          "required": false,
+          "description": "봉 간격"
+        },
+        {
+          "name": "from",
+          "type": "unix timestamp",
+          "required": false,
+          "description": "시작(유닉스 타임스탬프)"
+        },
+        {
+          "name": "to",
+          "type": "unix timestamp",
+          "required": false,
+          "description": "종료(유닉스 타임스탬프)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.intraday('AAPL.US', { interval: '5m' })"
+    },
+    {
+      "name": "client.realTime (Real-Time Quotes)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.realTime(ticker, options?)",
+      "description": "지연 실시간 호가(15-20분 지연). 단일/복수 티커 지원.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "기본 심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "description": "추가 심볼들(쉼표구분), 복수 조회"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "RealTimeQuote",
+          "type": "object",
+          "description": "code, close, change_p"
+        }
+      ],
+      "response_format": "JSON",
+      "example": "client.realTime('AAPL.US', { s: 'MSFT.US,GOOG.US' })"
+    },
+    {
+      "name": "client.usQuoteDelayed (US Extended Delayed Quotes)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.usQuoteDelayed(options)",
+      "description": "미국 확장 지연 호가. bid/ask, 최근 체결, 52주 데이터, 시가총액, P/E, 배당 반환.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": true,
+          "description": "심볼들(쉼표구분)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(여러 필드)",
+          "type": "object",
+          "description": "bid/ask, last trade, 52-week, market cap, P/E, dividends"
+        }
+      ],
+      "response_format": "JSON",
+      "example": "client.usQuoteDelayed({ s: 'AAPL,MSFT,GOOG' })"
+    },
+    {
+      "name": "client.bulkEod (Bulk EOD Data)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.bulkEod(exchange, options)",
+      "description": "거래소 단위 일괄 EOD 데이터.",
+      "path_params": [
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소 코드 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "date",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "기준일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.bulkEod('US', { date: '2024-01-15' })"
+    },
+    {
+      "name": "client.dividends (Corporate Actions - Dividends)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.dividends(ticker, options)",
+      "description": "배당 이력.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.dividends('AAPL.US', { from: '2020-01-01' })"
+    },
+    {
+      "name": "client.splits (Corporate Actions - Splits)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.splits(ticker)",
+      "description": "액면분할 이력.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.splits('AAPL.US')"
+    },
+    {
+      "name": "client.historicalMarketCap (Corporate Actions - Historical Market Cap)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.historicalMarketCap(ticker, options)",
+      "description": "역사적 시가총액.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.historicalMarketCap('AAPL.US', { from: '2020-01-01' })"
+    },
+    {
+      "name": "client.fundamentals (Fundamentals)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.fundamentals(ticker, options)",
+      "description": "펀더멘털 데이터(General/Financials 등 필터).",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "filter",
+          "type": "'General'|'Financials'",
+          "required": false,
+          "description": "반환 섹션 필터"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "FundamentalsData",
+          "type": "object",
+          "description": "펀더멘털 데이터 타입"
+        }
+      ],
+      "response_format": "JSON",
+      "example": "client.fundamentals('AAPL.US', { filter: 'General' })"
+    },
+    {
+      "name": "client.bulkFundamentals (Bulk Fundamentals)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.bulkFundamentals(exchange, options)",
+      "description": "거래소 단위 일괄 펀더멘털.",
+      "path_params": [
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소 코드 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "심볼들(쉼표구분)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.bulkFundamentals('US', { symbols: 'AAPL,MSFT,GOOG' })"
+    },
+    {
+      "name": "client.logo / client.logoSvg (Company Logo)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.logo(ticker) / client.logoSvg(ticker)",
+      "description": "회사 로고. logo=PNG, logoSvg=SVG, 둘 다 ArrayBuffer 반환.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [],
+      "response_fields": [
+        {
+          "name": "ArrayBuffer",
+          "type": "binary",
+          "description": "PNG(logo) 또는 SVG(logoSvg) 바이너리"
+        }
+      ],
+      "response_format": "ArrayBuffer",
+      "example": "client.logo('AAPL.US')"
+    },
+    {
+      "name": "client.calendar.earnings (Calendar - Earnings)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.calendar.earnings(options)",
+      "description": "실적 발표 캘린더.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "심볼들"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.calendar.earnings({ from, to, symbols })"
+    },
+    {
+      "name": "client.calendar.trends (Calendar - Trends)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.calendar.trends(options)",
+      "description": "추정치 트렌드 캘린더.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "심볼들"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.calendar.trends({ symbols })"
+    },
+    {
+      "name": "client.calendar.ipos (Calendar - IPOs)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.calendar.ipos(options)",
+      "description": "IPO 캘린더.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.calendar.ipos({ from, to })"
+    },
+    {
+      "name": "client.calendar.splits (Calendar - Splits)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.calendar.splits(options)",
+      "description": "분할 캘린더.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.calendar.splits({ from, to })"
+    },
+    {
+      "name": "client.news (News)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.news(options)",
+      "description": "금융 뉴스.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "description": "심볼"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "건수"
+        },
+        {
+          "name": "t",
+          "type": "string",
+          "required": false,
+          "description": "topic 태그"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "NewsArticle",
+          "type": "object",
+          "description": "뉴스 기사 타입"
+        }
+      ],
+      "response_format": "JSON",
+      "example": "client.news({ s: 'AAPL.US', limit: 50, t: 'earnings' })"
+    },
+    {
+      "name": "client.sentiments (Sentiment)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.sentiments(options)",
+      "description": "감성(sentiment) 데이터.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "description": "심볼"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.sentiments({ s: 'AAPL.US', from: '2024-01-01' })"
+    },
+    {
+      "name": "client.newsWordWeights (News Word Weights)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.newsWordWeights(options)",
+      "description": "뉴스 단어 가중치.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "description": "심볼"
+        },
+        {
+          "name": "filter[date_from]",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "filter[date_to]",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.newsWordWeights({ s: 'AAPL.US', 'filter[date_from]': '2024-01-01', 'filter[date_to]': '2024-02-01' })"
+    },
+    {
+      "name": "client.technical (Technical Indicators)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.technical(ticker, options)",
+      "description": "기술적 지표(20+ 종). function 으로 지표 선택.",
+      "path_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "description": "심볼 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "function",
+          "type": "'sma'|'ema'|'wma'|'macd'|'rsi'|'stochastic'|'bbands'|'adx'|'atr'|'cci'|'sar'|...",
+          "required": true,
+          "description": "지표 함수명(20+ 지원)"
+        },
+        {
+          "name": "period",
+          "type": "number",
+          "required": false,
+          "description": "기간"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "order",
+          "type": "'a'|'d'",
+          "required": false,
+          "description": "정렬"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.technical('AAPL.US', { function: 'rsi', period: 14, from: '2024-01-01', order: 'a' })"
+    },
+    {
+      "name": "client.screener (Screener)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.screener(options)",
+      "description": "주식 스크리너.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "description": "정렬 기준"
+        },
+        {
+          "name": "filters",
+          "type": "string (JSON.stringify 된 배열)",
+          "required": false,
+          "description": "필터 배열"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "건수"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.screener({ sort: 'market_capitalization.desc', filters: JSON.stringify([...]), limit: 50 })"
+    },
+    {
+      "name": "client.search (Search)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.search(term, options)",
+      "description": "심볼/기업 검색.",
+      "path_params": [
+        {
+          "name": "term",
+          "type": "string",
+          "description": "검색어 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "건수"
+        },
+        {
+          "name": "type",
+          "type": "'all'|'stock'|'etf'|'fund'|'bond'|'index'|'crypto'",
+          "required": false,
+          "description": "자산 유형"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "SearchResult",
+          "type": "object",
+          "description": "검색 결과 타입"
+        }
+      ],
+      "response_format": "JSON",
+      "example": "client.search('apple', { limit: 10, type: 'stock' })"
+    },
+    {
+      "name": "client.idMapping (ID Mapping)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.idMapping(options)",
+      "description": "ISIN 등 식별자 매핑.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "filter[isin]",
+          "type": "string",
+          "required": false,
+          "description": "ISIN 코드"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.idMapping({ 'filter[isin]': 'US0378331005' })"
+    },
+    {
+      "name": "client.exchanges.list (Exchanges - List)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.exchanges.list()",
+      "description": "지원 거래소 목록.",
+      "path_params": [],
+      "query_params": [],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.exchanges.list()"
+    },
+    {
+      "name": "client.exchanges.symbols (Exchanges - Symbols)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.exchanges.symbols(exchange, options)",
+      "description": "거래소 내 심볼 목록.",
+      "path_params": [
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소 코드 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "예: 'common_stock'"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.exchanges.symbols('US', { type: 'common_stock' })"
+    },
+    {
+      "name": "client.exchanges.details (Exchanges - Details)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.exchanges.details(exchange)",
+      "description": "거래소 상세(거래시간 등).",
+      "path_params": [
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소 코드 (필수)"
+        }
+      ],
+      "query_params": [],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.exchanges.details('US')"
+    },
+    {
+      "name": "client.exchanges.symbolChangeHistory (Exchanges - Symbol Change History)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.exchanges.symbolChangeHistory(options)",
+      "description": "티커 변경 이력.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.exchanges.symbolChangeHistory({ from: '2022-07-22' })"
+    },
+    {
+      "name": "client.macroIndicator (Macro Indicator)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.macroIndicator(country, options)",
+      "description": "국가별 거시지표.",
+      "path_params": [
+        {
+          "name": "country",
+          "type": "string",
+          "description": "국가코드 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "indicator",
+          "type": "'gdp_current_usd'|'inflation_consumer_prices_annual'|...",
+          "required": false,
+          "description": "지표명"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.macroIndicator('USA', { indicator: 'gdp_current_usd' })"
+    },
+    {
+      "name": "client.economicEvents (Economic Events)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.economicEvents(options)",
+      "description": "경제 이벤트 캘린더.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "required": false,
+          "description": "국가코드"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.economicEvents({ from, to, country })"
+    },
+    {
+      "name": "client.treasury.billRates / yieldRates / longTermRates / realYieldRates (US Treasury Rates)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.treasury.billRates(options) / .yieldRates(options) / .longTermRates(options) / .realYieldRates(options)",
+      "description": "미국 국채 금리 4종(bill/yield/long-term/real-yield).",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "시작일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.treasury.yieldRates({ from: '2024-01-01' })"
+    },
+    {
+      "name": "client.websocket (WebSocket Real-Time Streaming)",
+      "method": "WSS (SDK 메서드)",
+      "url_pattern": "client.websocket(feed, symbols, options)",
+      "description": "실시간 스트리밍. feed: 'us'|'us-quote'|'forex'|'crypto'. 이벤트: data/error/close/reconnectFailed. 메서드: subscribe/unsubscribe/close. Node.js 사용 시 'ws' peer 의존성 필요.",
+      "path_params": [
+        {
+          "name": "feed",
+          "type": "'us'|'us-quote'|'forex'|'crypto'",
+          "description": "피드 종류 (필수)"
+        },
+        {
+          "name": "symbols",
+          "type": "string[]",
+          "description": "티커 배열 (필수)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "maxReconnectAttempts",
+          "type": "number",
+          "required": false,
+          "default": "5",
+          "description": "최대 재연결 시도"
+        },
+        {
+          "name": "reconnectInterval",
+          "type": "number (ms)",
+          "required": false,
+          "default": "3000",
+          "description": "재연결 간격"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "tick",
+          "type": "object",
+          "description": "ws.on('data', (tick) => ...) 으로 수신되는 틱"
+        }
+      ],
+      "response_format": "WebSocket 이벤트 스트림",
+      "example": "const ws = client.websocket('us', ['AAPL'], { reconnectInterval: 3000 }); ws.on('data', t => {...})"
+    },
+    {
+      "name": "client.ticks (Marketplace - US Tick-Level Data)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.ticks(options)",
+      "description": "미국 틱 단위 데이터. Marketplace(별도 구매).",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": true,
+          "description": "심볼"
+        },
+        {
+          "name": "from",
+          "type": "unix timestamp",
+          "required": false,
+          "description": "시작"
+        },
+        {
+          "name": "to",
+          "type": "unix timestamp",
+          "required": false,
+          "description": "종료"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.ticks({ s: 'AAPL', from: 1700000000, to: 1700100000 })"
+    },
+    {
+      "name": "client.marketplace.unicornbay.options.* (Marketplace - US Options, Unicorn Bay)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.marketplace.unicornbay.options.underlyingSymbols(opts) / .contracts(opts) / .eod(opts)",
+      "description": "미국 옵션 데이터(Unicorn Bay 마켓플레이스, 별도 구매). underlyingSymbols(기초자산), contracts(계약), eod(옵션 EOD).",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "filter[underlying_symbol]",
+          "type": "string",
+          "required": false,
+          "description": "기초자산 심볼"
+        },
+        {
+          "name": "filter[type]",
+          "type": "'call'|'put'",
+          "required": false,
+          "description": "콜/풋"
+        },
+        {
+          "name": "filter[exp_date_from]",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "만기 시작"
+        },
+        {
+          "name": "filter[exp_date_eq]",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "만기 일치(eod)"
+        },
+        {
+          "name": "page[limit]",
+          "type": "number",
+          "required": false,
+          "description": "페이지 건수"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.marketplace.unicornbay.options.contracts({ 'filter[underlying_symbol]': 'AAPL', 'filter[type]': 'call', 'page[limit]': 50 })"
+    },
+    {
+      "name": "client.marketplace.unicornbay.spglobal.* (Marketplace - S&P Global Indices, Unicorn Bay)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.marketplace.unicornbay.spglobal.list() / .components(symbol, opts)",
+      "description": "S&P Global 지수(Unicorn Bay 마켓플레이스, 별도 구매). list(지수목록), components(구성종목, historical 옵션).",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "지수 심볼(components 시)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "historical",
+          "type": "boolean",
+          "required": false,
+          "description": "역사 구성"
+        },
+        {
+          "name": "from",
+          "type": "date",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "date",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.marketplace.unicornbay.spglobal.components('GSPC', { historical: true, from, to })"
+    },
+    {
+      "name": "client.marketplace.tradinghours.* (Marketplace - Trading Hours)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.marketplace.tradinghours.markets() / .details(opts) / .status(opts) / .lookup(opts)",
+      "description": "거래시간 마켓플레이스. markets(시장목록), details(상세), status(개장상태), lookup(심볼별).",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "market",
+          "type": "string",
+          "required": false,
+          "description": "예 'US.NASDAQ' (details/status)"
+        },
+        {
+          "name": "filter[symbol]",
+          "type": "string",
+          "required": false,
+          "description": "심볼(lookup)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.marketplace.tradinghours.status({ market: 'US.NASDAQ' })"
+    },
+    {
+      "name": "client.marketplace.praams.* (Marketplace - Investment Analytics, PRAAMS)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.marketplace.praams.analyseEquityByTicker(ticker) / .analyseBond(isin) / .exploreEquity(paging, filters)",
+      "description": "PRAAMS 투자 분석(마켓플레이스, 별도 구매). 주식/채권 분석, 주식 탐색.",
+      "path_params": [
+        {
+          "name": "ticker / isin",
+          "type": "string",
+          "description": "분석 대상 식별자"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "skip",
+          "type": "number",
+          "required": false,
+          "description": "페이징 skip(exploreEquity)"
+        },
+        {
+          "name": "take",
+          "type": "number",
+          "required": false,
+          "description": "페이징 take(exploreEquity)"
+        },
+        {
+          "name": "regions/sectors",
+          "type": "array",
+          "required": false,
+          "description": "필터(exploreEquity)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.marketplace.praams.analyseEquityByTicker('AAPL.US')"
+    },
+    {
+      "name": "client.marketplace.investverte.* (Marketplace - ESG Data, InvestVerte)",
+      "method": "GET (SDK 메서드)",
+      "url_pattern": "client.marketplace.investverte.companies() / .esg(ticker, opts) / .country(code) / .sector(name)",
+      "description": "InvestVerte ESG 데이터(마켓플레이스, 별도 구매). companies/esg/country/sector.",
+      "path_params": [
+        {
+          "name": "ticker / code / name",
+          "type": "string",
+          "description": "대상 식별자"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "year",
+          "type": "number",
+          "required": false,
+          "description": "연도(esg)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON",
+      "example": "client.marketplace.investverte.esg('AAPL.US', { year: 2024 })"
+    }
+  ],
+  "rate_limits": "이 SDK 페이지는 구체적 콜 소비량/일일 한도 수치를 명시하지 않는다. 다만 EODHDRateLimitError(HTTP 429, 재시도 가능) 에러 클래스가 존재하며, 429 등 일시적 오류는 지수 백오프로 자동 재시도된다(maxRetries 기본 2, EODHDClient 옵션). 실제 콜 소비량·일일 한도는 EODHD REST API/플랜 정책을 따르므로 별도 확인 필요(이 페이지엔 미기재).",
+  "pricing_notes": "페이지 명시: \"Different datasets are available depending on your subscription plan.\" 표준 플랜(Standard) 포함: End-of-day prices, fundamentals, news. 마켓플레이스(별도 구매 필요): 실시간 WebSocket 스트리밍, US 옵션(Unicorn Bay), S&P Global 지수, PRAAMS 분석, ESG(InvestVerte). \"Check the pricing page and individual Marketplace product pages to see what is included in your plan.\" SDK 자체는 무료 npm 패키지이며, 데이터 접근 권한은 구독 플랜에 따른다.",
+  "caveats": [
+    "이 페이지는 raw REST 엔드포인트 명세가 아니라 Node.js/TypeScript SDK 메서드 레퍼런스다 — 위 endpoints 의 url_pattern 은 HTTP path 가 아니라 SDK 메서드 호출 형태다. 실제 REST path(/api/eod 등)와 정확한 쿼리 파라미터는 EODHD 의 개별 REST 문서 페이지를 교차 확인해야 한다.",
+    "SDK 는 Node.js/TypeScript 전용(Node>=20, Deno/Bun/브라우저). stockpick 의 수집 스택은 Python 이라 이 SDK 는 직접 채택 대상이 아니다 — Python 에서는 별도 라이브러리/직접 REST 호출 필요.",
+    "본문은 r.jina.ai 렌더 프록시 경유로 확보했고 LLM 요약을 거쳐 일부 메서드 시그니처·파라미터·필드 목록이 정규화/축약됐을 가능성이 있다. 코드가 권위 명세로 참조하기 전 SDK npm README 또는 GitHub 소스로 메서드 시그니처를 최종 검증할 것.",
+    "응답 필드(response_fields)는 페이지가 EodDataPoint/RealTimeQuote/SearchResult/FundamentalsData/NewsArticle 같은 대표 타입만 예시했고 각 타입의 전체 필드는 나열하지 않았다 — 빈 response_fields 는 '미명시'를 의미하지 '필드 없음'이 아니다.",
+    "한국(KRX/코스피·코스닥) 커버리지는 이 페이지에 별도 명시가 없다(70+ 거래소 150,000+ 티커 일반론만). stockpick 적용 시 KRX 커버리지·수정주가 정의·폐지종목 포함 여부는 EODHD 거래소/데이터 문서로 별도 실측 필요.",
+    "rate limit/콜 소비량 수치가 이 페이지엔 없다 — 정량 한도는 EODHD 요금/문서 페이지를 따로 확인해야 한다.",
+    "client.realTime 은 '15-20분 지연' 지연시세이며 진짜 실시간이 아니다. 진짜 실시간은 WebSocket(마켓플레이스/별도 권한) 경유."
+  ]
+}

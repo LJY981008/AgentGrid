@@ -1,0 +1,182 @@
+{
+  "section": "fundamental-data-cryptocurrencies",
+  "category": "crypto",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/fundamental-data-for-cryptocurrencies",
+  "fetch_status": "ok — r.jina.ai 렌더 프록시 경유로 본문 확보 (eodhd.com SPA 직접 fetch 위험). 2회 일관 추출. 일부 응답 필드 타입은 예시 JSON 값으로부터 추정(페이지가 별도 타입표를 제공하지 않음).",
+  "auth": "쿼리 파라미터 `?api_token=<KEY>` (필수). demo 토큰은 BTC, ETH 두 종목에서만 동작 (\"Demo key works for BTC and ETH only\").",
+  "base_url": "https://eodhd.com/api",
+  "notes": "암호화폐 펀더멘털 데이터는 일반 EODHD Fundamentals 엔드포인트(`/api/fundamentals/{SYMBOL}`)를 공유하되, 심볼에 거래소 코드 `.CC` 서픽스를 붙여 식별한다(예: BTC-USD.CC). 응답은 단일 JSON 객체이며 General / Tech / Resources / Statistics 4개 상위 섹션으로 구성된다. General 에 코인 메타(이름·설명·웹사이트·Category coin|token), Tech.Developers 에 핵심 개발자(이름-역할 문자열 배열), Resources.Links 에 채널별 URL(website/reddit/youtube/explorer/facebook/source_code) 및 Thumbnail(128x128 아이콘, finage S3 호스팅), Statistics 에 시가총액(circulating/diluted)·공급량(circulating/total/max)·시장 지배율(MarketCapDominance, %)·기술문서/탐색기/소스코드/메시지보드 URL·전고점/전저점 가격(HighAllTime/LowAllTime)이 담긴다. ⚠️ stockpick(코스피/코스닥 한국주식, 30년 백테스트) 도메인과는 직접 무관 — EODHD API 표면 완결 기록용. 한국 주식 펀더멘털/가격은 EODHD 커버리지/품질을 별도 검증해야 함(이 페이지는 암호화폐 전용).",
+  "endpoints": [
+    {
+      "name": "Cryptocurrency Fundamentals",
+      "method": "GET",
+      "url_pattern": "/api/fundamentals/{SYMBOL}.CC",
+      "description": "단일 암호화폐의 펀더멘털 데이터(메타·개발자·리소스 링크·통계) 를 JSON 객체로 반환. 심볼은 거래소 코드 .CC 서픽스 사용(예: BTC-USD.CC).",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "암호화폐 심볼 + .CC 서픽스. 페이지 예시는 BTC-USD.CC. demo 토큰은 BTC/ETH 만."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 키. demo 키는 BTC, ETH 에서만 동작.",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 페이지 예시는 json. (예시에서만 확인, 별도 파라미터 설명표 없음)",
+          "default": "json"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "General.Name",
+          "type": "string",
+          "description": "암호화폐 이름 (예: \"Bitcoin\")"
+        },
+        {
+          "name": "General.Type",
+          "type": "string",
+          "description": "항상 \"Crypto\""
+        },
+        {
+          "name": "General.Category",
+          "type": "string",
+          "description": "\"coin\" 또는 \"token\""
+        },
+        {
+          "name": "General.WebURL",
+          "type": "string",
+          "description": "공식 프로젝트 웹사이트 URL"
+        },
+        {
+          "name": "General.Description",
+          "type": "string",
+          "description": "프로젝트 요약/설명"
+        },
+        {
+          "name": "Tech.Developers",
+          "type": "array<string>",
+          "description": "핵심 개발자 목록 (\"이름 - 역할\" 형식 문자열, 예: \"Satoshi Nakamoto - Founder\")"
+        },
+        {
+          "name": "Resources.Links.website",
+          "type": "array<string>",
+          "description": "공식 웹사이트 URL 목록"
+        },
+        {
+          "name": "Resources.Links.reddit",
+          "type": "array<string>",
+          "description": "Reddit URL 목록"
+        },
+        {
+          "name": "Resources.Links.youtube",
+          "type": "array<string>",
+          "description": "YouTube URL 목록"
+        },
+        {
+          "name": "Resources.Links.explorer",
+          "type": "array<string>",
+          "description": "블록 탐색기 URL 목록 (복수 가능)"
+        },
+        {
+          "name": "Resources.Links.facebook",
+          "type": "array<string>",
+          "description": "Facebook URL 목록"
+        },
+        {
+          "name": "Resources.Links.source_code",
+          "type": "array<string>",
+          "description": "소스코드 저장소 URL 목록 (예: GitHub)"
+        },
+        {
+          "name": "Resources.Thumbnail",
+          "type": "string",
+          "description": "아이콘 URL (128x128, finage S3 호스팅)"
+        },
+        {
+          "name": "Statistics.MarketCapitalization",
+          "type": "number",
+          "description": "시가총액 (유통량 기준)"
+        },
+        {
+          "name": "Statistics.MarketCapitalizationDiluted",
+          "type": "number",
+          "description": "완전 희석 시가총액 (max supply 기준)"
+        },
+        {
+          "name": "Statistics.CirculatingSupply",
+          "type": "number",
+          "description": "유통 공급량"
+        },
+        {
+          "name": "Statistics.TotalSupply",
+          "type": "number",
+          "description": "총 공급량"
+        },
+        {
+          "name": "Statistics.MaxSupply",
+          "type": "number",
+          "description": "최대 공급량"
+        },
+        {
+          "name": "Statistics.MarketCapDominance",
+          "type": "number",
+          "description": "전체 암호화폐 대비 시가총액 지배율 (%)"
+        },
+        {
+          "name": "Statistics.TechnicalDoc",
+          "type": "string",
+          "description": "기술 백서/문서 URL"
+        },
+        {
+          "name": "Statistics.Explorer",
+          "type": "string",
+          "description": "대표 블록 탐색기 URL"
+        },
+        {
+          "name": "Statistics.SourceCode",
+          "type": "string",
+          "description": "대표 소스코드 저장소 URL"
+        },
+        {
+          "name": "Statistics.MessageBoard",
+          "type": "string",
+          "description": "커뮤니티/메시지보드 URL"
+        },
+        {
+          "name": "Statistics.LowAllTime",
+          "type": "number",
+          "description": "역대 최저가 (전저점)"
+        },
+        {
+          "name": "Statistics.HighAllTime",
+          "type": "number",
+          "description": "역대 최고가 (전고점)"
+        }
+      ],
+      "response_format": "JSON (단일 객체)",
+      "example": "https://eodhd.com/api/fundamentals/BTC-USD.CC?api_token=demo&fmt=json"
+    }
+  ],
+  "rate_limits": "요청당 10 API calls 소비 (\"Each request consumes 10 API calls\"). 일일 총 한도 수치는 이 페이지에 명시되지 않음(EODHD 계정 플랜별 공통 한도에 종속).",
+  "pricing_notes": "All-In-One 플랜 및 Fundamentals Data Feed 플랜에 포함 (\"Available in plans: All-In-One and Fundamentals Data Feed plans\"). demo 토큰으로 BTC/ETH 한정 테스트 가능.",
+  "caveats": [
+    "eodhd.com 은 JS SPA — WebFetch 직접 호출 시 본문 비어 환각 위험. r.jina.ai 렌더 프록시 경유로만 본문 확보함(아카이브 미사용).",
+    "페이지가 별도 파라미터 타입표/응답 타입표를 제공하지 않아 일부 필드 타입(number/string/array)은 예시 JSON 값에서 추정한 것. fmt 파라미터도 예시에서만 확인됨.",
+    "stockpick 도메인(한국 코스피/코스닥, 30년 백테스트)과 직접 무관한 암호화폐 전용 엔드포인트 — EODHD API 표면 완결 기록용. 한국 주식 데이터에 이 명세를 적용 불가.",
+    "demo 토큰은 BTC, ETH 만 동작하므로 다른 코인 테스트 시 실제 키 필요.",
+    "Thumbnail 이 finage S3(finage.s3.eu-west-2.amazonaws.com)에 호스팅됨 — EODHD 가 Finage 데이터를 일부 재공급하는 정황. 데이터 출처/라이선스는 별도 약관 확인 권장.",
+    "시점 민감도: 콜 소비량(10)·플랜 구성은 EODHD 가격정책 변경 시 변동 가능 — 코드 반영 전 재확인 권장(실측 2026-06-16)."
+  ]
+}

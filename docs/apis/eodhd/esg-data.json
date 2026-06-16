@@ -1,0 +1,295 @@
+{
+  "section": "esg-data",
+  "category": "fundamentals",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/esg-data-api",
+  "fetch_status": "ok (landing page 본문은 r.jina.ai 프록시로 확보 — JS SPA. 실제 REST 명세는 랜딩이 아닌 마켓플레이스 docs 페이지 https://eodhd.com/marketplace/investverte/esg_data/docs 에 있어 동일 프록시로 교차 추출. 2회 패스 일관성 확인)",
+  "auth": "쿼리 파라미터 api_token. 문서상 authorization 스킴명은 \"EODToken\". 샘플에는 데모 토큰 api_token=demo 사용 (예: ...?api_token=demo). 메인 EODHD 계정 토큰을 동일하게 쿼리로 전달하는 방식.",
+  "base_url": "https://eodhd.com/api/mp/investverte (마켓플레이스 vendor 경로 /api/mp/{vendor}/ — 메인 EODHD /api 와 다름)",
+  "notes": "EODHD ESG Data API 는 EODHD 자체 데이터가 아니라 InvestVerte 가 EODHD 마켓플레이스를 통해 제공하는 서드파티 제품이다. 회사·국가·섹터 단위로 비교 가능한 ESG(환경/사회/지배구조) 점수와 벤치마크를 제공한다. 2024+ AI 업그레이드로 AI/딥러닝 기반 스코어링 프레임워크가 추가되어, E·S·G 각 축(pillar)마다 전용 AI 모델로 peer-pattern 추정 및 결측 보완을 수행하고, 규제/섹터/지리 컨텍스트별 집계를 한다. 회사 ESG는 연도·빈도(FY/Q1~Q4)별 E·S·G·총점(esg)을 제공하고, 국가는 연도별 평균(mean)/중앙값(median) 통계를, 섹터는 벤치마크와 섹터 목록을 제공한다. model 파라미터로 신규 AI 모델(ai, 기본값)과 과거 legacy 데이터셋을 선택할 수 있다. 랜딩 페이지(financial-apis/esg-data-api)는 마케팅 소개이고, 실제 엔드포인트/파라미터 명세는 https://eodhd.com/marketplace/investverte/esg_data/docs 의 docs 페이지에 있다.",
+  "endpoints": [
+    {
+      "name": "List companies",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/companies",
+      "description": "ESG 데이터가 제공되는 회사 목록을 반환한다.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (스킴명 EODToken). 샘플은 demo."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "회사 심볼 (예: AAPL)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "회사명 (예: Apple Inc.)"
+        }
+      ],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/companies?api_token=demo"
+    },
+    {
+      "name": "List countries",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/countries",
+      "description": "ESG 통계가 제공되는 국가 목록을 반환한다.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (EODToken)."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "국가 심볼 (예: US)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "국가명 (예: United States of America)"
+        }
+      ],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/countries?api_token=demo"
+    },
+    {
+      "name": "View country ESG data",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/country/{symbol}",
+      "description": "특정 국가의 ESG 통계(평균/중앙값)를 연도·빈도별로 반환한다.",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "국가 심볼 (필수, 예: US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "year",
+          "type": "number",
+          "required": false,
+          "description": "데이터 연도 (예: 2014)"
+        },
+        {
+          "name": "frequency",
+          "type": "string",
+          "required": false,
+          "description": "데이터 보고 빈도. enum: FY, Q1, Q2, Q3, Q4"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "required": false,
+          "default": "ai",
+          "description": "모델 선택. enum: ai, legacy. 기본은 AI 모델 결과 반환"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (EODToken)."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "국가 심볼"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "국가명"
+        },
+        {
+          "name": "mean",
+          "type": "number",
+          "description": "해당 연도/빈도 ESG 평균값"
+        },
+        {
+          "name": "median",
+          "type": "number",
+          "description": "해당 연도/빈도 ESG 중앙값"
+        },
+        {
+          "name": "year",
+          "type": "number",
+          "description": "데이터 연도"
+        },
+        {
+          "name": "frequency",
+          "type": "string",
+          "description": "데이터 빈도 (FY/Q1~Q4)"
+        }
+      ],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/country/US?year=2014&frequency=FY&api_token=demo"
+    },
+    {
+      "name": "View company ESG data",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/esg/{symbol}",
+      "description": "특정 회사의 E·S·G·총 ESG 점수를 연도·빈도별로 반환한다.",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "회사 심볼 (필수, 예: AAPL)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "year",
+          "type": "number",
+          "required": false,
+          "description": "데이터 연도 (예: 2014)"
+        },
+        {
+          "name": "frequency",
+          "type": "string",
+          "required": false,
+          "description": "데이터 보고 빈도. enum: FY, Q1, Q2, Q3, Q4"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "required": false,
+          "default": "ai",
+          "description": "모델 선택. enum: ai, legacy. 기본은 AI 모델 결과 반환"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (EODToken)."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "e",
+          "type": "number",
+          "description": "Environmental(환경) 점수"
+        },
+        {
+          "name": "s",
+          "type": "number",
+          "description": "Social(사회) 점수"
+        },
+        {
+          "name": "g",
+          "type": "number",
+          "description": "Governance(지배구조) 점수"
+        },
+        {
+          "name": "esg",
+          "type": "number",
+          "description": "종합 ESG 점수"
+        },
+        {
+          "name": "year",
+          "type": "number",
+          "description": "데이터 연도"
+        },
+        {
+          "name": "frequency",
+          "type": "string",
+          "description": "데이터 빈도 (FY/Q1~Q4)"
+        }
+      ],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/esg/AAPL?year=2014&frequency=FY&model=legacy&api_token=demo"
+    },
+    {
+      "name": "List sectors",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/sectors",
+      "description": "ESG 벤치마크가 제공되는 섹터 목록을 반환한다.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (EODToken)."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "sector",
+          "type": "string",
+          "description": "섹터명 (예: Aerospace & Defense)"
+        }
+      ],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/sectors?api_token=demo"
+    },
+    {
+      "name": "View sector data",
+      "method": "GET",
+      "url_pattern": "/api/mp/investverte/sector/{symbol}",
+      "description": "특정 섹터의 ESG 벤치마크 데이터를 반환한다.",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "섹터 심볼 (필수, 예: Airlines)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "year",
+          "type": "number",
+          "required": false,
+          "description": "데이터 연도"
+        },
+        {
+          "name": "frequency",
+          "type": "string",
+          "required": false,
+          "description": "데이터 빈도. enum: FY, Q1, Q2, Q3, Q4"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "required": false,
+          "default": "ai",
+          "description": "모델 선택. enum: ai, legacy"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (EODToken)."
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON array",
+      "example": "https://eodhd.com/api/mp/investverte/sector/{symbol}?api_token=demo"
+    }
+  ],
+  "rate_limits": "문서 명시: \"1 API request = 10 API calls\" (요청 1건당 10콜 소비). \"100 000 API calls per 24 hours\" (24시간당 10만 콜). \"1000 API requests per minute\" (분당 1000요청). 추가 문구: 마켓플레이스 제품의 24시간 카운트 방식은 메인 EODHD 플랜과 다르게 계산된다 (\"The 24-hour period is counted differently for Marketplace products compared to the main EODHD plans.\").",
+  "pricing_notes": "InvestVerte ESG Data 는 EODHD 마켓플레이스의 별도 구독 제품. 랜딩 페이지 기재 가격: $29.99/월 (정상가), 첫 3개월 $50 프로모션. docs 페이지에는 어느 메인 플랜(EOD All World / Fundamentals / All-In-One)에 포함되는지 명시 없음 — 마켓플레이스 add-on 으로 별도 구매하는 구조로 보임 (플랜 포함 여부는 페이지에 not stated).",
+  "caveats": [
+    "대상 랜딩 페이지(financial-apis/esg-data-api)는 마케팅 소개로 REST 명세가 없음. 실제 엔드포인트/파라미터/응답은 마켓플레이스 docs 페이지(https://eodhd.com/marketplace/investverte/esg_data/docs)에서 추출. 두 페이지 모두 JS SPA 라 r.jina.ai 렌더 프록시 경유 필요.",
+    "stockpick 도메인 적합성 주의: 이 ESG API 는 한국(KRX) 종목 커버리지 여부가 문서에 명시되지 않음. 샘플은 모두 미국(AAPL, US). 회사/국가 수, 커버리지 연도 범위 모두 페이지에 not stated — KRX 코스피/코스닥 지원 여부는 별도 검증 필요(미지원 가능성 높음).",
+    "EODHD 자체 데이터가 아니라 서드파티(InvestVerte) 마켓플레이스 제품 — 라이선스/약관이 메인 EODHD 와 다를 수 있음.",
+    "sector/{symbol} 응답 필드는 docs 추출본에 명시 응답 예시가 없어 필드 스키마 미확정(sectors 목록의 sector 필드 외 추가 통계 필드 추정 불가 — 미확인).",
+    "model=ai 가 기본이며 legacy 와 점수가 다를 수 있음. 백테스트/룰에 쓸 경우 어떤 model 로 산출된 점수인지 통일 필요. 또한 AI 모델은 peer-pattern 추정으로 결측을 보완하므로 시점 t 에 실제 공시된 값이 아닐 수 있어 룩어헤드/추정치 혼입 위험 — 정량 룰 입력으로 쓸 때 주의.",
+    "frequency enum 표기가 docs 원문에서 따옴표 연속('FY''Q1''Q2'...)으로 구분자 없이 렌더됨 — enum 값 자체는 FY/Q1/Q2/Q3/Q4 로 확정.",
+    "콜 소비 1req=10calls 와 분당 1000req 동시 적용 시 분당 최대 1만콜이지만 일 한도 10만콜이 더 빨리 소진됨 — 대량 회사 루프 시 실질 한계는 일 1만 요청(=10만콜) 수준."
+  ]
+}

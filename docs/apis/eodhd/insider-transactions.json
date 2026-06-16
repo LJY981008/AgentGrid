@@ -1,0 +1,331 @@
+{
+  "section": "insider-transactions",
+  "category": "fundamentals",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/insider-transactions-api",
+  "fetch_status": "ok (eodhd.com 직접 fetch + r.jina.ai 프록시 2회, 총 3회 교차검증 일관. 단 레거시 엔드포인트 응답 필드는 페이지에 스크린샷 이미지로만 제공되어 텍스트 미확보 — caveat 참조)",
+  "auth": "쿼리 파라미터 api_token=YOUR_TOKEN (필수). 무료 가입 https://eodhd.com/register",
+  "base_url": "https://eodhd.com/api",
+  "notes": "페이지는 인사이더 거래(SEC Form 4) API 두 가지를 다룬다. (1) 신규 권장 엔드포인트 GET /api/sec-filings/{symbol}/form4 — Form 4 제출 단위의 중첩 구조(filing 안에 non_derivative / derivative / footnotes 배열)를 반환하며 page[offset]/page[limit] 기반 페이지네이션. (2) 레거시 GET /api/insider-transactions — 문서가 \"obsolete\"로 명시하고 신규 form4 엔드포인트를 권장(\"For all new integrations we recommend the new SEC Form 4 endpoint described below\"). 레거시는 code/from/to/limit/fmt 파라미터를 쓰는 플랫(flat) 스키마이며 트랜잭션 코드 P(매수)/S(매도)만 노출. 데이터는 SEC EDGAR에서 직접 소싱되어 일간 갱신, US 상장 Form 4 제출사만 커버, 티커별 이력 깊이는 5~11년 수준(대형주 기준). 트랜잭션 코드 15종(P,S,A,D,F,M,G,V,J,L,C,E,H,O,X)이 SEC Section 16 코드로 신규 엔드포인트 응답의 transaction_code에 등장.",
+  "endpoints": [
+    {
+      "name": "Insider Transactions (SEC Form 4) — 신규 권장",
+      "method": "GET",
+      "url_pattern": "/api/sec-filings/{symbol}/form4",
+      "description": "특정 US 티커의 SEC Form 4(인사이더 거래) 제출 목록을 제출 단위 중첩 구조로 반환. 페이지네이션 지원. EODHD가 신규 통합에 권장하는 엔드포인트.",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "US 티커, 예 AAPL 또는 AAPL.US. 대소문자 무관, .US 접미사 옵션."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 토큰"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "0-based 페이지네이션 오프셋"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "default": "20",
+          "description": "페이지 크기, 1~100"
+        }
+      ],
+      "response_format": "JSON: {data:[filing], meta:{total, page:{offset,limit}}, links:{next}}",
+      "response_fields": [
+        {
+          "name": "data",
+          "type": "array",
+          "description": "Form 4 filing 객체 배열"
+        },
+        {
+          "name": "meta.total",
+          "type": "integer",
+          "description": "전체 filing 수 (예 594)"
+        },
+        {
+          "name": "meta.page.offset",
+          "type": "integer",
+          "description": "현재 페이지 오프셋"
+        },
+        {
+          "name": "meta.page.limit",
+          "type": "integer",
+          "description": "현재 페이지 크기"
+        },
+        {
+          "name": "links.next",
+          "type": "string",
+          "description": "다음 페이지 URL (next만 제공 — 특정 페이지는 offset 증가로 도달해야 함)"
+        },
+        {
+          "name": "filing.accession_number",
+          "type": "string",
+          "description": "SEC accession 번호, filing 고유 식별자"
+        },
+        {
+          "name": "filing.filed_at",
+          "type": "string (date YYYY-MM-DD)",
+          "description": "SEC 제출일"
+        },
+        {
+          "name": "filing.period_of_report",
+          "type": "string (date YYYY-MM-DD)",
+          "description": "보고 기간"
+        },
+        {
+          "name": "filing.non_derivative",
+          "type": "array",
+          "description": "직접 주식 거래(Common Stock, Class A/B/C 등)"
+        },
+        {
+          "name": "filing.derivative",
+          "type": "array",
+          "description": "파생 거래(스톡옵션, RSU, 워런트)"
+        },
+        {
+          "name": "filing.footnotes",
+          "type": "array",
+          "description": "거래 행에서 참조되는 각주"
+        },
+        {
+          "name": "non_derivative[].reporting_owner_cik",
+          "type": "string",
+          "description": "인사이더 SEC CIK"
+        },
+        {
+          "name": "non_derivative[].reporting_owner_name",
+          "type": "string",
+          "description": "인사이더 전체 이름"
+        },
+        {
+          "name": "non_derivative[].is_director",
+          "type": "boolean",
+          "description": "이사회 임원 여부"
+        },
+        {
+          "name": "non_derivative[].is_officer",
+          "type": "boolean",
+          "description": "회사 임원 여부"
+        },
+        {
+          "name": "non_derivative[].is_ten_percent_owner",
+          "type": "boolean",
+          "description": "10% 이상 보유자 여부"
+        },
+        {
+          "name": "non_derivative[].is_other",
+          "type": "boolean",
+          "description": "기타 관계 여부"
+        },
+        {
+          "name": "non_derivative[].officer_title",
+          "type": "string|null",
+          "description": "임원 직함, 예 Chief Executive Officer"
+        },
+        {
+          "name": "non_derivative[].other_text",
+          "type": "string|null",
+          "description": "기타 관계 설명"
+        },
+        {
+          "name": "non_derivative[].security_title",
+          "type": "string",
+          "description": "증권명, 예 Common Stock"
+        },
+        {
+          "name": "non_derivative[].transaction_date",
+          "type": "string (ISO-8601 datetime)",
+          "description": "거래 일시"
+        },
+        {
+          "name": "non_derivative[].transaction_code",
+          "type": "string",
+          "description": "SEC 트랜잭션 코드(P,S,A,D,F,M,G,V,J,L,C,E,H,O,X 중 하나)"
+        },
+        {
+          "name": "non_derivative[].acquired_or_disposed",
+          "type": "string",
+          "description": "A(취득) 또는 D(처분)"
+        },
+        {
+          "name": "non_derivative[].shares_amount",
+          "type": "number",
+          "description": "거래 주식 수"
+        },
+        {
+          "name": "non_derivative[].price_per_share",
+          "type": "number|null",
+          "description": "USD 주당 가격, 해당 없으면 null"
+        },
+        {
+          "name": "non_derivative[].shares_owned_after",
+          "type": "number",
+          "description": "거래 후 해당 인사이더 보유 총 주식 수"
+        },
+        {
+          "name": "non_derivative[].total_value",
+          "type": "number|null",
+          "description": "shares x price 계산값, price 없으면 null"
+        },
+        {
+          "name": "derivative[].reporting_owner_cik",
+          "type": "string",
+          "description": "인사이더 SEC CIK"
+        },
+        {
+          "name": "derivative[].reporting_owner_name",
+          "type": "string",
+          "description": "인사이더 전체 이름"
+        },
+        {
+          "name": "derivative[].security_title",
+          "type": "string",
+          "description": "파생 증권명, 예 Non-Qualified Stock Option"
+        },
+        {
+          "name": "derivative[].conversion_or_exercise_price",
+          "type": "number|null",
+          "description": "행사/전환 가격 USD"
+        },
+        {
+          "name": "derivative[].transaction_date",
+          "type": "string (ISO-8601 datetime)",
+          "description": "거래 일시"
+        },
+        {
+          "name": "derivative[].transaction_code",
+          "type": "string",
+          "description": "SEC 트랜잭션 코드"
+        },
+        {
+          "name": "derivative[].acquired_or_disposed",
+          "type": "string",
+          "description": "A 또는 D"
+        },
+        {
+          "name": "derivative[].shares_amount",
+          "type": "number",
+          "description": "거래 파생 단위 수"
+        },
+        {
+          "name": "derivative[].price_per_share",
+          "type": "number|null",
+          "description": "파생 단위당 USD 가격"
+        },
+        {
+          "name": "derivative[].shares_owned_after",
+          "type": "number",
+          "description": "거래 후 보유 파생 단위 수"
+        },
+        {
+          "name": "derivative[].underlying_security_title",
+          "type": "string|null",
+          "description": "기초 증권, 예 Common Stock"
+        },
+        {
+          "name": "derivative[].underlying_shares",
+          "type": "number|null",
+          "description": "파생이 전환되는 기초 주식 수"
+        },
+        {
+          "name": "derivative[].exercise_date",
+          "type": "string (ISO-8601 datetime)|null",
+          "description": "파생 행사 가능 시작일"
+        },
+        {
+          "name": "derivative[].expiration_date",
+          "type": "string (ISO-8601 datetime)|null",
+          "description": "파생 만기일"
+        },
+        {
+          "name": "footnotes[].footnote_id",
+          "type": "string",
+          "description": "거래 행에서 참조되는 식별자, 예 F1, F2"
+        },
+        {
+          "name": "footnotes[].text",
+          "type": "string",
+          "description": "각주 텍스트"
+        }
+      ],
+      "example": "https://eodhd.com/api/sec-filings/AAPL/form4?api_token=YOUR_TOKEN"
+    },
+    {
+      "name": "Insider Transactions — 레거시(obsolete)",
+      "method": "GET",
+      "url_pattern": "/api/insider-transactions",
+      "description": "레거시 인사이더 거래 엔드포인트. 문서가 obsolete로 명시하고 신규 form4 사용을 권장. 플랫 스키마, code 파라미터로 티커 필터. (응답 필드는 페이지에 스크린샷 이미지로만 제공 — 텍스트 미기재.)",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 토큰"
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "required": false,
+          "default": "all symbols",
+          "description": "티커, 예 AAPL 또는 AAPL.US. 기본은 전체 심볼 반환"
+        },
+        {
+          "name": "from",
+          "type": "string (date YYYY-MM-DD)",
+          "required": false,
+          "default": "1년 전",
+          "description": "시작일"
+        },
+        {
+          "name": "to",
+          "type": "string (date YYYY-MM-DD)",
+          "required": false,
+          "default": "현재일",
+          "description": "종료일"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "default": "100",
+          "description": "결과당 항목 수, 1~1000"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 형식. json 지원"
+        }
+      ],
+      "response_format": "JSON (플랫 구조). 응답 필드명은 페이지에 스크린샷 이미지로만 제공되어 텍스트로 확인 불가.",
+      "response_fields": [],
+      "example": "https://eodhd.com/api/insider-transactions?api_token=YOUR_TOKEN&code=AAPL.US&fmt=json"
+    }
+  ],
+  "rate_limits": "두 엔드포인트 모두 요청당 10 API calls 소비. (일일 한도는 본 페이지에 미기재 — 플랜별 일일 콜 한도는 EODHD 가격/사용량 정책 별도.)",
+  "pricing_notes": "All-In-One 및 Fundamentals Data Feed 플랜에 포함. 요청당 10 API calls.",
+  "caveats": [
+    "커버리지 = US 상장 SEC Form 4 제출사만. 한국 주식(KRX/코스피·코스닥) 미지원 → stockpick 도메인에 직접 사용 불가. 본 명세는 미국 데이터소스 연구 완결성 차원.",
+    "레거시 /api/insider-transactions 엔드포인트는 문서가 'obsolete'로 명시 — 신규 통합은 /api/sec-filings/{symbol}/form4 사용 권장.",
+    "레거시 엔드포인트의 응답 필드명은 페이지에 스크린샷 이미지로만 제시되어 텍스트로 확보 불가 (response_fields=[]). 레거시 응답 스키마를 코드에서 참조하려면 실제 API 응답 또는 Postman 컬렉션으로 별도 실측 필요.",
+    "트랜잭션 이력 깊이는 티커별로 상이 — 대형주 기준 5~11년. 따라서 30년 백테스트용 장기 인사이더 데이터로는 부적합.",
+    "신규 form4 응답은 links.next 만 제공. 특정 페이지로 점프 불가 — page[offset]를 증가시키며 순차 페이지네이션해야 함.",
+    "데이터는 SEC EDGAR 직접 소싱, 일간 갱신.",
+    "페이지가 JS SPA 라 직접 WebFetch 가 부분만 렌더될 위험이 있어 eodhd.com 직접 + r.jina.ai 프록시 교차검증함. web.archive.org 는 본 환경에서 fetch 불가.",
+    "price_per_share=0 / total_value 가 M(파생 행사) 코드 거래에서 0 으로 나타나는 등 코드별 의미 해석 주의 (예시 응답상 M 코드 derivative price_per_share=0)."
+  ]
+}

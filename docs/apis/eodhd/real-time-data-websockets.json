@@ -1,0 +1,209 @@
+{
+  "section": "real-time-data-websockets",
+  "category": "intraday",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/new-real-time-data-api-websockets",
+  "fetch_status": "partial",
+  "auth": "쿼리 파라미터 api_token 을 WebSocket URL 에 부착. 데모 키 demo 로 한정 심볼 테스트 가능.",
+  "base_url": "wss://ws.eodhistoricaldata.com 프로덕션 보안 WebSocket. REST 의 api.eodhd.com 과 다른 별도 게이트웨이 도메인.",
+  "notes": "EODHD 실시간 WebSocket API. 영구 연결을 열고 JSON 명령으로 심볼 구독 해지하면 서버가 체결과 호가 메시지를 푸시. 4개 채널 자산군별 분리. 연결 후 action subscribe symbols 형태 JSON 텍스트 프레임으로 구독, 여러 심볼은 콤마 구분, 해지는 action unsubscribe. 응답은 짧은 약어 키 JSON 오브젝트이고 t 는 epoch 밀리초. 심볼 표기 US 순수티커 Forex 구분자없음 Crypto 대시. 기본 연결당 최대 50 심볼 동시 구독. stockpick 한국 KRX 백테스트에는 직접 관련성 낮음.",
+  "endpoints": [
+    {
+      "name": "US Trades",
+      "method": "WS",
+      "url_pattern": "/ws/us",
+      "description": "미국 주식 실시간 체결 스트림",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 키"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "s",
+          "description": "티커"
+        },
+        {
+          "name": "p",
+          "description": "체결가"
+        },
+        {
+          "name": "v",
+          "description": "수량"
+        },
+        {
+          "name": "c",
+          "description": "condition code"
+        },
+        {
+          "name": "dp",
+          "description": "dark pool flag 단일소스"
+        },
+        {
+          "name": "ms",
+          "description": "market status"
+        },
+        {
+          "name": "t",
+          "description": "epoch 밀리초"
+        }
+      ]
+    },
+    {
+      "name": "US Quotes",
+      "method": "WS",
+      "url_pattern": "/ws/us-quote",
+      "description": "미국 주식 실시간 호가 스트림",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 키"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "s",
+          "description": "티커"
+        },
+        {
+          "name": "ap",
+          "description": "ask price"
+        },
+        {
+          "name": "as",
+          "description": "ask size"
+        },
+        {
+          "name": "bp",
+          "description": "bid price"
+        },
+        {
+          "name": "bs",
+          "description": "bid size"
+        },
+        {
+          "name": "t",
+          "description": "epoch 밀리초"
+        }
+      ]
+    },
+    {
+      "name": "Forex",
+      "method": "WS",
+      "url_pattern": "/ws/forex",
+      "description": "외환 통화쌍 실시간 스트림 심볼 구분자 없음",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 키"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "s",
+          "description": "통화쌍"
+        },
+        {
+          "name": "a",
+          "description": "ask"
+        },
+        {
+          "name": "b",
+          "description": "bid"
+        },
+        {
+          "name": "dc",
+          "description": "일간 변동률 퍼센트"
+        },
+        {
+          "name": "dd",
+          "description": "일간 가격 차이"
+        },
+        {
+          "name": "ppms",
+          "description": "단일소스 의미 미기재"
+        },
+        {
+          "name": "t",
+          "description": "epoch 밀리초"
+        }
+      ]
+    },
+    {
+      "name": "Crypto",
+      "method": "WS",
+      "url_pattern": "/ws/crypto",
+      "description": "암호화폐 실시간 스트림 심볼 대시 구분",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 키"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "s",
+          "description": "심볼"
+        },
+        {
+          "name": "p",
+          "description": "체결가"
+        },
+        {
+          "name": "q",
+          "description": "수량"
+        },
+        {
+          "name": "dc",
+          "description": "일간 변동률 퍼센트"
+        },
+        {
+          "name": "dd",
+          "description": "일간 가격 차이"
+        },
+        {
+          "name": "t",
+          "description": "epoch 밀리초"
+        }
+      ]
+    },
+    {
+      "name": "subscribe action",
+      "method": "WS",
+      "url_pattern": "연결 후 전송 JSON 프레임",
+      "description": "action subscribe symbols AAPL,TSLA 여러 심볼 콤마 구분",
+      "query_params": [],
+      "response_fields": []
+    },
+    {
+      "name": "unsubscribe action",
+      "method": "WS",
+      "url_pattern": "연결 후 전송 JSON 프레임",
+      "description": "action unsubscribe symbols ETH-USD,BTC-USD",
+      "query_params": [],
+      "response_fields": []
+    }
+  ],
+  "rate_limits": "연결당 기본 최대 50 심볼 동시 구독. 일일 콜 한도 페이지 미명시. 전송 지연 일반 50ms 미만.",
+  "pricing_notes": "실시간 데이터는 유료 플랜 EOD Intraday 및 ALL-IN-ONE 에 포함. 무료 플랜 미포함. 데모 키 demo 테스트 가능.",
+  "caveats": [
+    "base_url 은 WebSocket 전용 도메인으로 REST 와 다름 혼동 금지",
+    "SPA 라 직접 fetch 본문이 빌 수 있어 r.jina.ai 와 WebFetch 원본 2소스 교차로 추출 archive 차단으로 3차 검증 불가",
+    "dp 와 ppms 약어는 단일 소스에만 등장 환각 가능성 배제 못 함 실제 라이브 페이로드로 키 검증 필요",
+    "필드 타입은 페이지에 타입표가 없어 의미 기반 추정",
+    "인증실패 heartbeat 에러 메시지 포맷과 재연결 정책은 페이지에서 확인 못 함",
+    "stockpick 한국주식과 직접 무관 미국 외환 암호화폐 실시간 전용 한국 종목 미지원 백테스트 부적합",
+    "시점 민감도 도메인 필드 플랜 게이팅 변동 가능 2026-06-16 기준 운영 투입 전 재확인"
+  ]
+}

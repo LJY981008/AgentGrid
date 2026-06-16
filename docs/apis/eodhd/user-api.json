@@ -1,0 +1,102 @@
+{
+  "section": "user-api",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/user-api",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보, 2회 교차 추출 일치)",
+  "auth": "쿼리 파라미터 api_token=<KEY>. 문서 예시는 데모 토큰(api_token=demo) 사용. 프로덕션 토큰은 eodhd.com 가입 후 발급. 예: ?api_token=demo",
+  "base_url": "https://eodhd.com/api",
+  "notes": "User API 는 API 토큰 보유자의 계정/구독 상태를 조회하는 단일 엔드포인트. 주 용도는 (1) 현재 일일 사용량(apiRequests) 과 일일 한도(dailyRateLimit) 모니터링, (2) 추가 구매 콜 잔량(extraLimit) 확인, (3) 구독 유형/결제 수단/계정 정보 확인. 사용량(apiRequests)은 GMT 자정에 리셋되지만, 리셋 이후 첫 API 요청이 발생하기 전까지는 전일 값이 표시된다(\"the number of API requests resets at midnight GMT, but you will see the limit for the previous day until an API request is made after the reset\"). 문서는 'calls' 와 'requests' 의 구분은 별도의 API Limits 문서를 참조하라고 안내한다. 응답 데이터 타입은 페이지에 명시적으로 기재되어 있지 않으며(아래 타입은 필드명/예시값에서 추론한 표기), 페이지는 JSON 출력 구조를 스크린샷으로만 제시하고 원시 JSON 텍스트는 제공하지 않는다.",
+  "endpoints": [
+    {
+      "name": "User (계정/구독 정보 조회)",
+      "method": "GET",
+      "url_pattern": "/api/user",
+      "description": "API 토큰에 연결된 사용자의 계정 정보, 구독 유형, 일일 API 한도 및 당일 사용량, 추가 구매 콜 잔량, 어필리에이트 초대 토큰 정보를 반환한다.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "인증 토큰. 가입(eodhd.com/register) 후 발급. 문서 예시는 demo 사용."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "xml",
+          "description": "응답 포맷. JSON 출력을 받으려면 json 지정. 기본값은 xml."
+        }
+      ],
+      "path_params": [],
+      "response_fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "API 토큰에 연결된 구독자(가입자) 이름"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "description": "구독자 이메일 주소"
+        },
+        {
+          "name": "subscriptionType",
+          "type": "string",
+          "description": "구독 주기. 값: monthly 또는 yearly"
+        },
+        {
+          "name": "paymentMethod",
+          "type": "string",
+          "description": "결제 수단. 값: PayPal 또는 Stripe"
+        },
+        {
+          "name": "apiRequests",
+          "type": "integer",
+          "description": "가장 최근 사용일의 API 요청 수. GMT 자정에 리셋(단, 리셋 후 첫 요청 전까지 전일 값 표시)"
+        },
+        {
+          "name": "apiRequestsDate",
+          "type": "string",
+          "description": "가장 최근 API 요청 날짜"
+        },
+        {
+          "name": "dailyRateLimit",
+          "type": "integer",
+          "description": "하루에 허용되는 최대 API 콜 수(일일 한도)"
+        },
+        {
+          "name": "extraLimit",
+          "type": "integer",
+          "description": "추가로 구매한 잔여 API 콜 수"
+        },
+        {
+          "name": "inviteToken",
+          "type": "string",
+          "description": "어필리에이트(추천) 프로그램 초대 토큰"
+        },
+        {
+          "name": "inviteTokenClicked",
+          "type": "integer",
+          "description": "초대 토큰 클릭 횟수"
+        }
+      ],
+      "response_format": "기본 XML, fmt=json 지정 시 JSON",
+      "example": "https://eodhd.com/api/user?api_token=demo&fmt=json"
+    }
+  ],
+  "rate_limits": "이 페이지는 /api/user 호출이 일일 한도에서 몇 콜을 소비하는지(소비량) 또는 한도에 카운트되는지 여부를 명시하지 않음(미기재). 일일 한도의 구체적 수치도 이 페이지에는 없으며 dailyRateLimit 필드로 조회하라고만 안내. 'calls' 와 'requests' 의 정확한 구분은 별도 API Limits 문서 참조 안내. 사용량은 GMT 자정 리셋(리셋 후 첫 요청 전까지 전일 값 표시).",
+  "pricing_notes": "페이지에 이 엔드포인트의 플랜 귀속이 명시되어 있지 않음. 가입(무료 등록)으로 발급되는 토큰으로 사용하는 계정 조회용 유틸리티 엔드포인트로 제시되며, demo 토큰 예시가 제공됨. 어느 유료 플랜(EOD All World/Fundamentals/All-In-One)에 한정된다는 기재는 없음(미확인).",
+  "caveats": [
+    "응답 필드의 데이터 타입이 페이지에 명시되어 있지 않음 — 본 명세의 type 표기는 필드명/예시값 기반 추론이며 권위 출처 아님(검증 필요).",
+    "원시 JSON 응답 예시가 텍스트로 제공되지 않고 스크린샷으로만 제시됨 — 실제 키 케이스/중첩 구조는 실제 호출로 검증 권장.",
+    "기본 응답 포맷이 XML 임. JSON 이 필요하면 반드시 fmt=json 명시해야 함(누락 시 XML 반환).",
+    "이 엔드포인트의 콜 소비량/일일 한도 카운트 여부가 이 페이지에 없음 — API Limits 문서 별도 확인 필요(미확인).",
+    "일일 한도(dailyRateLimit) 구체 수치는 이 페이지에 없음. apiRequests 는 GMT 자정 리셋이나 리셋 후 첫 요청 전까지 전일 값이 표시되는 동작 주의(모니터링 로직에서 오판 가능).",
+    "SPA 직접 WebFetch 는 본문이 비어 r.jina.ai 렌더 프록시 경유로 추출함. 원본과의 정합성은 향후 SPA 렌더 변경 시 재확인 필요.",
+    "EODHD 약관 일반 주의(기존 리서치): 구독 해지 후 데이터 삭제 의무 등은 데이터 API 한정 — 본 user-api 는 계정 메타 조회라 무관."
+  ]
+}

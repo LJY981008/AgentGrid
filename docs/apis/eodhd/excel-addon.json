@@ -1,0 +1,67 @@
+{
+  "section": "excel-addon",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/excel-financial-add-on-fundamentals-end-of-day-charts",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 전체 확보. 직접 WebFetch는 SPA라 빈 본문 위험)",
+  "auth": "?api_token=<KEY> 쿼리 파라미터. DEMO 키(api_token=demo)는 일부 티커(AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD, EUR-USD)만 동작하며, 페이지의 VBA 예제 DEMO 키는 AAPL.US 만 동작한다고 명시. Excel Add-on 자체는 EODHD 계정 API Key 를 add-on UI 에 입력해 사용.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지는 EODHD \"Financial Excel Add-on\" 의 마케팅·사용 안내(튜토리얼) 페이지로, 독립적인 REST API 명세 페이지가 아니다. 대부분이 산문(주식 데이터의 종류/의미, 데이터 취득 방법 비교, add-on 소개)이다.\n\n페이지에 실제 기재된 사실:\n- EODHD Excel/Google Sheets Add-on 은 \"formula-free\"(수식 없이 클릭 몇 번으로 데이터 취득·차트 생성)를 표방. Windows 설치형(Install Excel Add-on).\n- Add-on 으로 취득 가능한 데이터: Stocks/ETF/Funds 의 Fundamental data, End-of-day historical data, Intraday data. (산문에서 Real-time, Dividends 도 언급)\n- 2024년 10월 업데이트: 벌크 다운로드 VBA 스크립트(vba-multiple-download-new 2.1.xlsm)에 \"Get dividends\" 버튼 추가 — 티커 컬럼의 종목들에 대해 배당 다운로드, from/to 날짜도 요청에 전달, 각 회사 배당은 별도 탭 생성.\n\nAPI/코드 관점에서 페이지에 명시된 구체 요소는 2가지뿐:\n1) Excel VBA 사용자정의함수 =EODSymbolData(Symbol, From_Date, To_Date) — REST 엔드포인트가 아니라 add-on/예제 XLS 의 VBA 함수. EOD Historical Data 를 가져오는 용도. ALT+F11 → VBA Module 'EODHistoricalData' 에서 코드 확인. 예제 XLS 다운로드 제공.\n2) LIVE API Excel Webservice 지원 — Excel 의 =WEBSERVICE() 함수에 EODHD real-time 엔드포인트 URL 을 넣어 단일 필드를 가져오는 팁. filter=FIELDNAME 으로 한 필드만 반환(예: filter=close → 숫자 172.5 만 반환). 이것이 페이지에 등장하는 유일한 실제 REST 엔드포인트.\n\n가입/요금 안내(activate your API key 섹션):\n- 등록 무료, API Key 발급.\n- DEMO 키: 위 6개 티커만, 단 해당 티커는 Real-Time 포함 모든 데이터 타입 무제한.\n- 무료 플랜: 하루 20 API calls 제한, EOD Historical(전 종목 가능하나 과거 1년치만), 거래소별 티커 목록 가능.\n- 유료 플랜 $19.99 부터.\n\n이 페이지에는 EODSymbolData 의 파라미터 타입·기본값, real-time 엔드포인트의 전체 쿼리 파라미터 표, 응답 필드 스키마 등 정식 명세 표가 없다. 정식 명세는 별도 EODHD API 문서 페이지(real-time API, EOD API 등)를 참조해야 함.",
+  "endpoints": [
+    {
+      "name": "Real-Time / Live (Excel WEBSERVICE 용 예시)",
+      "method": "GET",
+      "url_pattern": "/api/real-time/{symbol}",
+      "description": "페이지의 'LIVE API Excel Webservice support' 섹션에 등장하는 유일한 실제 REST 엔드포인트. Excel =WEBSERVICE() 함수에 URL 을 넣어 실시간 시세를 가져온다. filter 파라미터로 단일 필드만 추출하면 숫자 하나만 반환되어 WEBSERVICE 함수에 유용하다고 설명. (예: filter=close → 172.5)",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "티커 심볼. 예: AAPL.US. DEMO 키 사용 시 AAPL.US 등 지정된 데모 티커만 동작."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키. 예제에서는 demo 사용(AAPL.US 등 데모 티커 전용)."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 예제에서 fmt=json 사용. (이 페이지에는 json 외 값 명시 없음)"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "단일 필드명을 지정하면 그 필드 값만 반환. 예: filter=close 면 종가 숫자(172.5)만 반환. Excel WEBSERVICE 함수용으로 권장."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "close",
+          "type": "number",
+          "description": "filter=close 예시에서 반환된 종가 값(예시값 172.5). 이 페이지에는 real-time 응답의 전체 필드 스키마가 기재되어 있지 않음."
+        }
+      ],
+      "response_format": "JSON (fmt=json). filter 지정 시 단일 스칼라 값만 반환.",
+      "example": "https://eodhd.com/api/real-time/AAPL.US?api_token=demo&fmt=json&filter=close  →  172.5\nExcel: =WEBSERVICE(https://eodhd.com/api/real-time/AAPL.US?api_token=demo&fmt=json&filter=close)"
+    }
+  ],
+  "rate_limits": "무료 플랜: 하루 20 API calls 제한(이 페이지 명시). 이 페이지에는 Excel Add-on/엔드포인트별 콜 소비량(per-request consumption)은 명시되어 있지 않음 — real-time/EOD 의 콜 소비량은 별도 API 명세 페이지 참조 필요.",
+  "pricing_notes": "- DEMO 키(무비용): 6개 티커(AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD, EUR-USD) 한정, 단 Real-Time 포함 전 데이터 타입 무제한.\n- 무료 플랜: API Key 발급, 하루 20 calls, EOD Historical Stock Market Data(전 종목 but 과거 1년치만), 거래소별 티커 목록.\n- 유료 플랜: $19.99 부터 시작('different types of data without limitations'). 이 페이지는 add-on 으로 접근 가능한 데이터로 Fundamental(Stocks/ETF/Funds)·EOD historical·Intraday 를 들고, 산문에서 Real-time·Dividends 도 언급. 구체적 어느 플랜에 어느 데이터가 포함되는지는 이 페이지에 표로 정리돼 있지 않음 — EODHD 요금제 페이지 참조 필요.",
+  "caveats": [
+    "이 페이지는 REST API 명세가 아니라 Excel/Google Sheets Add-on 마케팅·튜토리얼 페이지다. 정식 엔드포인트 명세(real-time/EOD/fundamentals 의 전체 파라미터·응답 필드)는 별도 EODHD API 문서 페이지를 참조해야 한다.",
+    "=EODSymbolData(Symbol, From_Date, To_Date) 는 REST 엔드포인트가 아니라 EODHD 가 제공하는 예제 XLS 의 VBA 사용자정의함수다. 파라미터 타입·날짜 포맷·기본값이 이 페이지에 명시돼 있지 않다(예제 XLS 의 VBA Module 'EODHistoricalData' 소스 확인 필요).",
+    "real-time 엔드포인트 응답의 전체 필드 스키마는 이 페이지에 없다. close(172.5)만 filter 예시로 등장.",
+    "DEMO 키 동작 범위가 문맥에 따라 다르게 서술됨: activate 섹션은 6개 데모 티커 전체 데이터 가능이라 하고, VBA 예제 섹션은 'DEMO 키는 AAPL.US 에서만 동작'이라 한다 — 예제 파일 한정 제약으로 보임.",
+    "무료 플랜 EOD 는 '과거 1년치(within the past year only)' 제한 — stockpick 의 30년 백테스트 요건과 무관(유료 필요).",
+    "한국 주식(KRX/KQ/KO) 커버리지나 거래소 코드는 이 페이지에 일절 언급 없음. Excel Add-on 자체가 stockpick(Python 백테스트) 용도와 직접 관련 없는 채널 — 완결성·교차참조용 기록.",
+    "fetch_status=ok 이나 본문은 r.jina.ai 렌더 프록시 경유 확보분이며 페이지 내 스크린샷/표 이미지(예: 데이터 요청 종류 목록, 차트)는 텍스트로 캡처되지 않아 그 안의 세부 항목은 미확인."
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "section": "php-laravel-example",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/php-laravel-example",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 단, 페이지 자체가 REST 명세가 아닌 서드파티 래퍼 사용 예시 페이지라 추출 가능한 명세 정보가 제한적)",
+  "auth": "페이지에 인증 방식 미기재. \"No configuration required for Laravel >= 5.5+ (auto-discovery)\" 라고만 적혀 있고, api_token 설정 방법/환경변수명은 본 페이지에 없음 (GitHub 페이지로 안내). EODHD REST API 일반 규약상 ?api_token=<KEY> 쿼리지만, 이 페이지에는 기재되지 않음.",
+  "base_url": "페이지에 base_url 미기재. (서드파티 래퍼가 내부적으로 EODHD API를 호출하지만 URL은 노출하지 않음)",
+  "notes": "이 페이지는 EODHD 자체 REST API 명세 문서가 아니라, RadicalLoop가 만든 서드파티 PHP/Laravel 래퍼 패키지(GitHub: https://github.com/radicalloop/eodhistoricaldata)의 사용 예시를 소개하는 페이지다. 따라서 REST 엔드포인트의 URL 패턴/HTTP 메서드/파라미터/응답 필드 스키마는 본 페이지에 기재되어 있지 않고, \"자세한 내용은 GitHub 페이지 참조\"로 안내한다.\n\n페이지에 명시된 특징:\n- \"Easy installation with Composer\"\n- \"No configuration required for Laravel >= 5.5+, It will use the auto-discovery function\"\n- \"Easy to use\"\n\n페이지에 명시된 코드 예시 (verbatim):\n\n[Stocks API]\n  use Eod;\n  $stock = Eod::stock();\n  $stock->realTime('AAPL.US')->json();\n  $stock->eod('AAPL.US')->json();\n  $stock->realTime('AAPL.US')->download();\n  $stock->dividend('AAPL.US', ['from' => '2017-01-01'])->json();\n\n[Exchanges API]\n  use Eod;\n  $exchange = Eod::exchange();\n  $exchange->symbol('US')->json();\n  $exchange->multipleTicker('US')->json();\n  $exchange->symbol('US')->download();\n\n래퍼 메서드 정리:\n- Eod::stock() 객체: realTime(ticker), eod(ticker), dividend(ticker, [options])\n- Eod::exchange() 객체: symbol(code), multipleTicker(code)\n- 출력 체이닝: ->json(), ->download() (일부 추출에서 ->save() 도 언급되나 페이지 코드 예시에는 json/download만 등장)\n\n옵션 예시: dividend 호출 시 두 번째 인자로 연관배열 옵션 전달 가능 — ['from' => '2017-01-01'] (조회 시작일).\n\n심볼 형식: 'AAPL.US' (티커.거래소코드), 거래소는 'US' 등 코드로 지정.\n\n이들은 EODHD REST 엔드포인트(EOD, Real-Time, Dividends, Exchange Symbol List 등)에 대응하는 래퍼 메서드이나, 본 페이지는 대응 REST 경로를 명시하지 않는다.",
+  "endpoints": [],
+  "rate_limits": "페이지에 API 콜 소비량/일일 한도 미기재. (래퍼는 내부적으로 EODHD REST API를 호출하므로 각 엔드포인트 기본 콜 소비 규정을 따르나, 본 페이지에는 명시 없음)",
+  "pricing_notes": "페이지에 플랜 포함 정보 미기재. 래퍼 자체는 오픈소스 무료 패키지(Composer 설치)이며, 실제 데이터 호출에는 EODHD API 키와 해당 데이터의 구독 플랜이 별도로 필요하다(페이지 명시 없음, 일반 규약 추정).",
+  "caveats": [
+    "이 페이지는 EODHD 공식 REST API 명세가 아니라 서드파티(RadicalLoop) PHP/Laravel 래퍼 사용 예시 페이지다. 권위 있는 REST 명세 추출 목적에는 부적합 — 엔드포인트 URL/메서드/파라미터/응답 필드가 전혀 기재되지 않음.",
+    "코드가 환각 없이 참조할 REST 명세를 원한다면 이 페이지가 아니라 EODHD의 실제 데이터 엔드포인트 문서(/api/eod, /api/real-time, /api/div, /api/exchange-symbol-list 등 개별 페이지)를 봐야 한다.",
+    "실제 REST 경로/파라미터/응답 스키마, base_url, 인증(api_token 쿼리), 콜 소비량, 플랜 포함 여부가 모두 본 페이지에 미기재 — '자세한 내용은 GitHub 페이지(https://github.com/radicalloop/eodhistoricaldata) 참조'로 위임.",
+    "서드파티 래퍼는 EODHD 공식 유지보수가 아니므로 버전/유지 상태를 GitHub에서 별도 확인 필요(최종 커밋, Laravel 호환 버전 등 시점 민감).",
+    "PHP/Laravel 스택이라 stockpick(Python ≥3.12) 프로젝트와 무관 — 직접 도입 대상 아님. 본 추출은 문서 명세 완결성 목적.",
+    "->save() 출력 메서드는 일부 추출에서 언급되나 페이지 코드 예시에는 ->json()/->download()만 확정적으로 등장 — save 존재 여부는 미확정.",
+    "WebFetch 직접 호출은 SPA로 본문이 빌 수 있어 r.jina.ai 렌더 프록시 경유로 확보함. base_url/인증/콜소비/플랜은 프록시 본문에도 부재 = 페이지 원문에 없는 정보."
+  ]
+}

@@ -1,0 +1,666 @@
+{
+  "section": "library-r-v1",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/r-library-for-financial-data-by-eodhd",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. eodhd.com 직접 WebFetch는 SPA로 빈 본문 우려가 있어 프록시 사용)",
+  "auth": "API 토큰을 쿼리 파라미터 api_token 으로 전달. R 함수에서는 첫 인자 api_token 으로 받음. 직접 HTTP 호출 예시: ...?api_token=<KEY>. DEMO 키로 6개 티커 무료 테스트 가능.",
+  "base_url": "http://nonsecure.eodhd.com/api/  (⚠️ 페이지가 R 언어용으로 HTTPS 대신 HTTP 사용을 명시 권고. 일반 EODHD base는 https://eodhd.com/api 이나, 이 R 페이지는 nonsecure.eodhd.com/api 를 사용)",
+  "notes": "이 페이지는 REST 엔드포인트 명세 페이지가 아니라 EODHD가 제공하는 R 언어 라이브러리(패키지명 \"eodhd\") 사용 가이드다. 대부분의 데이터 접근은 개별 REST 경로가 아니라 R 함수 래퍼(예: get_eod_historical_stock_market_data(...))로 제시되며, 각 함수가 어떤 REST 경로를 호출하는지는 이 페이지에 명시되지 않는다(단, /api/eod/ 와 /api/table.csv 는 직접 HTTP 호출 예시로 등장). 설치: install.packages(\"eodhd\"); library(\"eodhd\"). 요구사항: R 4.3.1 이상, RStudio. 페이지 내 R 함수 도움말은 help(함수명)으로 조회. ⚠️ 중요: 이 R 라이브러리(eodhd)는 더 이상 CRAN에서 지원되지 않으며 신버전 eodhdR2로 대체되었다(레거시는 GitHub에 잔존). period 값은 d(일)/w(주)/m(월), order 값은 a(오름차순)/d(내림차순). GitHub: https://github.com/EodHistoricalData/EODHD-APIs-R-Financial-Library. 아래 endpoints 목록은 페이지에 시그니처로 등장한 R 함수들을 정리한 것이며, method/url_pattern은 페이지에 명시된 것만 채우고 미명시는 R 함수 호출로 표기했다. stockpick(한국 KRX) 관점: 이 페이지에는 KRX 커버리지 언급이 전혀 없고, 데모/예시는 모두 미국 티커(.US)·암호화폐·환율이라 한국주식 직접 적용 여부는 별도 확인 필요.",
+  "endpoints": [
+    {
+      "name": "EOD Historical Stock Market Data (직접 REST 경로 명시)",
+      "method": "GET",
+      "url_pattern": "/api/eod/{symbol}",
+      "description": "종목의 일/주/월 단위 종가 기반 과거 데이터. 페이지에 직접 HTTP 호출 예시로 등장한 유일한 명시 REST 경로 중 하나. 대응 R 함수: get_eod_historical_stock_market_data(api_token, symbol, from_date=NULL, to_date=NULL, period='d', order='a'). 직접 호출 예시는 CSV(read.csv(url(...)))로 가져옴.",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "티커 심볼. 예: AAPL.US"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 토큰(또는 DEMO)"
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "required": false,
+          "default": "d",
+          "description": "집계 주기: d(일)/w(주)/m(월). 예시에서 &period=m 사용"
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false,
+          "default": "a",
+          "description": "정렬: a(오름차순)/d(내림차순). 예시에서 &order=d 사용"
+        },
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "R 함수 인자 from_date(NULL 기본). REST 쿼리명은 페이지 미명시"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "R 함수 인자 to_date(NULL 기본). REST 쿼리명은 페이지 미명시"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "직접 HTTP 호출 예시는 CSV (read.csv(url(...))로 파싱). R 함수는 JSON 반환 언급",
+      "example": "ticker.link <- paste(\"http://nonsecure.eodhd.com/api/eod/\", symbol, \"?api_token=\", api.token, \"&period=m&order=d\", sep=\"\"); data <- read.csv(url(ticker.link)); head(data)  (symbol=\"AAPL.US\")"
+    },
+    {
+      "name": "table.csv (직접 REST 경로 명시)",
+      "method": "GET",
+      "url_pattern": "/api/table.csv",
+      "description": "페이지 코드 예시에 문자열로 등장한 CSV 형식 엔드포인트 경로. 이 페이지에는 세부 파라미터/응답 필드 설명이 없음.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 토큰"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "CSV"
+    },
+    {
+      "name": "Live (Real-Time) Stock Prices [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_live_stock_prices(api_token, ticker, s=NULL)",
+      "description": "실시간(지연) 주가. REST 경로는 페이지 미명시.",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "기본 티커"
+        },
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "default": "NULL",
+          "description": "추가 심볼(멀티)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Intraday Historical Data [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_intraday_historical_data(api_token, interval, from_unix_time, to_unix_time, symbol)",
+      "description": "인트라데이 과거 데이터. REST 경로 페이지 미명시.",
+      "query_params": [
+        {
+          "name": "interval",
+          "type": "string",
+          "required": true,
+          "description": "인트라데이 간격"
+        },
+        {
+          "name": "from_unix_time",
+          "type": "integer",
+          "required": true,
+          "description": "시작 유닉스 타임스탬프"
+        },
+        {
+          "name": "to_unix_time",
+          "type": "integer",
+          "required": true,
+          "description": "종료 유닉스 타임스탬프"
+        },
+        {
+          "name": "symbol",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Historical Dividends [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_historical_dividends_data(api_token, ticker, date_from, date_to)",
+      "description": "과거 배당 데이터. REST 경로 페이지 미명시(일반 EODHD는 /api/div/).",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        },
+        {
+          "name": "date_from",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "date_to",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Historical Splits [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_historical_splits_data(api_token, ticker, date_from, date_to)",
+      "description": "과거 액면분할 데이터. REST 경로 페이지 미명시(일반 EODHD는 /api/splits/).",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        },
+        {
+          "name": "date_from",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "date_to",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Bonds Fundamentals [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_bonds_fundamentals_data(api_token, isin)",
+      "description": "채권 펀더멘털. REST 경로 페이지 미명시.",
+      "query_params": [
+        {
+          "name": "isin",
+          "type": "string",
+          "required": true,
+          "description": "채권 ISIN"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Bulk EOD / Splits / Dividends [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_bulk_eod_splits_dividends_data(api_token, country, type, date, symbols, filter)",
+      "description": "국가 단위 벌크 EOD/분할/배당. REST 경로 페이지 미명시(일반 EODHD는 /api/eod-bulk-last-day/).",
+      "query_params": [
+        {
+          "name": "country",
+          "type": "string",
+          "required": true,
+          "description": "국가/거래소 코드"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "데이터 유형(eod/splits/dividends 등)"
+        },
+        {
+          "name": "date",
+          "type": "string",
+          "required": false,
+          "description": "대상 날짜"
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "심볼 필터"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "추가 필터"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Upcoming Earnings [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_upcoming_earnings_data(api_token, from_date, to_date, symbols)",
+      "description": "예정 실적 발표. REST 경로 페이지 미명시(일반 EODHD는 /api/calendar/earnings).",
+      "query_params": [
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "심볼 필터"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Earning Trends [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_earning_trends_data(api_token, symbols)",
+      "description": "실적 추세. REST 경로 페이지 미명시(일반 EODHD는 /api/calendar/trends).",
+      "query_params": [
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": true,
+          "description": "심볼"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Upcoming IPOs [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_upcoming_IPOs_data(api_token, from_date, to_date)",
+      "description": "예정 IPO. REST 경로 페이지 미명시(일반 EODHD는 /api/calendar/ipos).",
+      "query_params": [
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Upcoming Splits [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_upcoming_splits_data(api_token, from_date, to_date)",
+      "description": "예정 액면분할. REST 경로 페이지 미명시(일반 EODHD는 /api/calendar/splits).",
+      "query_params": [
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Economic Events [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_economic_events_data(api_token, date_from, date_to, country, comparison, offset, limit)",
+      "description": "경제 이벤트 캘린더. REST 경로 페이지 미명시(일반 EODHD는 /api/economic-events).",
+      "query_params": [
+        {
+          "name": "date_from",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "date_to",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "required": false,
+          "description": "국가 코드"
+        },
+        {
+          "name": "comparison",
+          "type": "string",
+          "required": false,
+          "description": "비교 기준"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "오프셋(페이지네이션)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "건수 제한"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Financial News [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: financial_news(api_token, s, t, from_date, to_date, limit, offset)",
+      "description": "금융 뉴스. REST 경로 페이지 미명시(일반 EODHD는 /api/news).",
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": false,
+          "description": "심볼 필터"
+        },
+        {
+          "name": "t",
+          "type": "string",
+          "required": false,
+          "description": "태그/토픽 필터"
+        },
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "건수 제한"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "오프셋"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "List of Exchanges [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_list_of_exchanges(api_token)",
+      "description": "지원 거래소 목록. REST 경로 페이지 미명시(일반 EODHD는 /api/exchanges-list/).",
+      "query_params": [],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Insider Transactions [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_insider_transactions_data(api_token, date_from, date_to, code, limit)",
+      "description": "내부자 거래. REST 경로 페이지 미명시(일반 EODHD는 /api/insider-transactions).",
+      "query_params": [
+        {
+          "name": "date_from",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "date_to",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        },
+        {
+          "name": "code",
+          "type": "string",
+          "required": false,
+          "description": "심볼/코드"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "건수 제한"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Macro Indicators [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_macro_indicators_data(api_token, country, indicator)",
+      "description": "거시 지표. REST 경로 페이지 미명시(일반 EODHD는 /api/macro-indicator/{country}).",
+      "query_params": [
+        {
+          "name": "country",
+          "type": "string",
+          "required": true,
+          "description": "국가 코드"
+        },
+        {
+          "name": "indicator",
+          "type": "string",
+          "required": false,
+          "description": "지표명"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Trading Hours / Stock Market Holidays [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_details_trading_hours_stock_market_holidays(api_token, code, from_date, to_date)",
+      "description": "거래시간·휴장일. REST 경로 페이지 미명시(일반 EODHD는 /api/exchange-details/{code}).",
+      "query_params": [
+        {
+          "name": "code",
+          "type": "string",
+          "required": true,
+          "description": "거래소 코드"
+        },
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Symbol Change History [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: symbol_change_history(api_token, from_date, to_date)",
+      "description": "심볼 변경 이력. REST 경로 페이지 미명시(일반 EODHD는 /api/symbol-change-history).",
+      "query_params": [
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Stock Market Screener [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: stock_market_screener(api_token, sort, filters, limit, signals, offset)",
+      "description": "주식 스크리너. REST 경로 페이지 미명시(일반 EODHD는 /api/screener).",
+      "query_params": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "description": "정렬 기준"
+        },
+        {
+          "name": "filters",
+          "type": "string",
+          "required": false,
+          "description": "필터 조건"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "건수 제한"
+        },
+        {
+          "name": "signals",
+          "type": "string",
+          "required": false,
+          "description": "시그널 필터"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "오프셋"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Technical Indicator [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_technical_indicator_data(api_token, ticker, func, period)",
+      "description": "기술적 지표. REST 경로 페이지 미명시(일반 EODHD는 /api/technical/{ticker}).",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        },
+        {
+          "name": "func",
+          "type": "string",
+          "required": true,
+          "description": "지표 함수명(sma/ema 등)"
+        },
+        {
+          "name": "period",
+          "type": "integer",
+          "required": false,
+          "description": "기간"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Historical Market Capitalization [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_historical_market_capitalization_data(api_token, ticker, from_date, to_date)",
+      "description": "과거 시가총액. REST 경로 페이지 미명시(일반 EODHD는 /api/historical-market-cap/{ticker}).",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        },
+        {
+          "name": "from_date",
+          "type": "string",
+          "required": false,
+          "description": "시작일"
+        },
+        {
+          "name": "to_date",
+          "type": "string",
+          "required": false,
+          "description": "종료일"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    },
+    {
+      "name": "Fundamentals [R 함수]",
+      "method": "GET",
+      "url_pattern": "R: get_fundamentals_data(api_token, ticker)",
+      "description": "펀더멘털 데이터. REST 경로 페이지 미명시(일반 EODHD는 /api/fundamentals/{ticker}).",
+      "query_params": [
+        {
+          "name": "ticker",
+          "type": "string",
+          "required": true,
+          "description": "티커 심볼"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON"
+    }
+  ],
+  "rate_limits": "무료(Free) 플랜: \"limited to 20 API calls per day\" (1일 20콜)로 명시되며, 과거 데이터는 최근 1년치만 접근 가능. 이 R 페이지에는 함수/엔드포인트별 콜 소비량 세분(예: 펀더멘털 10콜 등)은 명시되지 않음 — 별도 EODHD pricing/API 콜 문서 참조 필요.",
+  "pricing_notes": "DEMO 키: 6개 티커(AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD, EUR-USD)로 무료 테스트. Free 플랜: 1일 20콜, 과거 1년 EOD만. 유료 플랜: $19.99/월부터 시작(무제한 접근으로 표현). 단, 각 함수가 어느 구체 플랜(EOD All World / Fundamentals / All-In-One)에 포함되는지는 이 R 페이지에 매핑되어 있지 않음 — 함수 자체가 EODHD 데이터 API 래퍼이므로 해당 데이터의 원 플랜 요건을 그대로 따름.",
+  "caveats": [
+    "⚠️ 이 R 라이브러리(패키지 eodhd)는 더 이상 CRAN에서 지원되지 않으며 신버전 eodhdR2로 대체됨(레거시는 GitHub EodHistoricalData/EODHD-APIs-R-Financial-Library 에 잔존). 신규 사용 시 eodhdR2 별도 확인 필요.",
+    "⚠️ 이 페이지는 REST 엔드포인트 명세서가 아니라 R 함수 래퍼 가이드. 명시적으로 등장한 REST 경로는 /api/eod/ 와 /api/table.csv 단 2개이며, 나머지 데이터 접근은 R 함수 시그니처로만 제시됨. 다른 함수의 정확한 REST 경로/쿼리 파라미터명/응답 필드는 이 페이지에 없음 → 메모리에 축적된 EODHD 개별 엔드포인트 리서치(예: /api/div/, /api/splits/, /api/screener 등) 또는 https://eodhd.com/financial-apis/ 본 문서로 교차 확인 필요.",
+    "⚠️ base URL이 일반 EODHD(https://eodhd.com/api)와 다르게 http://nonsecure.eodhd.com/api/ 로 제시되고 'R 언어에서는 HTTPS 대신 HTTP 권고'라고 명시됨. 보안상 HTTP 평문 전송이며 코드 적용 시 주의(stockpick는 Python이므로 이 권고는 무관, https 사용 권장).",
+    "⚠️ 응답 필드(response_fields)는 이 페이지에 스키마로 제시되지 않아 모든 엔드포인트에서 비움. 함수 반환은 JSON, 직접 HTTP 예시(eod)는 CSV로 파싱.",
+    "⚠️ stockpick는 Python(pykrx/FDR/KRX OpenAPI) 스택이고 한국 KRX 종목 대상 — 이 R 라이브러리 페이지는 한국주식용으로 직접 사용 대상 아님. KRX 커버리지 언급도 페이지에 없음. 참고/완결성 차원의 명세 추출이며, 실제 데이터 도입은 EODHD의 KRX 커버리지·생존편향(폐지종목)·수정주가 정의를 별도 검증해야 함.",
+    "요구사항: R 4.3.1 이상 + RStudio. 설치: install.packages(\"eodhd\")."
+  ]
+}

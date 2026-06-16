@@ -1,0 +1,322 @@
+{
+  "section": "fundamental-data-stocks-etfs-funds-indices",
+  "category": "fundamentals",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/stock-etfs-fundamental-data-feeds",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. eodhd.com 은 JS SPA 라 WebFetch 직접은 빈 본문 우려 → 프록시 사용. 콜 소비량/일일 한도/분당 한도는 이 페이지에 미기재 → caveat 로 분리)",
+  "auth": "쿼리 파라미터 api_token=<KEY> 필수. 데모키 'demo' 는 AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD.CC, EURUSD.FOREX 5~6개 심볼로 제한. Free 플랜 20콜/일. Fundamentals 데이터는 'Fundamentals' 패키지(또는 상위 All-In-One) 구독 필요.",
+  "base_url": "https://eodhd.com/api/v1.1/fundamentals/ (권장 버전). 레거시: https://eodhd.com/api/fundamentals/ 도 계속 사용 가능",
+  "notes": "EODHD Fundamental Data API 는 주식/ETF/뮤추얼펀드/지수에 대한 펀더멘털(재무·기업개요·보유자·내부자거래·애널리스트·배당분할 등)을 단일 엔드포인트(/api/v1.1/fundamentals/{SYMBOL}.{EXCHANGE})로 제공한다. 자산군(주식/ETF/펀드)은 시스템이 심볼로 자동 식별해 응답 구조가 달라진다. 응답은 JSON 전용(XML/CSV 미지원). 응답이 매우 클 수 있어 filter 파라미터로 섹션/필드를 좁히는 것을 권장한다. filter 문법: 레이어 구분자는 \"::\" 이며 레이어 수에 제한 없음(예: Financials::Balance_Sheet::yearly), 여러 필터는 콤마로 나열(예: General::Code,General,Earnings). \\n\\nv1.1 변경점: Earnings Trend 의 Q4 누락 수정, Earnings Trend 가 Quarterly/Annual 두 섹션으로 분리, Quarterly 항목에 사람이 읽을 수 있는 분기(Q1~Q4) 필드 추가. \\n\\n데이터 커버리지(페이지 기재): 미국 주요 기업 1985년부터(40년+), 비미국 심볼 2000년부터(25년+), 미국 주요 거래소 약 11,000 티커 연간/분기 25년+, 소형주는 최근 6년 + 직전 20분기, ETF 글로벌 10,000+ 지원, 미국 뮤추얼펀드 20,000+, S&P500 과거 구성종목은 1960년대부터(2016년부터 완전).\\n\\n금융 BLOCKING 관점(우리 프로젝트): IsDelisted/Delisted 필드로 폐지여부 식별 가능, Index Constituents 의 historical=1 + HistoricalComponents 로 지수 과거 구성종목(생존편향 회피)을 시점별로 받을 수 있음 → 룩어헤드/생존편향 검증에 유용. 다만 PIT(point-in-time) 재무 여부(과거 재작성 반영 여부)는 이 페이지에 명시 없음 → 별도 확인 필요.",
+  "endpoints": [
+    {
+      "name": "Stock Fundamentals",
+      "method": "GET",
+      "url_pattern": "/api/v1.1/fundamentals/{SYMBOL}.{EXCHANGE_CODE}",
+      "description": "개별 주식의 전체 펀더멘털(General, Highlights, Valuation, Technicals, SplitsDividends, AnalystRatings, Holders, InsiderTransactions, outstandingShares, Earnings, Financials) 반환. 자산군은 심볼로 자동 식별.",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "주식 심볼 (예: AAPL)"
+        },
+        {
+          "name": "EXCHANGE_CODE",
+          "type": "string",
+          "description": "거래소 코드 (예: US=NASDAQ/NYSE, MX=멕시코 거래소)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키 (데모키 'demo' 가능, 제한 심볼)"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷. JSON 만 지원(XML/CSV 불가)"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "특정 섹션/필드만 조회. 레이어 구분 '::', 다중 필터는 콤마. 예: General::Code 또는 General::Code,General,Earnings 또는 Financials::Balance_Sheet::yearly"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "General",
+          "type": "object",
+          "description": "Code, Type, Name, Exchange, CurrencyCode, CountryName, CountryISO, ISIN, PrimaryTicker, CIK, EIN, FiscalYearEnd, IPODate, Sector, Industry, GicSector, HomeCategory, IsDelisted(boolean), Delisted(date), Description, WebURL, LogoURL, FullTimeEmployees, Address, phone, officers(임원 목록), Listings(타 거래소 상장)"
+        },
+        {
+          "name": "Highlights",
+          "type": "object",
+          "description": "MarketCapitalization, EBITDA, PERatio, PEGRatio, EarningsShare(EPS), DividendShare, DividendYield, BookValue, ProfitMargin, OperatingMargin, ReturnOnAssets, ReturnOnEquityTTM, RevenueTTM, RevenuePerShare, GrossProfit, DilutedEPS, QuarterlyEarningsGrowthYoY"
+        },
+        {
+          "name": "Valuation",
+          "type": "object",
+          "description": "TrailingPE, ForwardPE, PriceSalesTTM, PriceBookMRQ, EnterpriseValue, EnterpriseValueRevenue, EnterpriseValueEbitda"
+        },
+        {
+          "name": "Technicals",
+          "type": "object",
+          "description": "Beta, 52WeekHigh, 52WeekLow, 50DayMA, 200DayMA"
+        },
+        {
+          "name": "SplitsDividends",
+          "type": "object",
+          "description": "ForwardAnnualDividendRate, ForwardAnnualDividendYield, PayoutRatio, DividendDate, ExDividendDate, LastSplitFactor, LastSplitDate"
+        },
+        {
+          "name": "AnalystRatings",
+          "type": "object",
+          "description": "Rating(수치), TargetPrice, StrongBuy, Buy, Hold, Sell, StrongSell(각 카운트)"
+        },
+        {
+          "name": "Holders",
+          "type": "object",
+          "description": "Institutions/Funds 하위. 각 보유자: name, date(보고일), totalShares(비율%), currentShares(절대수량), change, change_p(변동%)"
+        },
+        {
+          "name": "InsiderTransactions",
+          "type": "object",
+          "description": "date(보고일), ownerName, ownerCIK, ownerRelationship, ownerTitle, transactionDate, transactionCode, transactionAmount, transactionPrice, transactionAcquiredDisposed, postTransactionAmount, secLink. SEC Form 4 및 의회 주식공시 포함"
+        },
+        {
+          "name": "outstandingShares",
+          "type": "object",
+          "description": "date, 발행주식수(백만 단위). annual/quarterly"
+        },
+        {
+          "name": "Earnings",
+          "type": "object",
+          "description": "History(EPS actual/estimate/difference/surprise%), Trend(v1.1: Quarterly/Annual 분리, 사람이 읽는 분기 라벨 Q1~Q4)"
+        },
+        {
+          "name": "Financials",
+          "type": "object",
+          "description": "Balance_Sheet/Income_Statement/Cash_Flow 각각 yearly/quarterly 중첩. 각 리포트에 재무제표 상세 라인아이템"
+        }
+      ],
+      "example": "GET https://eodhd.com/api/v1.1/fundamentals/AAPL.US?api_token=demo&fmt=json  (단일 필드: ?filter=General::Code&api_token=demo&fmt=json / 다중 섹션: ?filter=General::Code,General,Earnings&api_token=demo&fmt=json / 심층: ?filter=Financials::Balance_Sheet::yearly&api_token=demo&fmt=json)",
+      "response_format": "JSON only"
+    },
+    {
+      "name": "ETF Fundamentals",
+      "method": "GET",
+      "url_pattern": "/api/v1.1/fundamentals/{SYMBOL}.{EXCHANGE_CODE}",
+      "description": "주식과 동일 엔드포인트. ETF 심볼이면 시스템이 자동 식별해 ETF 전용 구조 반환.",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "ETF 심볼 (예: VTI)"
+        },
+        {
+          "name": "EXCHANGE_CODE",
+          "type": "string",
+          "description": "거래소 코드 (예: US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷 (JSON)"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "섹션/필드 필터 ('::' 구분)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "General",
+          "type": "object",
+          "description": "Code, Type, Name, Exchange, CurrencyCode, CountryName, Description, UpdatedAt (주식과 동일 기본)"
+        },
+        {
+          "name": "Technicals",
+          "type": "object",
+          "description": "Beta, 52WeekHigh, 52WeekLow, 50DayMA, 200DayMA"
+        },
+        {
+          "name": "ETF_Data",
+          "type": "object",
+          "description": "ISIN, Company_Name, Company_URL, Yield, Dividend_Paying_Frequency, Inception_Date, Net_Expense_Ratio, Annual_Holdings_Turnover, Total_Net_Assets, Average_Mkt_Cap_Mil, Asset_Allocation(Cash/Stock US/Stock non-US/Bond %), Top_10_Holdings(Code/Name/Sector/Assets_%), Sector 비중, World regions 비중, Valuation/growth 지표, Performance(Volatility, Expected Returns, Sharpe Ratio), Returns(YTD/3y/5y/10y)"
+        }
+      ],
+      "example": "GET https://eodhd.com/api/v1.1/fundamentals/VTI.US?api_token=demo&fmt=json",
+      "response_format": "JSON"
+    },
+    {
+      "name": "Mutual Fund Fundamentals",
+      "method": "GET",
+      "url_pattern": "/api/v1.1/fundamentals/{SYMBOL}.{EXCHANGE_CODE}",
+      "description": "뮤추얼펀드 펀더멘털. 심볼.거래소 또는 ISIN 으로 조회 가능.",
+      "path_params": [
+        {
+          "name": "SYMBOL.EXCHANGE_CODE 또는 ISIN",
+          "type": "string",
+          "description": "예: SWPPX.US 또는 ISIN US8085098551"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷 (JSON)"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "섹션/필드 필터"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "General",
+          "type": "object",
+          "description": "Code, Type, Name, Exchange, CurrencyCode, CountryName"
+        },
+        {
+          "name": "MutualFund_Data",
+          "type": "object",
+          "description": "Fund_Category, Fund_Style, Yield, Inception_Date, Asset_Allocation(Cash/US Stock/Non-US Stock/Bond %), Sector_Weights(Cyclical/Sensitive/Defensive), Top_Holdings(Name/Weight), Value Growth Measures(Price/Prospective Earnings, Price/Book, Price/Sales, Price/Cash Flow), World Regions(주식/혼합형), Top Countries(채권형)"
+        }
+      ],
+      "example": "GET https://eodhd.com/api/v1.1/fundamentals/SWPPX.US?api_token=demo&fmt=json",
+      "response_format": "JSON"
+    },
+    {
+      "name": "Index Constituents (Fundamentals)",
+      "method": "GET",
+      "url_pattern": "/api/v1.1/fundamentals/{INDEX_CODE}.INDX",
+      "description": "지수의 현재 및 과거 구성종목 반환. historical=1 시 시점별 스냅샷(생존편향 회피에 유용).",
+      "path_params": [
+        {
+          "name": "INDEX_CODE",
+          "type": "string",
+          "description": "지수 코드 + .INDX 접미 (예: GSPC.INDX = S&P 500)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷 (JSON)"
+        },
+        {
+          "name": "historical",
+          "type": "integer",
+          "required": false,
+          "description": "1 로 설정 시 과거 구성종목 스냅샷(HistoricalComponents) 반환"
+        },
+        {
+          "name": "from",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "과거 데이터 시작일"
+        },
+        {
+          "name": "to",
+          "type": "date(YYYY-MM-DD)",
+          "required": false,
+          "description": "과거 데이터 종료일"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "General",
+          "type": "object",
+          "description": "Code, Type, Name, Exchange, MarketCap, CurrencyCode, CountryName"
+        },
+        {
+          "name": "Components",
+          "type": "array",
+          "description": "현재 구성종목: Code, Exchange, Name, Sector, Industry, Weight"
+        },
+        {
+          "name": "HistoricalComponents",
+          "type": "object",
+          "description": "historical=1 시 날짜(YYYY-MM-DD) 키로 중첩: Code, Exchange, Name, Sector, Industry, Date"
+        }
+      ],
+      "example": "GET https://eodhd.com/api/v1.1/fundamentals/GSPC.INDX?api_token=demo&fmt=json (과거: &historical=1&from=2018-01-01&to=2020-01-01)",
+      "response_format": "JSON"
+    },
+    {
+      "name": "Bulk Fundamentals",
+      "method": "GET",
+      "url_pattern": "/api/v1.1/bulk-fundamentals/{EXCHANGE_CODE}",
+      "description": "거래소 전체 또는 다수 티커의 펀더멘털을 일괄 조회. 세부 파라미터(limit/offset 등)는 이 페이지에 미기재 — 별도 Bulk Fundamentals 문서 참조 안내.",
+      "path_params": [
+        {
+          "name": "EXCHANGE_CODE",
+          "type": "string",
+          "description": "거래소 코드 (예: US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키"
+        }
+      ],
+      "response_fields": [],
+      "example": "GET https://eodhd.com/api/v1.1/bulk-fundamentals/US?api_token=YOUR_KEY (이 페이지엔 응답 예시 미기재)",
+      "response_format": "JSON"
+    }
+  ],
+  "rate_limits": "⚠️ 이 페이지(Fundamental Data 피드 페이지)에는 콜 소비량·분당/일일 rate limit 이 명시되어 있지 않음. 페이지 기재 한도는 'Free 플랜 20콜/일' 뿐. (참고 — 본 페이지 출처 아님: 별도 EODHD 가격/문서 실측에서 Fundamental 요청=10콜 소비, 유료 100,000콜/일·1000요청/분으로 확인된 바 있으나, 이 페이지에서는 검증되지 않음 → 코드 의존 시 EODHD pricing/usage 페이지 별도 확인 필수)",
+  "pricing_notes": "Fundamentals 데이터는 'Fundamentals' 패키지(월 $59.99 수준) 또는 상위 All-In-One 구독에 포함. 페이지엔 '월 $19.99 부터(starting at $19.99/month)' 시작가가 적혀 있으나, 이는 EODHD 전체 라인업 시작가(EOD All World)이며 Fundamentals 풀 액세스는 Fundamentals 패키지 이상 필요. Free 플랜(20콜/일)·demo 키(5~6 심볼)로 체험 가능. 확장 과거 지수 데이터(30+ 지수의 2~12년)는 별도 마켓플레이스 상품.",
+  "caveats": [
+    "응답은 JSON 전용 — XML/CSV 미지원 (fmt=json 만 유효)",
+    "모든 기업이 완전한 재무를 보고하지 않음 — 일부 섹션 누락/빈값 가능",
+    "응답 크기가 매우 클 수 있음 → filter 파라미터로 섹션/필드 축소 권장(콜 비용·전송량 절감)",
+    "콜 소비량·일일/분당 rate limit 이 이 페이지에 미기재 → 코드의 호출량 산정은 EODHD usage/pricing 페이지로 별도 검증 필요",
+    "demo 키는 AAPL.US/TSLA.US/VTI.US/AMZN.US/BTC-USD.CC/EURUSD.FOREX 등 소수 심볼만 — 본 데이터 검증엔 부족",
+    "PIT(point-in-time) 재무 여부(과거 재작성/restatement 반영 정책)는 이 페이지에 명시 없음 → 룩어헤드 검증 위해 별도 확인 필요(금융 BLOCKING)",
+    "Index Constituents 의 HistoricalComponents 는 생존편향 회피에 유용하나 S&P500 과거 구성종목은 2016년부터 완전(그 이전 1960s~는 불완전) — 1990년대 백테스트 시 구성종목 누락 위험",
+    "Bulk Fundamentals 의 limit/offset 등 파라미터는 이 페이지에 없음 → 별도 Bulk 문서 확인 필요",
+    "v1.1 권장. 레거시 /api/fundamentals/ 사용 시 Earnings Trend Q4 누락 등 구버전 한계 존재",
+    "insider transactions 에 SEC Form 4 외 의회 의원 주식공시가 섞여 있음 — 순수 내부자거래 필터 시 주의",
+    "해지/구독 만료 시 데이터 1개월 내 삭제 의무(EODHD 공통 약관, 별도 가격 페이지 실측) — 재현성 BLOCKING. 이 펀더멘털 페이지엔 미반복이나 동일 약관 적용 추정"
+  ]
+}

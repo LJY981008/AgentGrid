@@ -1,0 +1,510 @@
+{
+  "source": "EODHD (EOD Historical Data) official documentation",
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "base_url": "https://eodhd.com/api",
+  "auth": "?api_token=<KEY> 쿼리 파라미터(Tiingo 의 Token 헤더와 다름). 키=.env EODHD_API_KEY. DEMO 키로 일부 테스트 가능",
+  "total_sections": 62,
+  "total_endpoints": 189,
+  "ok": 54,
+  "partial": 8,
+  "note": "stockpick 핵심(relevant=true): end-of-day-historical-data·delisted-stock-companies-data·corporate-actions-splits-dividends·bulk-api-eod-splits-dividends·search·exchanges·covered-tickers·fundamental·sp-dow-jones-historical-constituents(생존편향 보정)·us-stock-symbol-rename-history(티커연속성). 나머지(intraday/options/crypto/forex/news/macro/SDK 등)는 참고. bulk-api-eod-splits-dividends 는 partial(보강 여지).",
+  "sections": [
+    {
+      "section": "bulk-api-eod-splits-dividends",
+      "category": "bulk",
+      "relevant_to_stockpick": true,
+      "status": "partial",
+      "endpoints": 3,
+      "file": "bulk-api-eod-splits-dividends.json"
+    },
+    {
+      "section": "delisted-stock-companies-data",
+      "category": "delisted",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "delisted-stock-companies-data.json"
+    },
+    {
+      "section": "end-of-day-historical-data",
+      "category": "eod",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "end-of-day-historical-data.json"
+    },
+    {
+      "section": "covered-tickers-list",
+      "category": "exchanges",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "covered-tickers-list.json"
+    },
+    {
+      "section": "exchanges-api-list-of-tickers-and-trading-hours",
+      "category": "exchanges",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "exchanges-api-list-of-tickers-and-trading-hours.json"
+    },
+    {
+      "section": "bulk-fundamentals-api",
+      "category": "fundamentals",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "bulk-fundamentals-api.json"
+    },
+    {
+      "section": "fundamental-data-stocks-etfs-funds-indices",
+      "category": "fundamentals",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 5,
+      "file": "fundamental-data-stocks-etfs-funds-indices.json"
+    },
+    {
+      "section": "api-limits",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "api-limits.json"
+    },
+    {
+      "section": "historical-market-capitalization",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "historical-market-capitalization.json"
+    },
+    {
+      "section": "python-financial-library",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 22,
+      "file": "python-financial-library.json"
+    },
+    {
+      "section": "quick-start-guide",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 7,
+      "file": "quick-start-guide.json"
+    },
+    {
+      "section": "sp-dow-jones-historical-constituents",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "sp-dow-jones-historical-constituents.json"
+    },
+    {
+      "section": "us-stock-symbol-rename-history",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "us-stock-symbol-rename-history.json"
+    },
+    {
+      "section": "user-api",
+      "category": "general",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "user-api.json"
+    },
+    {
+      "section": "search-api-stocks-etfs-mutual-funds",
+      "category": "search",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "search-api-stocks-etfs-mutual-funds.json"
+    },
+    {
+      "section": "corporate-actions-splits-dividends",
+      "category": "splits",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "corporate-actions-splits-dividends.json"
+    },
+    {
+      "section": "fundamental-data-cryptocurrencies",
+      "category": "crypto",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "fundamental-data-cryptocurrencies.json"
+    },
+    {
+      "section": "list-supported-crypto-currencies",
+      "category": "crypto",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 2,
+      "file": "list-supported-crypto-currencies.json"
+    },
+    {
+      "section": "trading-hours-and-holidays",
+      "category": "exchanges",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "trading-hours-and-holidays.json"
+    },
+    {
+      "section": "list-supported-forex-currencies",
+      "category": "forex",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "list-supported-forex-currencies.json"
+    },
+    {
+      "section": "esg-data",
+      "category": "fundamentals",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 6,
+      "file": "esg-data.json"
+    },
+    {
+      "section": "insider-transactions",
+      "category": "fundamentals",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "insider-transactions.json"
+    },
+    {
+      "section": "api-marketplace",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "api-marketplace.json"
+    },
+    {
+      "section": "calendar-earnings-ipos-splits",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 5,
+      "file": "calendar-earnings-ipos-splits.json"
+    },
+    {
+      "section": "cboe-europe-indices",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "cboe-europe-indices.json"
+    },
+    {
+      "section": "chrome-extension",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "chrome-extension.json"
+    },
+    {
+      "section": "csharp-dotnet-wrapper",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "csharp-dotnet-wrapper.json"
+    },
+    {
+      "section": "curl-wget-examples",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 2,
+      "file": "curl-wget-examples.json"
+    },
+    {
+      "section": "excel-addon",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "excel-addon.json"
+    },
+    {
+      "section": "fsharp-example",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "fsharp-example.json"
+    },
+    {
+      "section": "google-sheets-addon",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 1,
+      "file": "google-sheets-addon.json"
+    },
+    {
+      "section": "id-mapping-cusip-isin-figi-lei-cik",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "id-mapping-cusip-isin-figi-lei-cik.json"
+    },
+    {
+      "section": "java-example",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 0,
+      "file": "java-example.json"
+    },
+    {
+      "section": "library-r-v1",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 23,
+      "file": "library-r-v1.json"
+    },
+    {
+      "section": "library-r-v2-2024",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 9,
+      "file": "library-r-v2-2024.json"
+    },
+    {
+      "section": "matlab-connector",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "matlab-connector.json"
+    },
+    {
+      "section": "mcp-server-for-financial-data",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "mcp-server-for-financial-data.json"
+    },
+    {
+      "section": "php-laravel-example",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "php-laravel-example.json"
+    },
+    {
+      "section": "postman-collection",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "postman-collection.json"
+    },
+    {
+      "section": "power-bi-connector",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "power-bi-connector.json"
+    },
+    {
+      "section": "sanctions-ofac-screening",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 4,
+      "file": "sanctions-ofac-screening.json"
+    },
+    {
+      "section": "sdk-nodejs-typescript",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 36,
+      "file": "sdk-nodejs-typescript.json"
+    },
+    {
+      "section": "stock-market-logos",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "stock-market-logos.json"
+    },
+    {
+      "section": "windows-linux-downloaders",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "windows-linux-downloaders.json"
+    },
+    {
+      "section": "wordpress-plugin",
+      "category": "general",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "wordpress-plugin.json"
+    },
+    {
+      "section": "bulk-for-live-ohlcv-stock-prices",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 1,
+      "file": "bulk-for-live-ohlcv-stock-prices.json"
+    },
+    {
+      "section": "intraday-historical-data",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "intraday-historical-data.json"
+    },
+    {
+      "section": "live-ohlcv-stocks",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "live-ohlcv-stocks.json"
+    },
+    {
+      "section": "live-v2-us-stocks-extended-quotes",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "live-v2-us-stocks-extended-quotes.json"
+    },
+    {
+      "section": "real-time-data-websockets",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 6,
+      "file": "real-time-data-websockets.json"
+    },
+    {
+      "section": "tick-data-us-stock-market",
+      "category": "intraday",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 0,
+      "file": "tick-data-us-stock-market.json"
+    },
+    {
+      "section": "commodities-historical-prices",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "commodities-historical-prices.json"
+    },
+    {
+      "section": "economic-events-data",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "economic-events-data.json"
+    },
+    {
+      "section": "interest-rates-policy",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 2,
+      "file": "interest-rates-policy.json"
+    },
+    {
+      "section": "macroeconomic-data-bonds-rates-fx",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 6,
+      "file": "macroeconomic-data-bonds-rates-fx.json"
+    },
+    {
+      "section": "macroeconomic-indicators",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "macroeconomic-indicators.json"
+    },
+    {
+      "section": "us-treasury-interest-rates",
+      "category": "macro",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 4,
+      "file": "us-treasury-interest-rates.json"
+    },
+    {
+      "section": "financial-news-feed-and-sentiment",
+      "category": "news",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "financial-news-feed-and-sentiment.json"
+    },
+    {
+      "section": "options-data-us-stocks-greeks",
+      "category": "options",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 3,
+      "file": "options-data-us-stocks-greeks.json"
+    },
+    {
+      "section": "stock-market-screener",
+      "category": "screener",
+      "relevant_to_stockpick": false,
+      "status": "partial",
+      "endpoints": 1,
+      "file": "stock-market-screener.json"
+    },
+    {
+      "section": "asx-corporate-actions",
+      "category": "splits",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "asx-corporate-actions.json"
+    },
+    {
+      "section": "technical-indicators",
+      "category": "technical",
+      "relevant_to_stockpick": false,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "technical-indicators.json"
+    }
+  ]
+}

@@ -1,0 +1,177 @@
+{
+  "section": "corporate-actions-splits-dividends",
+  "category": "splits",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/api-splits-dividends",
+  "fetch_status": "ok (Jina 렌더 프록시로 본문 확보 + demo 엔드포인트 직접 호출로 JSON 키·split 형식·CSV 헤더 실측 검증)",
+  "auth": "쿼리 파라미터 api_token=<KEY> (필수). 데모 토큰 \"demo\" 는 AAPL.US 에만 유효.",
+  "base_url": "https://eodhd.com/api/",
+  "notes": "EODHD 의 Splits & Dividends (Corporate Actions) API. 두 개의 독립 GET 엔드포인트(/div/ 배당, /splits/ 분할)로 구성. 둘 다 from/to(Y-m-d), api_token, fmt(json|csv, 기본 csv) 쿼리 파라미터를 공유. 심볼은 {TICKER}.{EXCHANGE_ID} 형식(예 AAPL.US). 배당의 value(수정값)와 unadjustedValue(당시 실제 지급액)는 별도 필드로 제공되며, 수정주가 통일·룩어헤드 방지에 직접 영향. 분할의 split 필드는 \"2.000000/1.000000\" 같은 분수 문자열이라 코드에서 분해 필요. 페이지는 별도 bulk(다종목) 다운로드 API 가 존재한다고 언급하나 이 페이지에서는 상세를 다루지 않음(별도 페이지). 응답 필드 JSON 키는 페이지 본문에 명시되지 않아 demo 엔드포인트 직접 호출로 실측 확정함.",
+  "endpoints": [
+    {
+      "name": "Dividends History",
+      "method": "GET",
+      "url_pattern": "/api/div/{SYMBOL}.{EXCHANGE_ID}",
+      "description": "특정 심볼의 과거 배당 이력. 기본 필드(전 심볼)는 배당락일·값·통화. 주요 미국/유럽 티커는 JSON 한정으로 declaration/record/payment date 와 period, unadjustedValue 까지 확장 제공.",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "티커 심볼 (예 AAPL)"
+        },
+        {
+          "name": "EXCHANGE_ID",
+          "type": "string",
+          "description": "거래소 코드 (예 US). 심볼과 합쳐 AAPL.US 형식"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키. demo 는 AAPL.US 한정"
+        },
+        {
+          "name": "from",
+          "type": "string (Y-m-d)",
+          "required": false,
+          "default": "가용 최대 범위(시작)",
+          "description": "조회 시작일"
+        },
+        {
+          "name": "to",
+          "type": "string (Y-m-d)",
+          "required": false,
+          "default": "가용 최대 범위(끝)",
+          "description": "조회 종료일"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "응답 형식. json 또는 csv. 확장 배당 필드는 json 에서만 제공"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (Y-m-d)",
+          "description": "배당락일(ex-dividend date). 실측 확인"
+        },
+        {
+          "name": "declarationDate",
+          "type": "string (Y-m-d)",
+          "description": "배당 선언일. 주요 미국/유럽 티커 + JSON 한정"
+        },
+        {
+          "name": "recordDate",
+          "type": "string (Y-m-d)",
+          "description": "기준일(record date). 확장 필드"
+        },
+        {
+          "name": "paymentDate",
+          "type": "string (Y-m-d)",
+          "description": "지급일(payment date). 확장 필드"
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "description": "배당 주기 (예 \"Quarterly\"). 실측 확인"
+        },
+        {
+          "name": "value",
+          "type": "number",
+          "description": "수정된 배당값(adjusted). 실측 확인. 분할 등 반영된 조정값"
+        },
+        {
+          "name": "unadjustedValue",
+          "type": "number",
+          "description": "수정 전(당시 실제) 배당값. 확장 필드. 룩어헤드/수정 통일 시 value 와 구분 필수"
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "description": "배당 통화 (예 \"USD\"). 실측 확인"
+        }
+      ],
+      "response_format": "JSON 배열(fmt=json) 또는 CSV(기본). CSV 기본 헤더는 'Date,Dividends' 의 2컬럼만(확장 필드 없음, 실측 확인)",
+      "example": "https://eodhd.com/api/div/AAPL.US?from=2000-01-01&api_token=demo&fmt=json  →  {\"date\":\"2012-08-09\",\"declarationDate\":\"2012-07-24\",\"recordDate\":\"2012-08-13\",\"paymentDate\":\"2012-08-16\",\"period\":\"Quarterly\",\"value\":0.0946,\"unadjustedValue\":2.6488,\"currency\":\"USD\"}"
+    },
+    {
+      "name": "Historical Splits",
+      "method": "GET",
+      "url_pattern": "/api/splits/{SYMBOL}.{EXCHANGE_ID}",
+      "description": "특정 심볼의 과거 주식 분할(및 병합) 이력. 날짜와 분할 비율(분수 문자열)을 반환.",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "티커 심볼 (예 AAPL)"
+        },
+        {
+          "name": "EXCHANGE_ID",
+          "type": "string",
+          "description": "거래소 코드 (예 US). 심볼과 합쳐 AAPL.US 형식"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 키. demo 는 AAPL.US 한정"
+        },
+        {
+          "name": "from",
+          "type": "string (Y-m-d)",
+          "required": false,
+          "default": "가용 최대 범위(시작)",
+          "description": "조회 시작일"
+        },
+        {
+          "name": "to",
+          "type": "string (Y-m-d)",
+          "required": false,
+          "default": "가용 최대 범위(끝)",
+          "description": "조회 종료일"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "응답 형식. json 또는 csv"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (Y-m-d)",
+          "description": "분할 효력 발생일. 실측 확인"
+        },
+        {
+          "name": "split",
+          "type": "string",
+          "description": "분할 비율을 분수 문자열로 표현 (예 \"2.000000/1.000000\" = 2:1 분할). 코드에서 '/' 분해 후 신주/구주 비율 계산 필요. 실측 확인"
+        }
+      ],
+      "response_format": "JSON 배열(fmt=json) 또는 CSV(기본)",
+      "example": "https://eodhd.com/api/splits/AAPL.US?from=2000-01-01&api_token=demo&fmt=json  →  [{\"date\":\"2000-06-21\",\"split\":\"2.000000/1.000000\"},{\"date\":\"2005-02-28\",\"split\":\"2.000000/1.000000\"}]"
+    }
+  ],
+  "rate_limits": "이 페이지에는 엔드포인트별 API 콜 소비량과 일일 한도가 명시되어 있지 않음. (EODHD 공통 규약상 EOD 가격은 호출당 1콜이나, splits/dividends 콜 가중치는 이 페이지에서 확인 불가 — 별도 Pricing/API Limits 페이지 확인 필요.)",
+  "pricing_notes": "무료(Free) 사용자: 배당·분할 1년치 과거 데이터 접근을 위해 support 에 문의(수동 활성화) 필요 (\"free users should contact support in order to activate access to 1 year of Historical data for Dividends and Splits\"). 유료 사용자: 30년 이상의 종합 과거 데이터 제공. 페이지 본문에서 특정 플랜명(EOD All World / All-In-One 등)과의 매핑은 명시하지 않음.",
+  "caveats": [
+    "배당의 value(수정값) vs unadjustedValue(당시 실제 지급액) 가 별도 필드 — 백테스트 수정주가 통일 시 어느 쪽을 쓸지 명확히 해야 함. value 는 이후 분할 등을 소급 반영한 조정값이라 시점 t 분석에 그대로 쓰면 룩어헤드 위험.",
+    "split 필드가 raw 분수 문자열(\"2.000000/1.000000\")이라 숫자 비율로 직접 파싱·분해 필요. 자동 float 아님.",
+    "확장 배당 필드(declarationDate/recordDate/paymentDate/period/unadjustedValue)는 '주요 미국·유럽 티커' + JSON 형식 한정. 그 외 심볼·CSV 는 기본 필드(date,value,currency)만 — CSV 기본 헤더는 'Date,Dividends' 2컬럼만 실측됨.",
+    "엔드포인트별 콜 소비량·일일 한도가 이 페이지에 미기재 — API 콜 예산 산정 시 EODHD Pricing/Limits 페이지 별도 확인 필요.",
+    "KRX(코스피/코스닥) 커버리지·한국 종목 corporate action 정확도는 이 페이지에서 확인 불가. stockpick 한국주식 분석 본선에는 미적용 — 미국·유럽 위주.",
+    "무료 1년치 접근조차 support 수동 문의가 전제 — 자가 활성화 아님. 자동 파이프라인 구축 시 유료 전제.",
+    "EODHD 공통: 구독 해지 후 1개월 내 데이터 삭제 의무가 약관에 있음(가격 데이터 메모 기준) — 재현성 함정 가능성, 본 corporate action 데이터에도 동일 적용되는지 약관 재확인 권장."
+  ]
+}

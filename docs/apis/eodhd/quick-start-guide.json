@@ -1,0 +1,243 @@
+{
+  "section": "quick-start-guide",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/quick-start-with-our-financial-data-apis",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 2회 조회 교차 확인)",
+  "auth": "api_token 쿼리 파라미터. 페이지 원문: \"Every API request uses your key as the api_token parameter.\" 모든 예시 URL이 `?api_token=demo` 형식. 테스트용 DEMO 키(api_token=demo)는 일부 티커만 허용. 무료 플랜은 가입 시 발급되는 키(일 20콜 한도). 키 노출 시 대시보드에서 재발급 권고.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지는 EODHD 금융 데이터 API의 quick-start 개요(가이드) 페이지로, 7개 주요 엔드포인트의 URL 패턴·HTTP 메서드·용도를 소개한다. 상세 응답 스키마(필드별 타입·의미)나 실제 JSON 응답 예시는 이 페이지에 포함되지 않으며, cURL/PHP/Python/R 호출 코드 스니펫만 제시된다(아래 Python 예시). 전체 명세는 https://eodhd.com/financial-apis/ 의 개별 문서를 참조하라고 안내한다. 페이지에 따르면 EODHD는 옵션 체인·금융 뉴스·거시경제 지표·기술적 분석 등 \"50+ API endpoints\"를 보유한다.\n\n공통 쿼리 파라미터: 모든 엔드포인트에서 api_token(필수)과 fmt(출력 포맷, 예시는 일관되게 fmt=json) 사용.\n\nAPI 콜 소비(internal currency) 원문: \"Each request consumes API calls as an internal currency, costing from 1 to 100 API calls per request depending on the API.\" (요청 1건당 API별로 1~100 콜 소비. 이 페이지는 엔드포인트별 정확한 콜 수치는 명시하지 않음.)\n\nPython 호출 예시(원문):\nimport requests\nurl = f'https://eodhd.com/api/eod/AAPL.US?api_token=demo&fmt=json'\ndata = requests.get(url).json()\nprint(data)\n\n티커 표기는 SYMBOL.EXCHANGE 형식(예: AAPL.US, BTC-USD.CC, EURUSD.FOREX).",
+  "endpoints": [
+    {
+      "name": "End-of-Day Historical Prices (EOD)",
+      "method": "GET",
+      "url_pattern": "/api/eod/{TICKER}",
+      "description": "30년 이상의 일별 OHLCV 데이터(분할·배당 수정). 백테스팅·차팅·장기 분석용. 무료 플랜은 임의 티커 가능하나 최근 1년 범위만(within the past year only).",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "SYMBOL.EXCHANGE 형식 (예: AAPL.US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키. 예시는 demo"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷 (예시: fmt=json)"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재",
+      "example": "https://eodhd.com/api/eod/AAPL.US?api_token=demo&fmt=json"
+    },
+    {
+      "name": "Real-Time/Delayed Prices",
+      "method": "GET",
+      "url_pattern": "/api/real-time/{TICKER}",
+      "description": "최신 가격 스냅샷(플랜에 따라 실시간 또는 15분 지연). 대시보드·알림·포트폴리오 추적용.",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "SYMBOL.EXCHANGE 형식 (예: AAPL.US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재",
+      "example": "https://eodhd.com/api/real-time/AAPL.US?api_token=demo&fmt=json"
+    },
+    {
+      "name": "Fundamental Data",
+      "method": "GET",
+      "url_pattern": "/api/fundamentals/{TICKER}",
+      "description": "재무제표·밸류에이션 비율·실적(earnings)·재무상태표(balance sheets). 주식·ETF·펀드 커버. 스크리닝·실사·팩터 모델용.",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "SYMBOL.EXCHANGE 형식 (예: AAPL.US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재",
+      "example": "https://eodhd.com/api/fundamentals/AAPL.US?api_token=demo&fmt=json"
+    },
+    {
+      "name": "Intraday Data",
+      "method": "GET",
+      "url_pattern": "/api/intraday/{TICKER}",
+      "description": "인트라데이 바 데이터. 1분 및 5분 봉. 인트라데이 전략·거래량 분석·단기 패턴용.",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "SYMBOL.EXCHANGE 형식 (예: AAPL.US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재. (주의: 인트라데이 간격 지정 파라미터(interval 등)는 이 페이지에 미기재)",
+      "example": "https://eodhd.com/api/intraday/AAPL.US?api_token=demo&fmt=json"
+    },
+    {
+      "name": "Splits & Dividends",
+      "method": "GET",
+      "url_pattern": "/api/div/{TICKER}",
+      "description": "기업 액션(corporate actions) 이력. 수정주가 계산 및 인컴 분석용. 예시에서 from 날짜 파라미터 사용.",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "SYMBOL.EXCHANGE 형식 (예: AAPL.US)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "from",
+          "type": "date (YYYY-MM-DD)",
+          "required": false,
+          "description": "조회 시작일. 예시에 from=2000-01-01 사용(필수 여부는 페이지 미명시)"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재. (엔드포인트명은 Splits & Dividends이나 경로는 /api/div/. splits 별도 경로 여부는 이 페이지에 미기재)",
+      "example": "https://eodhd.com/api/div/AAPL.US?from=2000-01-01&api_token=demo&fmt=json"
+    },
+    {
+      "name": "Search",
+      "method": "GET",
+      "url_pattern": "/api/search/{query_string}",
+      "description": "모든 거래소·자산군에서 티커 검색. 검색 UI 구축·심볼 해석용.",
+      "path_params": [
+        {
+          "name": "query_string",
+          "type": "string",
+          "description": "검색어 (경로 세그먼트로 전달)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재",
+      "example": "https://eodhd.com/api/search/{query_string}?api_token={TOKEN}&fmt=json"
+    },
+    {
+      "name": "Exchange List & Tickers",
+      "method": "GET",
+      "url_pattern": "/api/exchanges-list/",
+      "description": "지원되는 모든 거래소 및 해당 티커 목록 조회. 데이터 디스커버리·커버리지 맵 구축용. (무료 플랜에서 거래소 티커 목록 제공 언급)",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시는 json)",
+          "description": "출력 포맷"
+        }
+      ],
+      "response_fields": [],
+      "response_format": "JSON (fmt=json) — 페이지에 응답 스키마 미기재",
+      "example": "https://eodhd.com/api/exchanges-list/?api_token={TOKEN}&fmt=json"
+    }
+  ],
+  "rate_limits": "무료 플랜: 일 20 API 콜(원문: \"limited to 20 API calls per day\" / \"Register for the free plan to receive your API key (limited to 20 API calls per day)\"). 유료 플랜: $19.99부터 시작, \"100K to unlimited calls\" 범위. API 콜 소비량: 요청 1건당 API별로 1~100 콜 소비(\"costing from 1 to 100 API calls per request depending on the API\") — 단, 이 페이지는 엔드포인트별 정확한 콜 수치를 명시하지 않음.",
+  "pricing_notes": "DEMO 키(api_token=demo): 데모 티커만 테스트 가능 — AAPL.US, TSLA.US, VTI.US, AMZN.US, BTC-USD.CC, EURUSD.FOREX. 이 데모 티커에 한해 실시간 데이터 포함 모든 데이터 타입(API)을 제한 없이 사용 가능.\n무료 플랜: 가입 시 API 키 발급, 일 20콜. 임의 티커의 EOD 과거 데이터(단 최근 1년 범위만) + 거래소 티커 목록 제공.\n유료 플랜: $19.99부터 시작, 100K~무제한 콜. (이 페이지는 EOD All World/Fundamentals/All-In-One 등 개별 플랜별 데이터 매핑은 상세히 기술하지 않음 — 전체 명세는 eodhd.com/financial-apis/ 참조.)",
+  "caveats": [
+    "이 페이지는 quick-start 개요로, 엔드포인트별 응답 필드 스키마(필드명·타입·의미)와 실제 JSON 응답 예시가 없음 — 코드 참조용 권위 명세로는 불충분. 각 엔드포인트의 상세 문서(eodhd.com/financial-apis/)를 별도 실측 필요.",
+    "무료 플랜 EOD는 '최근 1년 범위만(within the past year only)' — 30년 백테스트에는 부적합. 30년 데이터는 유료 EOD 플랜 필요(메모리 [[research-eodhd]] 참조: EOD All World $19.99).",
+    "Splits & Dividends 엔드포인트명과 실제 경로(/api/div/)가 불일치. splits/dividends 분리 여부, from 외 to 파라미터, 필수 여부는 이 페이지에 미기재.",
+    "Intraday의 간격(interval) 지정 방식, EOD의 from/to/period(d/w/m)/order 등 추가 파라미터는 이 페이지에 미기재 — 별도 문서 확인 필요.",
+    "'분할·배당 수정(adjusted for splits and dividends)' 표현은 EOD 데이터에 수정 컬럼 존재를 시사하나, raw vs adjusted 컬럼 구조는 이 페이지 미기재 (메모리 [[research-eodhd]]: adj는 split+div+raw 분리 제공).",
+    "API 콜 소비가 엔드포인트별 1~100으로 가변이나 이 페이지엔 엔드포인트별 정확한 수치 없음.",
+    "한국 주식(KOSPI/KOSDAQ) 커버리지·티커 표기(.KO 등)·생존편향(폐지종목) 여부는 이 페이지에 언급 없음 — stockpick 도메인 적용 시 별도 검증 필수.",
+    "r.jina.ai 프록시 경유 추출이므로 일부 코드 블록/표가 누락됐을 가능성. 권위 명세 확정 전 원본 또는 개별 API 문서 재확인 권장."
+  ]
+}

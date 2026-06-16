@@ -1,0 +1,89 @@
+{
+  "section": "us-stock-symbol-rename-history",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/us-stock-symbol-rename-history-api",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. eodhd.com 은 JS SPA 라 WebFetch 직접은 빈본문 — 프록시 우회. 동일 페이지 2회 교차 추출, 결과 일관)",
+  "auth": "api_token 쿼리 파라미터로 API 키 전달 (?api_token=YOUR_API_TOKEN). EODHD 표준 방식과 동일.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "미국 주식 티커 변경(rename / symbol change) 이력 조회 API. 단일 엔드포인트(GET /api/symbol-change-history)로, 지정 기간 내 발생한 티커 심볼 변경 레코드를 반환한다. 각 레코드는 변경 발효일(effective)과 함께 이전 심볼(old_symbol)·신규 심볼(new_symbol)·당시 회사명(company_name)·거래소(exchange)를 담는다. 페이지 명시 기준: 데이터는 2022-07-22 부터 시작하며 매일(daily) 갱신된다. 현재 시점에서는 미국 거래소만 지원(\"Only US exchanges are supported for the moment\"). 페이지에 연도별 변경 건수도 명시됨: 2022년 137건, 2023년 261건, 2024년 237건, 2025년 291건, 2026년 YTD 93건. 이 페이지는 symbol-change-history 단일 엔드포인트만 명세하며, 다른 엔드포인트들(EOD Historical, Live OHLCV, Fundamental Data, Intraday, Real-Time Websockets, Corporate Actions Splits/Dividends, Technical Indicators, Insider Transactions, Calendar, ID Mapping, Search, Options)은 사이드 네비게이션 링크로만 참조됨(본문 명세 아님).",
+  "endpoints": [
+    {
+      "name": "Symbol Change History",
+      "method": "GET",
+      "url_pattern": "/api/symbol-change-history",
+      "description": "지정 기간 내 미국 주식 티커 심볼 변경(rename) 이력 조회. 각 레코드는 이전/신규 심볼·회사명·발효일을 포함.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "required": false,
+          "default": "현재 날짜 기준 12개월 전 (12 months before current date)",
+          "description": "조회 시작일 (YYYY-MM-DD)"
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": false,
+          "default": "현재 날짜 (current date)",
+          "description": "조회 종료일 (YYYY-MM-DD)"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "응답 형식: json 또는 csv"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소 코드 (현재 US 만)"
+        },
+        {
+          "name": "old_symbol",
+          "type": "string",
+          "description": "변경 전(이전) 티커 심볼"
+        },
+        {
+          "name": "new_symbol",
+          "type": "string",
+          "description": "변경 후(신규) 티커 심볼"
+        },
+        {
+          "name": "company_name",
+          "type": "string",
+          "description": "변경 시점의 회사 전체 명칭"
+        },
+        {
+          "name": "effective",
+          "type": "string",
+          "description": "변경 발효일 (YYYY-MM-DD)"
+        }
+      ],
+      "response_format": "JSON (fmt=json) 또는 CSV (fmt=csv, 기본). 레코드 배열.",
+      "example": "요청: https://eodhd.com/api/symbol-change-history?from=2026-01-01&api_token={YOUR_API_TOKEN}&fmt=json\n응답: [ { \"exchange\": \"US\", \"old_symbol\": \"BITF\", \"new_symbol\": \"KEEL\", \"company_name\": \"Keel Infrastructure Corp. Common Stock\", \"effective\": \"2026-04-06\" } ]"
+    }
+  ],
+  "rate_limits": "페이지 명시: \"Each request consumes 5 API calls per ticker.\" (요청당 티커 1개에 대해 5 API 콜 소비). 일일 한도 등 계정 전체 한도는 이 페이지에 별도 명시 없음 — EODHD 공통 일일 콜 한도 정책 적용(메인 EODHD 리서치 참조).",
+  "pricing_notes": "페이지 명시: \"Available in plans: All-In-One, EOD+Intraday — All World Extended plans.\" 즉 All-In-One 또는 EOD+Intraday(All World Extended) 플랜에 포함.",
+  "caveats": [
+    "미국 거래소만 지원 — KRX(한국 코스피/코스닥) 미지원이라 stockpick 도메인(개인 투자용 한국 주식 분석)에는 직접 사용 불가. 한국주식 생존편향/티커변경 보정 용도로는 부적합.",
+    "데이터 시작이 2022-07-22 로 비교적 최근 — 그 이전의 미국 티커 변경 이력은 미수록(룩어헤드/생존편향 분석에 과거 커버리지 한계).",
+    "fmt 기본값이 csv 이므로 JSON 파싱 코드는 fmt=json 을 명시해야 함(미지정 시 CSV 반환).",
+    "from 미지정 시 기본 12개월 전이므로, 전체 이력 조회 시 from=2022-07-22 등 명시 필요(기본값으로는 최근 1년만 반환).",
+    "'currently US only' 등 표현은 향후 거래소 확대 여지를 시사하나 시점 민감 — 재확인 필요(2026-06-16 기준).",
+    "페이지가 JS SPA 라 WebFetch 직접 호출 시 본문 비어 r.jina.ai 프록시 경유로 추출. 원문 표·예시 텍스트는 프록시 렌더 결과 기준이며 단일 출처(공식 페이지 1개) — 교차 출처는 동일 페이지 재추출로만 확인.",
+    "연도별 변경 건수(2022:137, 2023:261, 2024:237, 2025:291, 2026 YTD:93)는 페이지 작성 시점 스냅샷 — daily 갱신이므로 수치는 시점에 따라 변동."
+  ]
+}

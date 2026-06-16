@@ -1,0 +1,23 @@
+{
+  "section": "delisted-stock-companies-data",
+  "category": "delisted",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/delisted-stock-companies-data",
+  "fetch_status": "ok — 본문 확보(렌더 프록시 r.jina.ai 2회 교차). 단 이 페이지는 개요(overview) 페이지로, 자체적으로는 REST 엔드포인트/파라미터 명세를 담고 있지 않음. 실제 폐지종목 조회 메커니즘(exchange-symbol-list?delisted=1)은 별도 문서 페이지에서 교차 확인하여 notes/caveats에 기재. web.archive.org 는 접근 불가(차단)였으나 jina 2회로 본문 일치 확인됨.",
+  "auth": "쿼리 파라미터 ?api_token=YOUR_API_TOKEN (EODHD 공통). 이 페이지 자체엔 인증 예시 미기재 — register 후 무료 키 발급 안내(https://eodhd.com/register, 신용카드 불요)만 기술.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지(delisted-stock-companies-data)는 폐지종목 데이터의 \"커버리지 안내\" 개요 페이지로, 호출 가능한 전용 엔드포인트나 파라미터 명세를 직접 담고 있지 않다. 페이지가 실제로 기술하는 사실은 두 가지뿐이다.\n\n1) 폐지종목 데이터 가용성(delisting 시점별 차등):\n   - 2018년 이후 폐지: Fundamental data + Dividends & Splits + EOD(End-of-Day) data 제공. Intraday는 2021년 이후 폐지분부터 제공.\n   - 2018년 이전 폐지: EOD data only.\n   - 특정 티커의 가용 여부는 support 팀(support@eodhistoricaldata.com)에 확인 권고.\n\n2) 접근/라이선스: https://eodhd.com/register 에서 무료 API 키 발급(신용카드 불요). 개인(personal) 및 상업(commercial) 라이선스 옵션 제공.\n\n또한 관련 Academy 글 3편을 링크: \"How to Find Historical Stock Prices for Delisted Companies?\", \"Using Delisted Stocks for Backtesting a 3-EMA Strategy with Python\", \"Addressing Survivorship Bias: Integrating Historical Data for Delisted Companies\".\n\n[교차 확인 — 실제 폐지종목 목록 조회 메커니즘] 이 개요 페이지엔 없지만, EODHD에서 폐지(inactive) 티커 \"목록\"을 얻는 실제 경로는 Exchanges/Get-List-of-Tickers 엔드포인트의 delisted=1 파라미터다(별도 문서 페이지 exchanges-api-list-of-tickers-and-trading-hours에서 확인). URL 패턴: GET https://eodhd.com/api/exchange-symbol-list/{EXCHANGE_CODE}?api_token=...&delisted=1&fmt=json. 기본적으로 \"지난 1개월 내 활성\" 티커만 반환되며, delisted=1 시 비활성(폐지) 티커만 반환. 응답 객체 필드: Code, Name, Country, Exchange, Currency, Type, Isin. 이 목록으로 폐지 티커 Code를 얻은 뒤 EOD/Fundamentals/Div/Split 엔드포인트로 개별 데이터 조회하는 워크플로우다. (이 엔드포인트의 정식 명세는 본 페이지가 아니라 exchanges 문서 페이지의 권위 명세를 참조할 것.)",
+  "endpoints": [],
+  "rate_limits": "이 페이지엔 rate limit 기재 없음. (EODHD 공통 정책은 별도: 유료 1000요청/분·100,000콜/일, EOD 심볼 1콜, 벌크 거래소 100콜 등 — 메모리 [[research-eodhd]] 참조. 본 페이지에서 확인된 바 아님.)",
+  "pricing_notes": "이 페이지엔 폐지종목 데이터가 어느 플랜에 포함되는지 명시적 가격표가 없다. 무료 키로 register 가능하다고만 안내. 데이터 유형별로 따라가는 플랜(별도 페이지 기준): EOD는 EOD All World, Fundamental/Dividends/Splits는 Fundamentals/All-In-One 계열에 포함됨(본 페이지 기재 아님 — 메모리 [[research-eodhd]] 교차). 2018년 이전 폐지분은 EOD only이므로 사실상 EOD All World 플랜으로 접근.",
+  "caveats": [
+    "이 URL(delisted-stock-companies-data)은 SPA 개요 페이지 — WebFetch 직접은 빈약, r.jina.ai 프록시로 본문 확보. 자체 엔드포인트 명세 없음(endpoints=[]가 정상).",
+    "web.archive.org 는 본 환경에서 fetch 차단됨 — 교차검증은 jina 프록시 2회(raw+prompted)로 본문 일치 확인했으나 단일 프록시 소스라는 한계 존재.",
+    "폐지종목 '목록'을 얻는 실제 호출은 이 페이지가 아니라 exchange-symbol-list?delisted=1 엔드포인트다 — 코드에서 참조 시 그쪽 권위 페이지를 별도 실측할 것. 본 리서치에서 인용한 exchange-symbol-list 파라미터(delisted/type/fmt/Isin 등)도 다른 문서 페이지를 jina로 1회 fetch한 것이라 그 페이지 자체의 별도 정밀 검증 권장.",
+    "생존편향 관점 BLOCKING: 2018년 이전 폐지종목은 EOD only(Fund/Div/Split 없음) → 배당수정·재무기반 백테스트에 결손. survivorship-bias-free 라고 단정 표기는 없고 Academy 글로 '대응 방법' 권고 수준. 30년 풀 백테스트엔 깊이 차등 인지 필수.",
+    "재현성 함정(별도 라이선스 약관): 구독 해지/만료 후 1개월 내 데이터 전량 삭제 의무 — 폐지종목 스냅샷도 합법 영구 보관 불가. 메모리 [[research-eodhd]] 참조.",
+    "특정 티커 가용성 편차 → support 확인 권고가 페이지에 명시됨(자동화 시 누락 가능성 가정)."
+  ]
+}

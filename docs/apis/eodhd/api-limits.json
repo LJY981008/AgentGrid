@@ -1,0 +1,25 @@
+{
+  "section": "api-limits",
+  "category": "general",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/api-limits",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유 2회 fetch, 수치·표 일치 교차검증. 원문 eodhd.com 은 JS SPA 추정이라 직접 WebFetch 미시도, 프록시로 본문 확보 성공)",
+  "auth": "이 페이지(api-limits)에는 인증 방식이 명시되어 있지 않음. EODHD 공통 규약(별도 페이지/기존 실측)은 쿼리 파라미터 ?api_token=<KEY>. 본 페이지에서 확인된 인증 관련 사실 없음 → 코드 참조 시 인증은 본 페이지 근거로 단정 금지.",
+  "base_url": "이 페이지에는 base_url 명시 없음. EODHD 공통 base_url 은 https://eodhd.com/api (별도 페이지 근거). 본 api-limits 페이지 자체에는 엔드포인트 base URL 기재 없음.",
+  "notes": "이 페이지는 엔드포인트 명세가 아니라 \"API 호출 소비량(API call consumption) 및 사용 한도 정책\" 페이지다. 따라서 endpoints=[] 이며, 핵심은 각 API 요청이 일일 한도에서 몇 \"API call\"을 소비하는가의 소비 모델이다.\n\n[일일 한도] 모든 유료 플랜(every paid plan)에 대해 기본값(default) 100,000 API calls / user / day. 대시보드에서 한도 상향 가능(increase via dashboard).\n\n[API call 소비 모델 — 본 페이지에 명시된 표]\n- 심볼 단위 요청(each symbol request): 1 API call\n- Technical API, Intraday API, News API: 요청당 5 API calls\n- Fundamental API, Options API, Bond Fundamentals API: 요청당 10 API calls\n- 각 Marketplace product: 10 API calls (문서에 별도 명시 없는 한)\n- Bulk API 거래소 전체(entire exchange) 요청: 100 API calls\n- Bulk API + 'symbols' 파라미터: 100 + N API calls (N = 심볼 개수)\n\n[분/요청 한도] \"Minute request limit (not API calls)\" = 요청(request) 기준이며 API call 기준이 아님. 분당 1000 requests 이하로 제한. 응답 헤더로 잔량 확인: X-RateLimit-Limit: 1000, X-RateLimit-Remaining: 998 (예시값).\n\n[리셋 타이밍]\n- 구독(subscription) 플랜: 매일 GMT 자정(midnight GMT)에 일일 한도 리셋. 단 카운터 자체는 자정에 즉시 리셋되지 않고, 자정 직후 첫 API 요청 시점에 리셋됨(\"the counter will be reset on any API request right after midnight GMT\").\n- Marketplace products: 첫 요청 후 24시간 윈도우 기준으로 리셋(첫 요청이 24시간 창을 생성).\n\n[사용량 확인] 대시보드 https://eodhd.com/cp/dashboard 및 사용통계 https://eodhd.com/cp/api 에서 현재 소비량 확인.\n\n[추가 콜] 추가 API call 구매 가능 — 일일 한도 소진 후에만 버퍼로 소비됨. 대시보드의 'Buy Extra API Calls' 폼에서 구매.",
+  "endpoints": [],
+  "rate_limits": "[분당] 1000 requests/분 (request 기준, API call 기준 아님). 헤더 X-RateLimit-Limit: 1000, X-RateLimit-Remaining: 998 로 잔량 추적.\n[일일] 기본 100,000 API calls/user/day (모든 유료 플랜). 대시보드에서 상향·추가 콜 구매(소진 후 버퍼) 가능.\n[엔드포인트별 콜 소비량] 심볼 요청 1콜 / Technical·Intraday·News 각 5콜 / Fundamental·Options·Bond Fundamentals 각 10콜 / Marketplace product 10콜 / Bulk 거래소 전체 100콜 / Bulk + symbols 파라미터 100 + N콜(N=심볼수).\n[리셋] 구독: GMT 자정 리셋(단 카운터는 자정 직후 첫 요청 때 실제 리셋). Marketplace: 첫 요청 기준 24시간 윈도우.",
+  "pricing_notes": "본 페이지에는 플랜별 가격표가 없음(가격 미기재). 명시된 것은 \"기본 일일 한도 100,000 API calls 는 모든 유료 플랜(every paid plan) 및 marketplace products 에 적용\"이라는 점뿐. 무료(Free) 플랜의 일일 한도는 본 페이지에 기재되지 않음(별도 실측: Free=20콜/일). 추가 API call 구매는 모든 플랜 공통으로 대시보드에서 가능. 즉 가격·플랜별 데이터 포함 여부는 본 페이지 범위 밖이며 별도 pricing 페이지 참조 필요.",
+  "caveats": [
+    "이 페이지는 엔드포인트/응답 스키마 명세가 아니라 'API call 소비량·한도 정책' 페이지 → endpoints=[]. 실제 호출 URL·파라미터·응답 필드는 본 페이지에서 확인 불가, 각 API별 전용 문서 참조 필요.",
+    "본 페이지에 base_url·인증(api_token) 방식 명시 없음 → 그 값들은 EODHD 공통 규약/기존 실측이며 본 페이지 근거로 단정 금지.",
+    "'request'와 'API call'은 다른 단위 — 분당 1000 한도는 request 기준, 일일 100,000 한도는 API call(소비량) 기준. 예: Fundamental 1요청=10콜이므로 일일 100,000콜이면 Fundamental 요청은 약 10,000회 한도. 코드의 한도 계산 시 단위 혼동 주의.",
+    "구독 플랜 일일 카운터는 GMT 자정에 자동 0이 되지 않고 자정 직후 '첫 요청' 시점에 리셋됨 → 자정 직후 잔량 헤더 해석 시 함정 가능.",
+    "Marketplace product는 GMT 자정 리셋이 아니라 첫 요청 후 24시간 윈도우 — 구독과 리셋 기준이 다름.",
+    "X-RateLimit-Remaining: 998 등은 페이지의 예시값이지 실제 현재값 아님.",
+    "Free 플랜 한도는 본 페이지에 기재 없음(별도 실측 20콜/일과 교차확인 권고).",
+    "원문은 JS SPA 추정으로 직접 WebFetch는 본문이 빌 수 있어 r.jina.ai 프록시로 확보함 — 수치는 동일 프록시 2회 일관, 다만 프록시 변환 과정의 표 누락 가능성은 0이 아님(특히 세부 marketplace 예외 문구)."
+  ]
+}

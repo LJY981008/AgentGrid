@@ -1,0 +1,22 @@
+{
+  "section": "java-example",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/java-stock-api-example",
+  "fetch_status": "partial — r.jina.ai 렌더 프록시로 본문 확보 성공(SPA 본문이 일부만 렌더됨). 단, 이 페이지 자체가 REST 명세가 아니라 Java 코드 예제(GitHub 저장소 링크) 페이지라 추출할 엔드포인트 명세가 페이지에 존재하지 않음. WebFetch 직접/r.jina.ai 3회 교차 확인 모두 동일 결과.",
+  "auth": "페이지에 인증 방식(api_token 등)이 명시되어 있지 않음. 본문은 \"무료 API 키는 EODHD 플랫폼 가입으로 발급\" 정도만 언급. (EODHD 전체 관례인 ?api_token=<KEY> 쿼리는 이 페이지에는 기재되지 않음 — 추측 배제.)",
+  "base_url": "페이지에 base_url 미기재. (EODHD 일반 base_url은 https://eodhd.com/api 이나 이 페이지 본문에는 명시되지 않음.)",
+  "notes": "이 페이지는 REST API 명세 페이지가 아니라 \"Java Stock API Example\" — EODHD의 EOD API와 Fundamentals API를 Java로 연동하는 코드 예제 페이지다. 페이지에 실제로 기재된 사실만 정리하면 다음과 같다.\n\n1) 목적: EOD API와 Fundamentals API 양쪽의 Java 소스 코드 예제 제공. 본문 인용: \"In this API we provide source code for both EOD API and Fundamentals API. The example works with JSON version of our API, which provide more data and more flexible than CSV output.\" (CSV보다 JSON 버전이 더 많은 데이터·더 유연함을 강조.)\n\n2) 코드 위치: 전체 소스 코드는 외부 GitHub 저장소에 있음 — https://github.com/EodHistoricalData/Java-API-Example\n\n3) 코드 예제 내용: Google Gson 라이브러리(@SerializedName, @Expose 애노테이션)를 사용해 JSON을 역직렬화하는 Java 클래스 구조를 보여줌. EodStock 클래스가 General / Highlights / Earnings / Financials 4개 섹션(각각 getter/setter 포함)으로 Fundamentals JSON 응답을 매핑하는 형태. 즉 Fundamentals API의 JSON 응답 최상위 키가 General, Highlights, Earnings, Financials 임을 코드 구조로 간접 확인 가능(단 각 필드의 타입·의미는 이 페이지에 표로 기술되지 않음).\n\n4) 디스클레이머: EODHD는 금융 서비스가 아니라 데이터 API만 제공하며, 가격은 OTC·peer-to-peer 소스를 집계한 \"indicative\" 값으로 거래 목적에 부적합하다는 표준 면책 문구 포함.\n\n5) 지원 문의: support@eodhistoricaldata.com\n\n결론: 코드가 환각 없이 참조할 \"엔드포인트 URL·파라미터·응답 필드\" 권위 명세는 이 페이지에서 추출 불가. EOD/Fundamentals의 실제 REST 명세는 별도 문서 페이지(예: /financial-apis/api-for-historical-data-and-volumes, /financial-apis/stock-etfs-fundamental-data-feed)에서 확인해야 함. 단, Fundamentals 응답의 최상위 섹션 키(General/Highlights/Earnings/Financials)는 본 예제 코드에서 실측됨.",
+  "endpoints": [],
+  "rate_limits": "페이지에 API 콜 소비량·rate limit 명시 없음.",
+  "pricing_notes": "페이지에 플랜·가격 명시 없음. \"무료 API 키는 EODHD 가입으로 발급 가능\" 수준만 언급. 예제가 대상으로 하는 EOD API와 Fundamentals API의 실제 플랜 포함 여부는 이 페이지에서 확인 불가(EOD는 EOD All World, Fundamentals는 Fundamentals/All-In-One 플랜이 일반적이나 본 페이지에는 미기재 — 추측 배제).",
+  "caveats": [
+    "이 페이지는 REST 엔드포인트 명세가 아니라 Java 코드 예제 페이지다. url_pattern·method·query/path 파라미터·응답 필드 표가 페이지에 존재하지 않아 endpoints=[]로 둘 수밖에 없음.",
+    "실제 호출 URL(http... 문자열)은 페이지 본문이 아니라 외부 GitHub 저장소(EodHistoricalData/Java-API-Example) 코드 안에 있을 가능성이 큼 — 권위 명세가 필요하면 저장소 소스 또는 EOD/Fundamentals 전용 문서 페이지를 별도 확인 필요.",
+    "Fundamentals 응답 최상위 키(General/Highlights/Earnings/Financials)는 예제 코드 구조에서 실측됨. 단 각 필드의 타입·의미·전체 스키마는 이 페이지에 없음 — Fundamentals 전용 문서로 교차 확인 권장.",
+    "SPA 특성상 r.jina.ai로도 본문이 부분 렌더되었을 수 있음. 다만 3회(직접 1 + 프록시 2) 교차 결과가 일관되게 '코드 예제 페이지, 엔드포인트 명세 없음'으로 수렴해 신뢰도는 높음.",
+    "stockpick 도메인(한국 KRX 주식) 관점: 이 페이지는 KRX 커버리지·생존편향·수정주가 정의와 무관한 언어별(Java) 연동 예제일 뿐이며, 프로젝트는 Python 스택이라 직접 활용도 낮음. EODHD KRX 데이터 자체의 적합성은 기존 research-eodhd.md 메모(EOD All World, 폐지종목 2000~, 해지 후 1개월 삭제 의무=재현성 함정) 참조 권장."
+  ]
+}

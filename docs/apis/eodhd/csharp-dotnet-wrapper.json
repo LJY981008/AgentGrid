@@ -1,0 +1,22 @@
+{
+  "section": "csharp-dotnet-wrapper",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/c-net-financial-data-api-stock-wrapper",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보, 3회 교차 확인. eodhd.com 직접 fetch 는 미시도 — 프록시로 충분히 일관된 본문 확보됨)",
+  "auth": "페이지에 명시 없음. 이 페이지는 .NET 래퍼(SDK) 소개 페이지로, 인증 방식(api_token 쿼리 등)을 설명하지 않음. (EODHD 일반 규약은 ?api_token=<KEY> 쿼리이나, 이 페이지에 직접 기재되지 않음 — github.com/EodHistoricalData/EODHistoricalData.Wrapper 및 다른 REST 문서 페이지로 안내)",
+  "base_url": "https://eodhd.com/api (EODHD 일반 base — 단, 이 페이지에는 base_url 이 직접 기재되어 있지 않음)",
+  "notes": "이 페이지는 REST 엔드포인트 명세 페이지가 아니라 EODHD 의 C#/.NET 래퍼(SDK) 소개(overview) 페이지다. 따라서 endpoints=[] 이며, 코드가 직접 참조할 REST 명세(URL 패턴·파라미터·응답 필드)는 이 페이지에 존재하지 않는다.\n\n페이지에 실제로 기재된 사실:\n- 제목/취지: \"a comprehensive C# .NET Financial API Stock Wrapper for all our Financial APIs, including End-of-Day API, Fundamental API, Options API, and others.\" 즉 EODHD 의 모든 금융 API(EOD, Fundamental, Options 등)를 감싸는 C#/.NET SDK.\n- \"the C# .NET SDK for the EOD Historical data REST API\" 로 자신을 규정.\n- GitHub 저장소: github.com/EodHistoricalData/EODHistoricalData.Wrapper (\"You can find the project on GitHub EODHistoricalData.Wrapper\"). 오픈소스이며 소스 열람·디버깅 가능, \"stand-alone .NET project\" 로 기술됨.\n- 래퍼가 커버한다고 명시한 3개 카테고리:\n  1) Historical & Real-Time Price Data — End-of-day, live/real-time, intraday quotes, splits, dividends\n  2) Fundamental & Economic Data — 주식/ETF fundamentals, bonds, economic indicators\n  3) Exchange Information — tickers, trading hours, market holidays, bulk 엔드포인트\n- 활용 용도로 financial valuations, macroeconomic analyses, sentiment analysis, option strategies, technical analysis, machine learning model 개발을 열거.\n- 다른 언어 SDK(Python, R, Node.js/TypeScript, Java, PHP/Laravel, F#)와 노코드 솔루션을 함께 안내. 무료 API 키 가입 CTA(\"Sign up & Get Data\") 존재.\n- 데이터 API 제공만 하며 트레이딩 손실 책임은 지지 않는다는 면책 문구 포함.\n\n페이지에 없는 것(명시 부재 확인): 구체 REST 엔드포인트 URL·HTTP 메서드, query/path 파라미터, 응답 필드 스키마, C# 코드 예시, NuGet 패키지명/설치 명령(dotnet add package / Install-Package), 인증 방식, base_url, API 콜 소비량, 구체적 요금 플랜.\n\n코드가 권위 명세로 참조할 대상은 이 페이지가 아니라 (a) 실제 데이터 종류별 REST 문서 페이지(EOD/Fundamentals/Splits-Dividends/Exchanges 등 — 이미 메모리에 다수 실측 보관됨)와 (b) GitHub 래퍼 저장소 소스다.",
+  "endpoints": [],
+  "rate_limits": "이 페이지에 API 콜 소비량·일일 한도에 대한 기재 없음. (래퍼는 EODHD REST API 를 호출하는 클라이언트일 뿐이므로 콜 소비량은 래핑하는 실제 엔드포인트 정책을 따름 — 해당 엔드포인트별 문서 참조 필요)",
+  "pricing_notes": "이 페이지에 어느 플랜 포함인지 구체적 기재 없음. 무료 API 키 가입 CTA 와 일반적 가격 페이지 링크만 존재하며 특정 티어(무료/EOD All World/Fundamentals/All-In-One)를 지정하지 않음. 실제 비용은 래퍼가 호출하는 데이터 종류별 엔드포인트의 플랜 정책을 따름.",
+  "caveats": [
+    "이 페이지는 REST 명세가 아니라 .NET SDK 소개 페이지 — 코드가 환각 없이 참조할 엔드포인트 명세(URL/파라미터/응답)는 여기에 없음. 권위 명세는 데이터 종류별 REST 문서 페이지에서 확보해야 함.",
+    "stockpick 도메인은 Python(uv) 스택이며 C#/.NET 래퍼는 무관 — 채택 대상 아님(아카이브/완결성 목적 기록).",
+    "GitHub 래퍼(EodHistoricalData/EODHistoricalData.Wrapper)는 서드파티/오픈소스 클라이언트로, EODHD 본 데이터의 커버리지·생존편향(폐지종목)·수정주가 정의·재현성(해지 후 삭제 의무) 같은 본질적 제약은 래퍼와 무관하게 EODHD 데이터 자체의 제약을 따름 — 별도 실측 메모리 참조.",
+    "페이지가 JS SPA 라 eodhd.com 직접 fetch 시 본문이 빌 수 있어 r.jina.ai 프록시 경유로 확보함. NuGet 패키지명·설치 명령·인증 파라미터는 페이지에 부재(미확인)로, 이를 코드에 가정하면 환각 위험.",
+    "GitHub 저장소의 현재 유지보수 상태·.NET 타깃 버전·최신 커밋 시점은 이 페이지로 확인 불가 — 채택 검토 시 저장소 직접 실측 필요."
+  ]
+}

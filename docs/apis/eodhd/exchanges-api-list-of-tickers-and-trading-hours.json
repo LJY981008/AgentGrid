@@ -1,0 +1,166 @@
+{
+  "section": "exchanges-api-list-of-tickers-and-trading-hours",
+  "category": "exchanges",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/exchanges-api-list-of-tickers-and-trading-hours",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보. 단, 페이지 제목에 'trading hours'가 있으나 실제 거래시간/휴장일 엔드포인트는 본 페이지가 아닌 별도 'Exchange Trading Hours and Holidays API' 페이지로 링크만 되어 있어 본 페이지 명세에는 미포함)",
+  "auth": "쿼리 파라미터 api_token=&lt;KEY&gt; (예: ?api_token={YOUR_API_TOKEN}). 모든 요청 필수.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "EODHD Exchanges API 페이지. 두 개의 REST 엔드포인트만 문서화됨: (1) 거래소 목록(exchanges-list) — 지원 거래소 메타데이터, (2) 거래소별 티커 목록(exchange-symbol-list/{CODE}). 페이지 제목에 'trading hours'가 포함되어 있으나, 실제 거래시간/휴장일(Exchange Trading Hours and Holidays) 명세는 본 페이지에 없고 별도 페이지로 링크만 되어 있다(\"We recommend to check our Exchange Trading Hours and Holidays API as well\"). 거래소 목록은 60개 이상 거래소와 함께 자산군 가상거래소 코드(EUFUND=유럽펀드, CC=암호화폐, FOREX=외환, GBOND=국채, MONEY=참조금리/벤치마크)를 반환한다. US 주식은 통합 코드 'US'(NYSE, NASDAQ, NYSE ARCA, OTC 포함) 사용을 권장하며, 개별 거래소 코드로도 분리 조회 가능하다고 기재.",
+  "endpoints": [
+    {
+      "name": "Get List of Exchanges (거래소 목록)",
+      "method": "GET",
+      "url_pattern": "/exchanges-list/",
+      "description": "EODHD가 지원하는 60개 이상 거래소 및 자산군 가상거래소(EUFUND, CC, FOREX, GBOND, MONEY)의 메타데이터 목록을 반환한다.",
+      "path_params": [],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "개인 API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷 (json 또는 csv)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "Name",
+          "type": "string",
+          "description": "거래소 전체 이름 (Full name of the exchange)"
+        },
+        {
+          "name": "Code",
+          "type": "string",
+          "description": "EODHD API에서 사용하는 거래소 코드 (Exchange code used in EODHD APIs)"
+        },
+        {
+          "name": "OperatingMIC",
+          "type": "string",
+          "description": "운영 venue의 MIC 코드들 (쉼표 구분, 예: XNAS,XNYS)"
+        },
+        {
+          "name": "Country",
+          "type": "string",
+          "description": "거래소가 운영되는 국가"
+        },
+        {
+          "name": "Currency",
+          "type": "string",
+          "description": "기본 거래 통화"
+        },
+        {
+          "name": "CountryISO2",
+          "type": "string",
+          "description": "ISO2 국가 코드"
+        },
+        {
+          "name": "CountryISO3",
+          "type": "string",
+          "description": "ISO3 국가 코드"
+        }
+      ],
+      "response_format": "json (기본) 또는 csv (fmt 파라미터)",
+      "example": "https://eodhd.com/api/exchanges-list/?api_token={YOUR_API_TOKEN}&fmt=json  →  [{\"Name\":\"USA Stocks\",\"Code\":\"US\",\"OperatingMIC\":\"XNAS,XNYS\",\"Country\":\"USA\",\"Currency\":\"USD\",\"CountryISO2\":\"US\",\"CountryISO3\":\"USA\"},{\"Name\":\"London Exchange\",\"Code\":\"LSE\",\"OperatingMIC\":\"XLON\",\"Country\":\"UK\",\"Currency\":\"GBP\",\"CountryISO2\":\"GB\",\"CountryISO3\":\"GBR\"}]"
+    },
+    {
+      "name": "Get List of Tickers (거래소별 티커 목록)",
+      "method": "GET",
+      "url_pattern": "/exchange-symbol-list/{EXCHANGE_CODE}",
+      "description": "지정한 거래소 코드에 상장된 티커(심볼) 목록을 반환한다. 기본적으로 지난 한 달간 활성이었던 티커만 포함된다.",
+      "path_params": [
+        {
+          "name": "EXCHANGE_CODE",
+          "type": "string",
+          "description": "거래소 코드 (예: US, LSE, XETRA, WAR). US는 NYSE/NASDAQ/NYSE ARCA/OTC를 통합."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "개인 API 키"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "json",
+          "description": "응답 포맷 (json 또는 csv)"
+        },
+        {
+          "name": "delisted",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "1로 설정 시 폐지(비활성) 티커만 반환한다 (returns delisted/inactive tickers ONLY). 활성+폐지 동시 반환 수단은 문서에 기재되지 않음."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "티커 타입 필터. 지원 값: common_stock, preferred_stock, stock, etf, fund"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "Code",
+          "type": "string",
+          "description": "티커 심볼"
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "description": "회사 또는 상품 전체 이름 (Full company or instrument name)"
+        },
+        {
+          "name": "Country",
+          "type": "string",
+          "description": "상장 국가 (Country of listing)"
+        },
+        {
+          "name": "Exchange",
+          "type": "string",
+          "description": "거래소 코드"
+        },
+        {
+          "name": "Currency",
+          "type": "string",
+          "description": "거래 통화"
+        },
+        {
+          "name": "Type",
+          "type": "string",
+          "description": "자산 타입 (예: Common Stock, ETF, Fund)"
+        },
+        {
+          "name": "Isin",
+          "type": "string",
+          "description": "국제증권식별번호 ISIN (제공되는 경우)"
+        }
+      ],
+      "response_format": "json (기본) 또는 csv (fmt 파라미터)",
+      "example": "https://eodhd.com/api/exchange-symbol-list/WAR?api_token={YOUR_API_TOKEN}&fmt=json  →  [{\"Code\":\"CDR\",\"Name\":\"CD PROJEKT SA\",\"Country\":\"Poland\",\"Exchange\":\"WAR\",\"Currency\":\"PLN\",\"Type\":\"Common Stock\",\"Isin\":\"PLOPTTC00011\"},{\"Code\":\"PKN\",\"Name\":\"PKN Orlen SA\",\"Country\":\"Poland\",\"Exchange\":\"WAR\",\"Currency\":\"PLN\",\"Type\":\"Common Stock\",\"Isin\":\"PLPKN0000018\"}]"
+    }
+  ],
+  "rate_limits": "페이지 기재: \"Each request consumes 1 API call.\" (각 요청은 1 API 콜 소비). 양 엔드포인트 모두 요청당 1콜. 일일 한도 등 별도 숫자는 본 페이지에 기재 없음(계정 플랜별 일일 콜 한도는 별도 가격/계정 페이지 소관).",
+  "pricing_notes": "페이지 기재: 다음 플랜에서 사용 가능 — \"All-In-One, EOD Historical Data — All World, EOD+Intraday — All World Extended, Fundamentals Data Feed and Free plans.\" 즉 무료(Free) 플랜 포함 전 플랜에서 접근 가능.",
+  "caveats": [
+    "페이지 제목이 '...and trading hours'이지만, 실제 거래시간/휴장일(Exchange Trading Hours and Holidays) 엔드포인트 명세는 본 페이지에 없고 별도 페이지로 링크만 됨. 거래시간 명세가 필요하면 그 별도 페이지를 추가 fetch해야 함 — 이 명세에 trading-hours 엔드포인트가 있다고 코드에서 가정하면 환각.",
+    "delisted=1은 폐지 티커만(ONLY) 반환. 활성+폐지를 한 번에 받는 파라미터는 문서에 없음 → 전체 유니버스가 필요하면 기본 호출(활성)과 delisted=1 호출을 합쳐야 함(생존편향 회피 시 중요).",
+    "기본 동작상 '지난 한 달간 활성이었던 티커만' 포함 → 최근 폐지된 종목이 기본 응답에서 누락될 수 있음. 과거 시점 유니버스 복원에는 부적합할 수 있으니 delisted 조회와 병합 필요.",
+    "type 필터 지원 값에 'common_stock'과 'stock', 'preferred_stock'가 동시 존재 — 의미 구분(stock=상위 카테고리 여부)은 페이지에 명확히 정의되지 않음.",
+    "fmt 기본값 및 delisted 기본값(0)은 본문 표 기준이며 일부는 페이지가 명시한 기본 동작에서 역산. 정확한 기본값은 라이브 호출로 재확인 권장.",
+    "rate limit(일일 콜 한도)·요금 세부는 별도 Pricing/Account 페이지 소관 — 본 페이지에는 요청당 1콜만 명시.",
+    "fetch는 r.jina.ai 렌더 프록시 경유(eodhd.com SPA). 원문 코드 블록의 일부 공백/필드 순서는 프록시 변환 과정에서 정규화됐을 수 있음."
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "section": "fsharp-example",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/f-sharp-stock-api-example",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유 본문 확보, 2회 교차 확인. 단 페이지가 튜토리얼이라 REST 명세 자체는 빈약)",
+  "auth": "쿼리 파라미터 api_token. 페이지에 demo 토큰(api_token=demo, AAPL.US 만 동작)과 플레이스홀더 \"99999999999999\"(\"insert your EOD token here\") 표시. 헤더 인증은 언급 없음.",
+  "base_url": "http://eodhd.com/api (페이지 코드에 http:// 로 기재 — EODHD 정식 base 는 https://eodhd.com/api 이나 본 예제 코드는 http 사용)",
+  "notes": "이 페이지는 REST API 레퍼런스가 아니라 F# 언어로 EODHD EOD(End-of-Day) Historical Data 엔드포인트를 호출하는 방법을 보여주는 튜토리얼/예제 페이지다. 한국 주식(stockpick) 관점에서 새 API 표면은 없고, 이미 실측된 EOD 엔드포인트의 F# 사용 예시일 뿐이다.\n\n구성: F# 솔루션 2개 파일. (1) Program.fs — \"Ticker\" 컬럼 헤더를 가진 CSV 파일에서 티커 목록을 읽어 순회 다운로드. (2) Download.fs — FSharp.Data 의 Http.RequestString() 으로 EOD URL 호출 후 Deedle 데이터프레임(DeedleFuncs.Frame.stringToTSDF)으로 변환, CSV 저장.\n\n핵심 코드(verbatim):\n  let url = @\"http://eodhd.com/api/eod/\" + symbol + endStr\n  let df = Http.RequestString(url) |> DeedleFuncs.Frame.stringToTSDF\nCSV 저장: FrameExtensions.SaveCsv(df, path, includeRowKeys=true, keyNames=[\"Date\"])\n\n필요 NuGet 패키지: Deedle, FSharp.Data.\n\n호출 URL 형태: http://eodhd.com/api/eod/{symbol}?api_token={token}&period=d&order=d\n응답은 Date, Open, High, Low, Close, Volume 컬럼을 가진 데이터로, CSV 로 내보냄. 페이지에 응답 필드의 타입/의미를 명시한 표는 없으며 위 컬럼명은 예제 맥락에서 드러난 것이다.</notes>\n<parameter name=\"endpoints\">[{\"name\": \"End-of-Day Historical Data (예제에서 호출하는 유일한 엔드포인트)\", \"method\": \"GET\", \"url_pattern\": \"/api/eod/{symbol}\", \"description\": \"F# 예제가 호출하는 EOD 일별 시세 엔드포인트. 본 페이지는 튜토리얼이라 파라미터 일부만 사용 — 전체 명세는 EODHD End-of-Day API 레퍼런스 참조.\", \"example\": \"http://eodhd.com/api/eod/AAPL.US?api_token=demo&period=d&order=d\", \"path_params\": [{\"name\": \"symbol\", \"type\": \"string\", \"description\": \"조회할 티커. 형식 {CODE}.{EXCHANGE} (예: AAPL.US). demo 토큰은 AAPL.US 만 동작.\"}], \"query_params\": [{\"name\": \"api_token\", \"type\": \"string\", \"required\": true, \"default\": \"\", \"description\": \"인증 토큰. 예제는 demo 또는 플레이스홀더 99999999999999 사용.\"}, {\"name\": \"period\", \"type\": \"string\", \"required\": false, \"default\": \"d\", \"description\": \"데이터 주기. 예제는 d(일별) 사용.\"}, {\"name\": \"order\", \"type\": \"string\", \"required\": false, \"default\": \"\", \"description\": \"정렬 순서. 예제는 d(내림차순) 사용.\"}], \"response_fields\": [{\"name\": \"Date\", \"type\": \"string(date)\", \"description\": \"거래일 (CSV row key 로 사용). 페이지에 정식 필드 명세 표는 없으며 예제 맥락에서 드러난 컬럼.\"}, {\"name\": \"Open\", \"type\": \"number\", \"description\": \"시가 (예제 CSV 컬럼)\"}, {\"name\": \"High\", \"type\": \"number\", \"description\": \"고가 (예제 CSV 컬럼)\"}, {\"name\": \"Low\", \"type\": \"number\", \"description\": \"저가 (예제 CSV 컬럼)\"}, {\"name\": \"Close\", \"type\": \"number\", \"description\": \"종가 (예제 CSV 컬럼)\"}, {\"name\": \"Volume\", \"type\": \"number\", \"description\": \"거래량 (예제 CSV 컬럼)\"}], \"response_format\": \"기본 CSV (예제는 CSV 응답을 Deedle 데이터프레임으로 파싱)\"}]",
+  "endpoints": [
+    {
+      "name": "End-of-Day Historical Data (예제에서 호출하는 유일한 엔드포인트)",
+      "method": "GET",
+      "url_pattern": "/api/eod/{symbol}",
+      "description": "F# 예제가 호출하는 EOD 일별 시세 엔드포인트. 본 페이지는 튜토리얼이라 파라미터 일부만 사용 — 전체 명세는 EODHD End-of-Day API 레퍼런스 참조.",
+      "example": "http://eodhd.com/api/eod/AAPL.US?api_token=demo&period=d&order=d",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "조회할 티커. 형식 {CODE}.{EXCHANGE} (예: AAPL.US). demo 토큰은 AAPL.US 만 동작."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "default": "",
+          "description": "인증 토큰. 예제는 demo 또는 플레이스홀더 99999999999999 사용."
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "required": false,
+          "default": "d",
+          "description": "데이터 주기. 예제는 d(일별) 사용."
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false,
+          "default": "",
+          "description": "정렬 순서. 예제는 d(내림차순) 사용."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "Date",
+          "type": "string(date)",
+          "description": "거래일 (CSV row key 로 사용). 페이지에 정식 필드 명세 표는 없으며 예제 맥락에서 드러난 컬럼."
+        },
+        {
+          "name": "Open",
+          "type": "number",
+          "description": "시가 (예제 CSV 컬럼)"
+        },
+        {
+          "name": "High",
+          "type": "number",
+          "description": "고가 (예제 CSV 컬럼)"
+        },
+        {
+          "name": "Low",
+          "type": "number",
+          "description": "저가 (예제 CSV 컬럼)"
+        },
+        {
+          "name": "Close",
+          "type": "number",
+          "description": "종가 (예제 CSV 컬럼)"
+        },
+        {
+          "name": "Volume",
+          "type": "number",
+          "description": "거래량 (예제 CSV 컬럼)"
+        }
+      ],
+      "response_format": "기본 CSV (예제는 CSV 응답을 Deedle 데이터프레임으로 파싱)"
+    }
+  ],
+  "rate_limits": "페이지 본문 기준: 무료 가입 20 calls/day, 유료 플랜은 구독별 상한 상향. demo 토큰은 제한된 티커(AAPL.US)만. 단 이 페이지에 EOD 엔드포인트의 정확한 콜 소비량(요청당 calls) 수치는 명시되지 않음 — EOD API 레퍼런스 별도 확인 필요.",
+  "pricing_notes": "페이지에 어느 유료 플랜에 포함되는지 명시 없음(\"register for appropriate plan access\" 수준). EOD Historical Data 엔드포인트는 일반적으로 EOD All World / All-In-One 플랜 포함(별도 실측 research-eodhd 참조). 본 페이지 단독으로는 가격 결론 불가.",
+  "caveats": [
+    "페이지가 REST 레퍼런스가 아니라 F# 튜토리얼/예제 — 새로운 엔드포인트나 권위 있는 파라미터/필드 명세를 제공하지 않음. 코드 참조용 권위 명세로는 EODHD End-of-Day API 레퍼런스를 써야 함.",
+    "예제 코드의 base URL 이 http://eodhd.com/api (비암호화) 로 기재됨 — 실제 운영은 https 사용 권장. SPA 렌더링으로 직접 WebFetch 시 본문 비므로 r.jina.ai 프록시로 확보함.",
+    "응답 필드(Date/Open/High/Low/Close/Volume)는 정식 명세 표가 아니라 예제 CSV 출력 맥락에서 추출 — 타입은 추정값. EOD API 정식 응답은 adjusted_close 등 추가 컬럼 포함(별도 레퍼런스 확인).",
+    "period 기본값(d)·order 기본값은 예제에서 사용한 값이며 엔드포인트의 진짜 default 와 다를 수 있음(페이지에 default 명시 없음).",
+    "한국 주식(KRX) 커버리지·콜 소비량은 이 페이지에서 다루지 않음 — stockpick 도메인 직접 활용도 낮음(미국 AAPL 예제).",
+    "rate limit 수치(20 calls/day 등)는 가입 정책 일반론이며 페이지에 EOD 엔드포인트별 정확한 소비량은 미기재."
+  ]
+}

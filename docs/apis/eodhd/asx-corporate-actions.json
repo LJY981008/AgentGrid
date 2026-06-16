@@ -1,0 +1,429 @@
+{
+  "section": "asx-corporate-actions",
+  "category": "splits",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/asx-australia-corporate-actions-beta",
+  "fetch_status": "ok — r.jina.ai 렌더 프록시 + WebFetch 직접 경로 2회 교차 검증, 본문(엔드포인트·파라미터·응답 record 예시) 확보. 단 EODHD 문서는 JS SPA 성향이며 일부 응답 필드 스키마(특히 _asx_extra 하위)는 fetch 모델 요약에 의존 → 코드 구현 전 실제 API 응답으로 최종 검증 권고",
+  "auth": "api_token 쿼리 파라미터 (필수). 예: ?api_token=YOUR_TOKEN. 누락/오류 시 401 응답",
+  "base_url": "https://eodhd.com/api",
+  "notes": "EODHD ASX Australia Corporate Actions API (베타). 호주 증권거래소(ASX) 상장 종목의 기업 행위(corporate actions) 데이터를 제공한다. ASX ReferencePoint 피드(E34)에서 하루 1회 임포트된다. 단일 엔드포인트 /api/asx-corporate-actions 하나로 type 파라미터에 따라 8종(dividends, splits, bonus-issues, rights-issues, buybacks, capital-returns, spp, other)의 기업 행위를 조회한다. 응답은 data/meta/links 표준 envelope 구조이며 offset/limit 기반 페이지네이션을 쓴다(기본 100, 최대 1000). type 별로 data 배열 내 record 스키마가 다르다(타입별 필드 셋 상이). 배당(dividends) record 는 EODHD 공통 배당 스키마(code/date/value/unadjustedValue/period/currency/recordDate/paymentDate/declarationDate)에 ASX 고유 _asx_extra 객체(ISIN·franking 정보·DRP 등)가 추가된다. ⚠️ ASX(.AU 접미사) 종목 전용 — 한국 코스피/코스닥(.KS/.KQ)은 커버리지 무관하므로 stockpick 도메인에서 직접 사용 불가(완결성/타 시장 참고용). 동작·필드 의미는 페이지 기재 사실 기준.",
+  "endpoints": [
+    {
+      "name": "ASX Corporate Actions",
+      "method": "GET",
+      "url_pattern": "/api/asx-corporate-actions",
+      "description": "ASX(호주) 상장 종목의 기업 행위 조회. type 파라미터로 8종(dividends/splits/bonus-issues/rights-issues/buybacks/capital-returns/spp/other) 분기. data/meta/links envelope + offset/limit 페이지네이션. ASX ReferencePoint 피드(E34) 일 1회 임포트.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "EODHD API 토큰",
+          "default": ""
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "기업 행위 유형. 값: dividends, splits, bonus-issues, rights-issues, buybacks, capital-returns, spp, other. 미지정 시 전체 유형",
+          "default": "all types"
+        },
+        {
+          "name": "symbol",
+          "type": "string",
+          "required": false,
+          "description": ".AU 접미사 포함 티커 (예: PMV.AU)",
+          "default": ""
+        },
+        {
+          "name": "date_from",
+          "type": "date",
+          "required": false,
+          "description": "시작일 YYYY-MM-DD (inclusive, event date 기준)",
+          "default": ""
+        },
+        {
+          "name": "date_to",
+          "type": "date",
+          "required": false,
+          "description": "종료일 YYYY-MM-DD (inclusive, event date 기준)",
+          "default": ""
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "description": "0-based 페이지네이션 오프셋",
+          "default": "0"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "description": "페이지 크기, 1~1000",
+          "default": "100"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 현재 json 만 지원",
+          "default": "json"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "data",
+          "type": "array",
+          "description": "기업 행위 record 배열. type 별 스키마 상이"
+        },
+        {
+          "name": "meta.total",
+          "type": "integer",
+          "description": "조건에 매칭되는 전체 record 수 (예: 566)"
+        },
+        {
+          "name": "meta.page.offset",
+          "type": "integer",
+          "description": "현재 응답의 오프셋"
+        },
+        {
+          "name": "meta.page.limit",
+          "type": "integer",
+          "description": "현재 응답의 페이지 크기"
+        },
+        {
+          "name": "links.next",
+          "type": "string",
+          "description": "다음 페이지 URL (page[offset]/page[limit] 인코딩 쿼리 포함)"
+        },
+        {
+          "name": "[dividends] code",
+          "type": "string",
+          "description": "티커 (예: PMV.AU)"
+        },
+        {
+          "name": "[dividends] date",
+          "type": "date",
+          "description": "배당 ex-date"
+        },
+        {
+          "name": "[dividends] value",
+          "type": "number",
+          "description": "배당 값 (수정 반영)"
+        },
+        {
+          "name": "[dividends] unadjustedValue",
+          "type": "number",
+          "description": "미수정 배당 값"
+        },
+        {
+          "name": "[dividends] period",
+          "type": "string",
+          "description": "배당 주기 (예: Interim)"
+        },
+        {
+          "name": "[dividends] currency",
+          "type": "string",
+          "description": "통화 (예: AUD)"
+        },
+        {
+          "name": "[dividends] exchange",
+          "type": "string",
+          "description": "거래소 (AU)"
+        },
+        {
+          "name": "[dividends] recordDate",
+          "type": "date",
+          "description": "기준일(record date)"
+        },
+        {
+          "name": "[dividends] paymentDate",
+          "type": "date",
+          "description": "지급일"
+        },
+        {
+          "name": "[dividends] declarationDate",
+          "type": "date|null",
+          "description": "선언일 (null 가능)"
+        },
+        {
+          "name": "[dividends] _asx_extra.isin",
+          "type": "string",
+          "description": "ISIN 코드"
+        },
+        {
+          "name": "[dividends] _asx_extra.asx_ticker",
+          "type": "string",
+          "description": ".AU 없는 ASX 티커"
+        },
+        {
+          "name": "[dividends] _asx_extra.corporate_action_id",
+          "type": "string",
+          "description": "ASX 기업행위 ID"
+        },
+        {
+          "name": "[dividends] _asx_extra.franked_amount_aud",
+          "type": "number",
+          "description": "franked 금액 (AUD)"
+        },
+        {
+          "name": "[dividends] _asx_extra.franked_percent",
+          "type": "number",
+          "description": "franking 비율 (%)"
+        },
+        {
+          "name": "[dividends] _asx_extra.drp_indicator",
+          "type": "integer",
+          "description": "DRP(배당재투자) 지시자"
+        },
+        {
+          "name": "[dividends] _asx_extra.drp_discount_rate",
+          "type": "number",
+          "description": "DRP 할인율"
+        },
+        {
+          "name": "[dividends] _asx_extra.special_indicator",
+          "type": "string",
+          "description": "특별배당 여부 (예: N)"
+        },
+        {
+          "name": "[dividends] _asx_extra.withholding_tax_rate",
+          "type": "number",
+          "description": "원천징수세율"
+        },
+        {
+          "name": "[dividends] _asx_extra.transaction_type",
+          "type": "string",
+          "description": "(2번째 fetch에 추가 등장) 거래 유형 — 1차 fetch 예시엔 부재, 검증 필요"
+        },
+        {
+          "name": "[dividends] _asx_extra.comment",
+          "type": "string",
+          "description": "(2번째 fetch에 추가 등장) 코멘트 — 검증 필요"
+        },
+        {
+          "name": "[splits] code",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "[splits] date",
+          "type": "date",
+          "description": "분할 일자"
+        },
+        {
+          "name": "[splits] split",
+          "type": "string",
+          "description": "분할 비율 문자열 (예: 2000:3)"
+        },
+        {
+          "name": "[splits] exchange",
+          "type": "string",
+          "description": "거래소 (AU)"
+        },
+        {
+          "name": "[splits] _asx_extra.asx_ticker",
+          "type": "string",
+          "description": "ASX 티커"
+        },
+        {
+          "name": "[splits] _asx_extra.record_date",
+          "type": "date",
+          "description": "기준일"
+        },
+        {
+          "name": "[splits] _asx_extra.effective_date",
+          "type": "date",
+          "description": "효력 발생일"
+        },
+        {
+          "name": "[splits] _asx_extra.new_security_code",
+          "type": "string",
+          "description": "신규 증권 코드"
+        },
+        {
+          "name": "[splits] _asx_extra.calculation_method",
+          "type": "string",
+          "description": "계산 방식 (예: M)"
+        },
+        {
+          "name": "[splits] _asx_extra.corporate_action_id",
+          "type": "string",
+          "description": "ASX 기업행위 ID"
+        },
+        {
+          "name": "[bonus-issues] code",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "[bonus-issues] date",
+          "type": "date",
+          "description": "일자"
+        },
+        {
+          "name": "[bonus-issues] ratio",
+          "type": "string",
+          "description": "비율 (예: 4:21)"
+        },
+        {
+          "name": "[bonus-issues] exchange",
+          "type": "string",
+          "description": "거래소"
+        },
+        {
+          "name": "[bonus-issues] pariPassu",
+          "type": "boolean",
+          "description": "기존주와 동순위 여부"
+        },
+        {
+          "name": "[bonus-issues] recordDate",
+          "type": "date",
+          "description": "기준일"
+        },
+        {
+          "name": "[bonus-issues] despatchDate",
+          "type": "date",
+          "description": "발송일"
+        },
+        {
+          "name": "[rights-issues] code",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "[rights-issues] date",
+          "type": "date",
+          "description": "일자"
+        },
+        {
+          "name": "[rights-issues] type",
+          "type": "string",
+          "description": "권리 유형 (예: non-renounceable)"
+        },
+        {
+          "name": "[rights-issues] ratio",
+          "type": "string",
+          "description": "비율 (예: 1:10)"
+        },
+        {
+          "name": "[rights-issues] currency",
+          "type": "string",
+          "description": "통화"
+        },
+        {
+          "name": "[rights-issues] pariPassu",
+          "type": "boolean",
+          "description": "동순위 여부"
+        },
+        {
+          "name": "[rights-issues] recordDate",
+          "type": "date",
+          "description": "기준일"
+        },
+        {
+          "name": "[rights-issues] despatchDate",
+          "type": "date",
+          "description": "발송일"
+        },
+        {
+          "name": "[rights-issues] applicationPrice",
+          "type": "number",
+          "description": "청약 가격"
+        },
+        {
+          "name": "[rights-issues] applicationCloseDate",
+          "type": "date",
+          "description": "청약 마감일"
+        },
+        {
+          "name": "[capital-returns] code",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "[capital-returns] date",
+          "type": "date",
+          "description": "일자"
+        },
+        {
+          "name": "[capital-returns] value",
+          "type": "number",
+          "description": "자본 환원 값"
+        },
+        {
+          "name": "[capital-returns] currency",
+          "type": "string",
+          "description": "통화"
+        },
+        {
+          "name": "[capital-returns] recordDate",
+          "type": "date",
+          "description": "기준일"
+        },
+        {
+          "name": "[capital-returns] paymentDate",
+          "type": "date",
+          "description": "지급일"
+        },
+        {
+          "name": "[spp] code",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "[spp] price",
+          "type": "number",
+          "description": "SPP 가격"
+        },
+        {
+          "name": "[spp] currency",
+          "type": "string",
+          "description": "통화"
+        },
+        {
+          "name": "[spp] maxAmount",
+          "type": "number",
+          "description": "최대 청약 금액"
+        },
+        {
+          "name": "[spp] minAmount",
+          "type": "number",
+          "description": "최소 청약 금액"
+        },
+        {
+          "name": "[spp] recordDate",
+          "type": "date",
+          "description": "기준일"
+        },
+        {
+          "name": "[spp] despatchDate",
+          "type": "date",
+          "description": "발송일"
+        },
+        {
+          "name": "[spp] offerCloseDate",
+          "type": "date",
+          "description": "청약 마감일"
+        }
+      ],
+      "example": "GET https://eodhd.com/api/asx-corporate-actions?api_token=YOUR_TOKEN&type=dividends&symbol=PMV.AU&fmt=json"
+    }
+  ],
+  "rate_limits": "요청당 1 API 콜 소비(\"1 API call per request\"). 일일 한도는 페이지에 별도 명시 없음(EODHD 계정 플랜의 공통 일일 콜 한도를 따름 — 본 페이지 미기재). 429 = rate limit 초과.",
+  "pricing_notes": "Fundamentals 플랜 및 All-in-One 플랜에 포함(\"Fundamentals and All-in-One plans\"). 베타(beta) 단계 엔드포인트. 플랜 미포함 시 403 응답.",
+  "caveats": [
+    "⚠️ ASX(호주, .AU 접미사) 상장 종목 전용 — 한국 코스피/코스닥과 무관. stockpick 도메인에 직접 활용 불가(타 시장 참고/완결성 목적)",
+    "베타(beta) 엔드포인트 — 스키마/동작 변경 가능성 있음",
+    "데이터는 ASX ReferencePoint 피드(E34)에서 하루 1회만 임포트 → 당일 변경은 최대 24시간 지연 반영",
+    "type 별로 data 배열 record 스키마가 다름(필드 셋 상이) — 코드에서 타입별 파싱 분기 필요. _asx_extra 객체도 dividends/splits 에서만 확인됨",
+    "buybacks·other 등 'sparse categories'는 record 수가 적을 수 있음(예시 응답 미제공)",
+    "_asx_extra 하위 필드(특히 dividends 의 transaction_type·comment)는 2개 fetch 간 약간 불일치 — fetch 모델 요약 편차 가능성. 코드 구현 전 실제 API 응답으로 최종 필드 검증 필요",
+    "date_from/date_to 는 event date(ex-date) 기준 inclusive 라고 1차 fetch 가 기술 — 직접 검증 권고",
+    "fmt 는 현재 json 만 지원(csv 미지원)",
+    "EODHD 문서는 JS SPA 성향 → 단일 직접 WebFetch 시 본문 비는 위험. 본 추출은 r.jina.ai 프록시 + 직접 경로 2회 교차로 보강한 결과"
+  ]
+}

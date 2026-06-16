@@ -1,0 +1,127 @@
+{
+  "section": "matlab-connector",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/matlab-api-connector-and-example",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보, 2회 교차 확인)",
+  "auth": "API 키를 쿼리 파라미터 api_token 으로 전달 (예: ...&api_token=YOUR_API_KEY). 데모 키 api_token=demo 는 AAPL.US 에만 동작. 페이지 본문 기준 ?api_token= 형식(EODHD 표준과 일치).",
+  "base_url": "http://nonsecure.eodhd.com/api (이 페이지는 MATLAB 호환을 위해 HTTPS 가 아닌 HTTP + nonsecure.eodhd.com 서브도메인 사용을 권장. EODHD 표준 base_url 은 https://eodhd.com/api 이나 본 페이지는 레거시 nonsecure 경로를 명시)",
+  "notes": "이 페이지는 신규 REST 엔드포인트를 정의하는 명세서가 아니라 **MATLAB 환경에서 기존 EODHD API 를 사용하는 통합 튜토리얼**이다. 두 가지 접근을 제시한다. (1) 직접 호출: MATLAB 의 webread() 로 레거시 'table.csv' URL 을 호출하고 textscan() 으로 CSV 를 파싱. 페이지 원문 \"basically, all you need is to change the beginning of the URL to http://nonsecure.eodhd.com/api/table.csv and then add your API Key as an additional parameter.\" 및 \"it's better to use HTTP instead of HTTPS for MatLab projects\" (HTTPS 사용 시 자동 리다이렉트로 문제 발생). (2) 서드파티 커넥터 EODML: UndocumentedMatlab.com 에서 EODML.zip 을 받아 사용하며, prices(live/historical)·fundamental·earnings 데이터타입을 함수 호출 형태로 래핑한다. EODML 은 EODHD 가 아닌 외부(UndocumentedMatlab) 저작물로, 케이스 비민감 파라미터명·유연한 날짜 형식(정수 20191203 또는 문자열 '2019/12/13')을 지원한다고 기재. table.csv 의 날짜 파라미터(a/b/c=시작 월/일/연, d/e/f=종료 월/일/연, g=빈도)는 Yahoo Finance 레거시 호환 스타일이다. EODML 의 fundamental 호출은 General/Highlights/Valuation/SharesStats/Technicals/SplitsDividends/ESGScores/Earnings/Financials 중첩 구조 struct 를 반환한다고 기재. 본 페이지는 한국 KRX 주식과 직접 관련 없음(stockpick 도메인 무관, 완결성 기록용).",
+  "endpoints": [
+    {
+      "name": "table.csv (레거시 EOD 가격 CSV)",
+      "method": "GET",
+      "url_pattern": "/api/table.csv",
+      "description": "MATLAB webread() 로 직접 호출하는 레거시 EOD 가격 데이터 엔드포인트(Yahoo Finance 레거시 호환 스타일 파라미터). 본 페이지가 명시적으로 보여주는 유일한 직접 호출 URL. 응답은 CSV.",
+      "query_params": [
+        {
+          "name": "s",
+          "type": "string",
+          "required": true,
+          "description": "종목 심볼(EODHD 형식, 예: AAPL.US)"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키. 데모 값 demo 는 AAPL.US 에만 동작"
+        },
+        {
+          "name": "a",
+          "type": "integer",
+          "required": false,
+          "description": "시작일 월(0-base 가능, 예시에서 a=0). Yahoo 레거시 스타일"
+        },
+        {
+          "name": "b",
+          "type": "integer",
+          "required": false,
+          "description": "시작일 일(예시 b=1)"
+        },
+        {
+          "name": "c",
+          "type": "integer",
+          "required": false,
+          "description": "시작일 연(예시 c=2000)"
+        },
+        {
+          "name": "d",
+          "type": "integer",
+          "required": false,
+          "description": "종료일 월(예시 d=5)"
+        },
+        {
+          "name": "e",
+          "type": "integer",
+          "required": false,
+          "description": "종료일 일(예시 e=16)"
+        },
+        {
+          "name": "f",
+          "type": "integer",
+          "required": false,
+          "description": "종료일 연(예시 f=2017)"
+        },
+        {
+          "name": "g",
+          "type": "string",
+          "required": false,
+          "description": "빈도. 'd' = 일간(daily)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "Date",
+          "type": "string",
+          "description": "거래일"
+        },
+        {
+          "name": "Open",
+          "type": "number",
+          "description": "시가"
+        },
+        {
+          "name": "High",
+          "type": "number",
+          "description": "고가"
+        },
+        {
+          "name": "Low",
+          "type": "number",
+          "description": "저가"
+        },
+        {
+          "name": "Close",
+          "type": "number",
+          "description": "종가"
+        },
+        {
+          "name": "Volume",
+          "type": "number",
+          "description": "거래량"
+        },
+        {
+          "name": "Adjusted Close",
+          "type": "number",
+          "description": "수정 종가"
+        }
+      ],
+      "response_format": "CSV (HeaderLines 1, comma-delimited; MATLAB textscan 포맷 '%s%f%f%f%f%f%f')",
+      "example": "url = 'http://nonsecure.eodhd.com/api/table.csv?s=AAPL.US&api_token=YOUR_API_KEY&a=0&b=1&c=2000&d=5&e=16&f=2017&g=d'; options = weboptions('ContentType','text'); s=webread(url,options); C = textscan(s, '%s%f%f%f%f%f%f', 'HeaderLines', 1, 'delimiter', ',', 'CollectOutput', 0);"
+    }
+  ],
+  "rate_limits": "페이지 본문에 API 콜 소비량·일일 한도 명시 없음. (등록 안내 http://eodhd.com/register 만 언급)",
+  "pricing_notes": "페이지 본문에 어느 플랜에 포함되는지 명시 없음. table.csv 는 EOD 가격 데이터를 반환하므로 일반적으로 EOD All World/All-In-One 계열에 속하나, 본 페이지가 직접 언급하지 않아 추정은 보류. EODML 의 fundamental 호출이 다루는 데이터는 Fundamentals 데이터에 해당하나 역시 페이지에 플랜 매핑 기재 없음.",
+  "caveats": [
+    "페이지 성격: REST 명세서가 아니라 MATLAB 통합 튜토리얼. 신규 엔드포인트 정의 없음 — 기존 EOD 데이터를 레거시 table.csv 경로로 노출.",
+    "HTTPS 가 아닌 HTTP + nonsecure.eodhd.com 사용을 권장(MATLAB 의 HTTPS 자동 리다이렉트 문제 회피). 이는 본 튜토리얼 특수 사정이며 EODHD 표준 base_url(https://eodhd.com/api)과 다름.",
+    "table.csv 의 a/b/c/d/e/f/g 파라미터는 Yahoo Finance 레거시 호환 스타일. EODHD 표준 EOD 엔드포인트(/api/eod/{symbol} + from/to/period)와 별개 경로이므로, 정식 코드에서는 표준 /api/eod 사용 권장(table.csv 의 장기 지원 보장 여부는 페이지에 언급 없음).",
+    "EODML 커넥터는 EODHD 가 아닌 서드파티(UndocumentedMatlab.com)가 만든 EODML.zip. EODHD 공식 라이브러리 아님 — 유지보수/신뢰성 별도 검증 필요.",
+    "EODML 함수 시그니처(prices/fundamental/earnings 의 파라미터·반환 struct 필드)는 MATLAB 래퍼 인터페이스이지 REST 응답 스키마가 아님. 실제 REST 필드는 해당 데이터 API 본체 문서로 교차 확인 필요.",
+    "콜 소비량·요금 플랜이 본 페이지에 전무 — 정량 결론 불가.",
+    "한국 KRX 주식과 무관(stockpick 도메인 부적합). 완결성 기록용.",
+    "단일 페이지 출처이나 동일 페이지를 r.jina.ai 로 2회 교차 확인하여 인용 일관성 검증함(독립 2차 출처는 아님)."
+  ]
+}

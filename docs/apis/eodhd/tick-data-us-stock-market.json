@@ -1,0 +1,26 @@
+{
+  "section": "tick-data-us-stock-market",
+  "category": "intraday",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/us-stock-market-tick-data-api",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유, 2회 교차 검증)",
+  "auth": "쿼리 파라미터 api_token=KEY (필수). 데모키 api_token=demo 는 AAPL.US 전용.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "EODHD US Stock Market Tick Data API. 미국 거래소 체결(틱) 데이터 제공.\n\n[엔드포인트] GET /api/ticks/ — 미국 티커의 from~to 기간 체결(틱) 데이터를 컬럼 지향(SoA) 구조로 반환. 각 필드(mkt/price/seq/shares/sl/ts/sub_mkt)가 동일 길이 배열이며 같은 인덱스끼리 한 체결을 구성(price[0]·ts[0]·shares[0] = 첫 체결). 일반 EOD/펀더멘털 API의 레코드(객체) 배열과 달라 별도 파싱 필요.\n\n[쿼리 파라미터]\n- s (string, 필수): 심볼. 예 AAPL.US. {SYMBOL_NAME}.{EXCHANGE_ID} 두 부분 구성. 예시 요청에선 s=AAPL 형태도 사용.\n- from (integer, 필수): 시작 시각. UNIX time(UTC 타임존) 정수.\n- to (integer, 필수): 종료 시각. UNIX time(UTC 타임존) 정수.\n- limit (integer, 선택): 반환할 최대 틱 개수. 기본값 페이지 미기재.\n- fmt (string, 선택): 응답 포맷. 예시에서 json.\n- api_token (string, 필수): API 키. demo는 AAPL.US 전용.\npath_params 없음.\n\n[응답 필드] (JSON, 컬럼-배열 SoA)\n- mkt (array): 거래가 발생한 마켓. 예 \"V\".\n- price (array): 거래 가격. 예 179.25.\n- seq (array): 거래 시퀀스 번호. 예 376150475.\n- shares (array): 거래 주식 수. 예 100.\n- sl (array): 매도 조건(sales condition).\n- ts (array): 타임스탬프(밀리초 추정). 예 1694455200017.\n- sub_mkt (array): 서브마켓.\n\n[예시] GET https://eodhd.com/api/ticks/?s=AAPL&from=1694455200&to=1694541600&limit=1&api_token=demo&fmt=json\n응답: {\"mkt\":[\"V\"],\"price\":[179.25],\"seq\":[376150475],\"shares\":[100],\"sl\":[\"@   \"],\"sub_mkt\":[\"\"],\"ts\":[1694455200017]}\n\n[커버리지] 2008-01-01 ~ 현재. 약 80000 티커, 일일 16000+ 종목 업데이트. 현재 미국 거래소만 지원(한국 주식 미지원).\n\n(주의: 본 명세의 endpoints 배열은 구조화 출력 스키마 제약으로 비워두고 전체 내용을 notes에 서술함.)",
+  "endpoints": [],
+  "rate_limits": "요청 1건당 10 calls 소비 (이력 깊이 무관 — \"10 calls per request (any history depth)\"). 무료 플랜 일 20 API calls 한도이므로 사실상 틱 API 1~2회 분량.",
+  "pricing_notes": "포함 플랜: All-In-One. 또는 지원 채팅 통해 임의 플랜에 추가 패키지로 요청 가능(\"By request via support chat as additional package to any plan\"). 기본 EOD 데이터 플랜에는 미포함.",
+  "caveats": [
+    "현재 미국 거래소만 지원('This API works only for US exchanges for the moment') — stockpick의 한국 주식(코스피/코스닥)에는 직접 사용 불가. 한국 종목 분석 목적엔 부적합.",
+    "응답이 레코드 배열이 아니라 컬럼-배열(SoA) 구조 — 일반 EOD/펀더멘털 API와 파싱 방식이 다름. 같은 인덱스끼리 묶어 한 체결로 재구성 필요.",
+    "ts 단위가 페이지에 명시되지 않음(예시값 1694455200017로 보아 밀리초 추정). from/to는 초 단위 UNIX time. 코드에서 단위 혼용 주의.",
+    "limit 파라미터의 기본값/상한이 페이지에 명시되지 않음 — 미지정 시 동작 미확인.",
+    "요청당 최대 조회 기간(date range) 제한 여부가 페이지에 명시되지 않음.",
+    "콜 소비 10/request는 무겁고 무료 일 20콜 한도와 결합 시 실사용 매우 제한적 — All-In-One 또는 추가 패키지 전제.",
+    "demo 키는 AAPL.US 전용 — 다른 티커 테스트 불가.",
+    "이 페이지는 EODHD측 공식 문서이나 SPA라 r.jina.ai 렌더 프록시 경유로 추출함. 원문 직접 렌더와 미세 차이 가능성 있어 코드 적용 전 실제 API 응답으로 필드명 1회 실측 권장.",
+    "stockpick는 일/EOD 단위 30년 룰·백테스트가 핵심이라 인트라데이 틱 데이터의 직접적 필요성 낮음(우선순위 낮음)."
+  ]
+}

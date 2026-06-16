@@ -1,0 +1,56 @@
+{
+  "section": "stock-market-logos",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/40-000-stock-market-logos-api",
+  "fetch_status": "ok (마케팅 페이지 https://eodhd.com/financial-apis/40-000-stock-market-logos-api 는 SPA/마케팅이라 엔드포인트 본문 빈약 → 해당 페이지가 링크하는 공식 기술문서 https://eodhd.com/marketplace/unicornbay/logo/docs 를 r.jina.ai 프록시로 확보. 양쪽 모두 fetch 성공)",
+  "auth": "api_token 쿼리 파라미터로 인증: `?api_token=<KEY>` (예시는 demo 토큰). 문서상 Authorization 토큰명은 \"EODToken\". 별도 헤더 인증 표기는 본 페이지에 명시 없음 — 쿼리 토큰 방식만 예시됨.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "EODHD \"Stock Market Logos API\" (마켓플레이스 공급자 Unicornbay). 시장 가격/재무 데이터가 아니라 회사 로고 이미지 제공 서비스다. 단일 엔드포인트로 종목별 로고를 PNG 바이너리로 반환한다(JSON 응답 필드 없음). 마케팅 카피: \"40,000 stock market company logos available via a single API endpoint\", \"covers over 60+ stock exchanges worldwide\", \"Each logo is provided as a 200x200px PNG with transparency\", \"Well-structured by exchange and ticker name\", \"The database is constantly updated\". SVG 포맷은 별도 product(\"Stock Market Logos API (SVG extension)\")로 분리. 지원 거래소 코드 목록에 KQ(코스닥)·KO(코스피) 등 한국 거래소가 포함되어 한국 종목 로고도 요청 가능. 다만 가격/거래량/재무 같은 분석 입력 데이터가 아니므로 stockpick 의 data/rules/backtest 모듈과는 무관하고, 웹앱(M4) UI 의 종목 로고 표시 용도로만 의미가 있다. 마케팅 페이지에는 엔드포인트 문자열·파라미터·예시 URL 이 적혀 있지 않고, 본문에서 기술 명세는 docs 링크(https://eodhd.com/marketplace/unicornbay/logo/docs)로 안내한다.",
+  "endpoints": [
+    {
+      "name": "Get Ticker Logo",
+      "method": "GET",
+      "url_pattern": "/api/logo/{symbol}",
+      "description": "종목별 회사 로고를 200x200px 투명 배경 PNG 바이너리로 반환. 응답은 image/png (JSON 아님).",
+      "path_params": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "description": "종목 식별자. 형식 {ticker}.{exchange} (예: AAPL.US). exchange 부분에 KQ(코스닥)·KO(코스피) 등 60+ 거래소 코드 사용 가능"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰. 예시는 demo 토큰 사용"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(binary PNG)",
+          "type": "image/png",
+          "description": "200x200px 투명 배경 PNG 이미지 바이너리. 구조화된 JSON 응답 필드 없음"
+        }
+      ],
+      "response_format": "image/png (PNG 바이너리)",
+      "example": "https://eodhd.com/api/logo/AAPL.US?api_token=demo"
+    }
+  ],
+  "rate_limits": "문서 기재: \"100 000 API calls per 24 hours\", \"1000 API requests per minute\". 콜 소비량: \"1 API request = 10 API calls\" (로고 1개 요청 = 10 콜 소비). 따라서 일 한도 10만 콜 기준 하루 최대 약 10,000 로고 요청.",
+  "pricing_notes": "별도 마켓플레이스 구독 — $299/year (annual). 공급자 Unicornbay 의 마켓플레이스 add-on 으로, EODHD 의 기본 플랜(EOD All World / Fundamentals / All-In-One)에 포함된다는 표기는 본 페이지에 없음(별도 구매). 본문에 정확한 plan tier 포함 여부 명시 없음.",
+  "caveats": [
+    "마케팅 페이지 자체에는 엔드포인트/파라미터/예시 URL 이 적혀 있지 않다. 기술 명세는 페이지가 링크하는 공식 docs(https://eodhd.com/marketplace/unicornbay/logo/docs)에서 추출했다 — 두 페이지를 합쳐 보고.",
+    "시장 데이터(가격·재무·거래량)가 아니라 회사 로고 이미지 서비스다. stockpick 의 백테스트/룰/수집 파이프라인과 무관 — 웹앱(M4) UI 장식용으로만 의미. 데이터소스로 채택 권고하지 않음.",
+    "응답은 image/png 바이너리로 구조화된 JSON 필드가 없다. 코드에서 파싱할 응답 스키마가 없음.",
+    "SVG 가 필요하면 별도 product(SVG extension)로 분리되어 있어 본 엔드포인트로는 PNG 만 반환.",
+    "콜 소비 1요청=10콜 함정: 로고 한 장 받는 데 10 콜이 차감되므로 대량 로고 수집 시 일 한도(10만 콜)를 빠르게 소진.",
+    "Authorization 토큰명 'EODToken' 및 401/403/404/429 상태코드는 요약 모델이 EODHD 공통 규약으로 보강했을 가능성이 있어 본 페이지 명시 사실로 100% 단정은 보류. 인증은 ?api_token= 쿼리 방식이 페이지 예시(AAPL.US?api_token=demo)로 확정됨.",
+    "KRX(KQ/KO) 거래소 코드가 지원 목록에 있으나, 실제 한국 종목 로고 커버리지(어느 종목까지, 폐지종목 포함 여부)는 페이지에 수치로 명시되지 않음 — 실사용 전 demo/실 토큰으로 표본 검증 필요.",
+    "가격·플랜은 시점 민감(마켓플레이스 가격 변동 가능) — 2026-06-16 기준."
+  ]
+}

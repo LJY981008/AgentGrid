@@ -1,0 +1,349 @@
+{
+  "section": "macroeconomic-data-bonds-rates-fx",
+  "category": "macro",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/macroeconomic-data-api",
+  "fetch_status": "ok — r.jina.ai 렌더 프록시 + eodhd.com 직접 WebFetch 2개 독립 경로 교차 일치. web.archive.org 는 환경상 차단(불필요).",
+  "auth": "쿼리 파라미터 api_token=YOUR_TOKEN (모든 요청 필수). 표준 EODHD EOD 엔드포인트(/api/eod/) 규약을 그대로 사용.",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지(제목: \"Macroeconomic Data API: Bonds, Rates & FX Reference\")는 별도 신규 엔드포인트를 정의하지 않고, 표준 End-of-Day 엔드포인트(/api/eod/{SYMBOL})를 통해 접근하는 두 개의 가상 거래소(virtual exchange)를 문서화한다. (1) GBOND = 국채 수익률(sovereign bond yields), (2) MONEY = 머니마켓 금리(EURIBOR, ECB 환율, Norges Bank 환율, deprecated LIBOR). 즉 별도 schema 가 아니라 EOD OHLCV 응답 구조를 그대로 재사용하며, close 가 해당일의 수익률/금리 값이다. 페이지 헤딩 순서: Government Bonds (GBOND) / Symbol List / Request Example / EURIBOR / LIBOR (Deprecated) / ECB Exchange Rates / Norges Bank Exchange Rates / Risk-Free Rates and Policy Rates / Coming Next / Response Format / Known Limitations. ⚠️ 한국(KRX) 주식 분석(stockpick) 도메인과는 직접 관련 없음 — 한국 국채/원화 관련 심볼이 GBOND/MONEY 가상거래소에 포함되는지 이 페이지에는 명시되지 않음(미확인). 이 추출은 EODHD 문서 명세 아카이브 완결 목적.",
+  "endpoints": [
+    {
+      "name": "Government Bonds (GBOND) EOD",
+      "method": "GET",
+      "url_pattern": "/eod/{SYMBOL}.GBOND",
+      "description": "국채 수익률 시계열. 표준 EOD 엔드포인트로 .GBOND 접미 심볼 조회. 28개국 117개 국채 수익률 시리즈, 일별 값, 2000년대 이후. 테너 예: 1M,3M,6M,1Y,2Y,3Y,5Y,7Y,10Y,20Y,30Y.",
+      "example": "https://eodhd.com/api/eod/UK10Y.GBOND?api_token=YOUR_TOKEN&fmt=json",
+      "path_params": [
+        {
+          "name": "SYMBOL",
+          "type": "string",
+          "description": "국채 심볼 (예: UK10Y = 영국 10년물). 형식은 {국가코드}{테너}.GBOND. 전체 목록은 Symbol List 엔드포인트 참조."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷 (json 또는 csv). 문서 예시는 json",
+          "default": "json"
+        },
+        {
+          "name": "from",
+          "type": "string (YYYY-MM-DD)",
+          "required": false,
+          "description": "표준 EOD 날짜 범위 시작 (페이지에 기본값 미기재)",
+          "default": ""
+        },
+        {
+          "name": "to",
+          "type": "string (YYYY-MM-DD)",
+          "required": false,
+          "description": "표준 EOD 날짜 범위 끝 (페이지에 기본값 미기재)",
+          "default": ""
+        },
+        {
+          "name": "period",
+          "type": "string",
+          "required": false,
+          "description": "표준 EOD period 파라미터 (페이지에 허용값/기본값 미기재)",
+          "default": ""
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false,
+          "description": "표준 EOD 정렬 파라미터 (페이지에 기본값 미기재)",
+          "default": ""
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "관측일"
+        },
+        {
+          "name": "open",
+          "type": "number",
+          "description": "수익률 값. 금리 시리즈는 보통 close 와 동일(하루 1개 공시값)"
+        },
+        {
+          "name": "high",
+          "type": "number",
+          "description": "수익률 값. 보통 close 와 동일"
+        },
+        {
+          "name": "low",
+          "type": "number",
+          "description": "수익률 값. 보통 close 와 동일"
+        },
+        {
+          "name": "close",
+          "type": "number",
+          "description": "해당일의 주요 수익률 값(primary value)"
+        },
+        {
+          "name": "adjusted_close",
+          "type": "number",
+          "description": "이 시리즈에서는 close 와 동일"
+        },
+        {
+          "name": "volume",
+          "type": "integer",
+          "description": "해당하는 경우(선물/repo) 거래량, 금리 시리즈는 0"
+        }
+      ],
+      "response_format": "JSON array of daily observations (fmt=csv 도 표준 EOD 규약상 지원)"
+    },
+    {
+      "name": "GBOND Symbol List",
+      "method": "GET",
+      "url_pattern": "/exchange-symbol-list/GBOND",
+      "description": "GBOND 가상거래소의 전체 심볼 목록 조회 (표준 exchange-symbol-list 엔드포인트 재사용)",
+      "example": "https://eodhd.com/api/exchange-symbol-list/GBOND?api_token=YOUR_TOKEN&fmt=json",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷",
+          "default": "json"
+        }
+      ],
+      "response_fields": []
+    },
+    {
+      "name": "EURIBOR (MONEY) EOD",
+      "method": "GET",
+      "url_pattern": "/eod/{TICKER}.MONEY",
+      "description": "EURIBOR 머니마켓 금리. 가용 티커: EURIBOR1W, EURIBOR1M, EURIBOR3M, EURIBOR6M, EURIBOR12M (각각 1주/1개월/3개월/6개월/12개월).",
+      "example": "https://eodhd.com/api/eod/EURIBOR3M.MONEY?api_token=YOUR_TOKEN&fmt=json",
+      "path_params": [
+        {
+          "name": "TICKER",
+          "type": "string",
+          "description": "EURIBOR{테너}.MONEY 형식 (예: EURIBOR3M)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷",
+          "default": "json"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string",
+          "description": "관측일"
+        },
+        {
+          "name": "close",
+          "type": "number",
+          "description": "해당일 금리 값 (open/high/low 는 보통 close 와 동일)"
+        },
+        {
+          "name": "adjusted_close",
+          "type": "number",
+          "description": "close 와 동일"
+        },
+        {
+          "name": "volume",
+          "type": "integer",
+          "description": "금리 시리즈는 0"
+        }
+      ],
+      "response_format": "JSON array"
+    },
+    {
+      "name": "ECB Exchange Rates (MONEY) EOD",
+      "method": "GET",
+      "url_pattern": "/eod/ECBEUR{CCY}.MONEY",
+      "description": "유로(EUR)를 기준통화로 한 ECB 참조 환율. 42개 통화쌍.",
+      "example": "https://eodhd.com/api/eod/ECBEURUSD.MONEY?api_token=YOUR_TOKEN&fmt=json",
+      "path_params": [
+        {
+          "name": "CCY",
+          "type": "string",
+          "description": "상대 통화 코드 (예: USD → ECBEURUSD)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷",
+          "default": "json"
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "required": false,
+          "description": "표준 EOD 날짜 범위 시작",
+          "default": ""
+        },
+        {
+          "name": "to",
+          "type": "string",
+          "required": false,
+          "description": "표준 EOD 날짜 범위 끝",
+          "default": ""
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string",
+          "description": "관측일"
+        },
+        {
+          "name": "close",
+          "type": "number",
+          "description": "해당일 환율 값"
+        }
+      ],
+      "response_format": "JSON array"
+    },
+    {
+      "name": "Norges Bank Exchange Rates (MONEY) EOD",
+      "method": "GET",
+      "url_pattern": "/eod/NORGE{CCY}NOK.MONEY",
+      "description": "NOK(노르웨이 크로네)를 상대통화로 한 Norges Bank 환율. 38개 통화쌍.",
+      "example": "https://eodhd.com/api/eod/NORGEUSDNOK.MONEY?api_token=YOUR_TOKEN&fmt=json",
+      "path_params": [
+        {
+          "name": "CCY",
+          "type": "string",
+          "description": "기준 통화 코드 (예: USD → NORGEUSDNOK)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷",
+          "default": "json"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string",
+          "description": "관측일"
+        },
+        {
+          "name": "close",
+          "type": "number",
+          "description": "해당일 환율 값"
+        }
+      ],
+      "response_format": "JSON array"
+    },
+    {
+      "name": "LIBOR (MONEY, Deprecated) EOD",
+      "method": "GET",
+      "url_pattern": "/eod/LIBOR{CCY}{TENOR}.MONEY",
+      "description": "LIBOR 금리 (DEPRECATED — 어떤 통화/테너도 더 이상 신규 공시 없음. 과거 데이터만 접근 가능). 마지막 공시일: EUR 2021-12-31, JPY 2022-12-30, GBP 2023-03-31, USD 2024-09-30.",
+      "example": "https://eodhd.com/api/eod/LIBORUSD3M.MONEY?api_token=YOUR_TOKEN&fmt=json",
+      "path_params": [
+        {
+          "name": "CCY",
+          "type": "string",
+          "description": "통화 코드 (예: USD, EUR)"
+        },
+        {
+          "name": "TENOR",
+          "type": "string",
+          "description": "테너 (예: 3M, 2M)"
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰",
+          "default": ""
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷",
+          "default": "json"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string",
+          "description": "관측일"
+        },
+        {
+          "name": "close",
+          "type": "number",
+          "description": "해당일 금리 값 (과거 데이터 한정)"
+        }
+      ],
+      "response_format": "JSON array"
+    }
+  ],
+  "rate_limits": "엔드포인트별 API 콜 소비 (페이지 명시): GBOND = 요청당 1콜. MONEY(EURIBOR/ECB/Norges Bank/LIBOR) = 요청당 10콜. 반환 연수와 무관하게 고정. (일일 한도는 이 페이지에 미기재 — 전사 공통 플랜 한도 적용.)",
+  "pricing_notes": "\"Fundamentals Data Feed\" 플랜 및 \"All-in-One\" 플랜에 포함 (페이지 명시). 무료 플랜 포함 여부는 이 페이지에 미기재.",
+  "caveats": [
+    "MONEY 가상거래소는 요청당 10 API 콜을 소비 — 반환 연수와 무관. 콜 예산 주의.",
+    "금리/수익률 시리즈는 하루 1개 공시값이라 open/high/low 가 보통 close 와 동일하고 adjusted_close=close, volume=0. OHLCV 형식이지만 실질은 단일 값 시계열.",
+    "LIBOR 는 deprecated — 신규 관측 없음, 과거 데이터만. 마지막 공시일(USD 2024-09-30 등) 이후 데이터 없음.",
+    "ECB 가 참조 통화를 추가/폐지할 수 있어 통화쌍 구성이 시간에 따라 변동.",
+    "Norges Bank 환율은 Norges Bank/상업은행에 구속력 없는 참조값이라는 면책 고지.",
+    "SOFR/SONIA/€STR 등 무위험 정책금리는 이 페이지가 아닌 별도 'Interest Rates API' 로 제공됨.",
+    "페이지에 from/to/period/order 등 표준 EOD 파라미터가 언급되나 각 기본값·허용값은 명시 안 됨 → 표준 EOD 문서 별도 확인 필요(미확인).",
+    "⚠️ 페이지 제목은 'Bonds, Rates & FX Reference'. /macro-indicator/ 같은 거시지표(GDP/CPI) 엔드포인트는 이 페이지에 없음 — 3개 독립 추출 모두 일관 확인.",
+    "한국(KRX) 국채/원화 커버리지 포함 여부는 이 페이지에 미기재(미확인) — stockpick 한국주식 도메인 직접 활용성 낮음.",
+    "web.archive.org 경로는 환경상 차단되어 미확인. 단 r.jina.ai 프록시 2회 + eodhd.com 직접 fetch 1회가 모두 일치하여 본문 검증은 충분."
+  ]
+}

@@ -24,7 +24,9 @@
 
 > 외부 API 실제 명세를 구조화 JSON 캡처(코드가 추측 아닌 실측 참조). 6개월 주기 재캡처.
 
-- [[apis/README|API 명세 인덱스]] — **Tiingo**(미국 가격 소스) 16섹션/34엔드포인트. 핵심: end-of-day(raw OHLCV+adjClose+divCash)·corporate-actions·fundamentals. 인증 `Token`(Bearer 아님)·심볼 대시(-)·재배포 금지
+- [[apis/README|API 명세 인덱스]] — 외부 API 권위 명세(환각 방지). 코드는 `.claude/rules/api-spec-reference.md` 로 자동 참조
+  - **Tiingo**(파일럿 가격) [[apis/tiingo/_index|16섹션/34EP]] — end-of-day(raw OHLCV+adjClose+divCash), 인증 `Token` 헤더(Bearer 아님)·심볼 대시(-)
+  - **EODHD**(M2 본격 가격) [[apis/eodhd/README|62섹션/189EP]] — `/api/eod/{SYM}`(raw OHLC+adjusted_close), 인증 `?api_token=` 쿼리·폐지 2000~·지수 historical constituents(생존편향 보정)
 
 ## 🔬 리서치 (research/)
 

@@ -1,0 +1,252 @@
+{
+  "section": "us-treasury-interest-rates",
+  "category": "macro",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/us-treasury-ust-interest-rates-api-beta",
+  "fetch_status": "ok — r.jina.ai 프록시로 본문·코드블록·파라미터표·출력필드표·JSON 응답 예시 모두 텍스트로 완전 렌더 확보(3회 호출 일관). web.archive.org 는 fetch 불가였으나 본문이 이미 완전 확보되어 불필요.",
+  "auth": "쿼리 파라미터 `api_token` (필수, 모든 엔드포인트). 예: `?api_token=YOUR_TOKEN`. 예시에 `fmt=json` 함께 사용.",
+  "base_url": "https://eodhd.com/api/ust/",
+  "notes": "EODHD US Treasury (UST) Interest Rates API (beta). 미국 재무부 공식 금리 데이터셋(Treasury bills, par yield curve, long-term rates, real yield curve)에 구조화·사용 편의 접근을 제공한다고 페이지에 기재. 용도(원문): \"macro research, fixed-income analytics, discounting/cost of capital, yield curve modeling, and building risk-free rate baselines in trading/portfolio systems\". 4개 base 엔드포인트(Bill Rates, Long-Term Rates, Yield Rates, Real Yield Rates)로 구성. 응답 공통 포맷: { \"meta\": {\"total\": N}, \"data\": [ ... ] } JSON. 코드 예시는 cURL/PHP/Python/R 4종 제공. 모든 엔드포인트가 동일하게 filter[year] 1개만 받으며(bill-rates만 page[limit]·page[offset] 페이지네이션 예시 추가), HTTP 메서드는 GET.",
+  "endpoints": [
+    {
+      "name": "US Treasury Bill Rates",
+      "method": "GET",
+      "url_pattern": "/api/ust/bill-rates",
+      "description": "Daily Treasury Bill Rates (T-Bills) 제공: discount·coupon rate, average rate, maturity, CUSIP. (원문: \"Provides Daily Treasury Bill Rates (T-Bills): discount and coupon rates, average rates, maturity, and CUSIP.\")",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "Your API access token"
+        },
+        {
+          "name": "filter[year]",
+          "type": "integer",
+          "required": false,
+          "default": "현재 연도 (미지정 시)",
+          "description": "Filter by year (1900 – current year + 1). If not mentioned – current year."
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "description": "페이지네이션 limit (요청 예시에 page[limit]=100 으로 등장). 설명문은 페이지에 별도 없음"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "description": "페이지네이션 offset (요청 예시에 page[offset]=0 으로 등장). 설명문은 페이지에 별도 없음"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 모든 코드 예시 URL에 fmt=json 으로 등장. 페이지에 파라미터 표 항목으로는 명시 안 됨(예시에만)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "Observation date"
+        },
+        {
+          "name": "tenor",
+          "type": "string",
+          "description": "Bill tenor (e.g., 4WK, 13WK)"
+        },
+        {
+          "name": "discount",
+          "type": "number",
+          "description": "Discount rate"
+        },
+        {
+          "name": "coupon",
+          "type": "number",
+          "description": "Coupon equivalent rate"
+        },
+        {
+          "name": "avg_discount",
+          "type": "number",
+          "description": "Average discount rate"
+        },
+        {
+          "name": "avg_coupon",
+          "type": "number",
+          "description": "Average coupon equivalent rate"
+        },
+        {
+          "name": "maturity_date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "Maturity date"
+        },
+        {
+          "name": "cusip",
+          "type": "string",
+          "description": "CUSIP identifier"
+        }
+      ],
+      "response_format": "JSON — { \"meta\": {\"total\": N}, \"data\": [ {date, tenor, discount, coupon, avg_discount, avg_coupon, maturity_date, cusip}, ... ] }",
+      "example": "https://eodhd.com/api/ust/bill-rates?api_token=YOUR_TOKEN&filter[year]=2012&page[limit]=100&page[offset]=0&fmt=json  →  예시 응답: {\"meta\":{\"total\":120},\"data\":[{\"date\":\"2026-01-02\",\"tenor\":\"4WK\",\"discount\":3.58,\"coupon\":3.64,\"avg_discount\":3.58,\"avg_coupon\":3.64,\"maturity_date\":\"2026-02-03\",\"cusip\":\"912797SJ7\"}, ...]}"
+    },
+    {
+      "name": "US Treasury Long-Term Rates",
+      "method": "GET",
+      "url_pattern": "/api/ust/long-term-rates",
+      "description": "장기 국채 금리. (원문: \"Long-term Treasury rates. This feed combines 'Daily Treasury Real Long-Term Rate Averages' and 'Daily Treasury Long-Term Rates' into one dataset.\")",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "Your API access token"
+        },
+        {
+          "name": "filter[year]",
+          "type": "integer",
+          "required": false,
+          "default": "현재 연도 (미지정 시)",
+          "description": "Filter by year (1900 – current year + 1). If not mentioned – current year."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 코드 예시 URL에 fmt=json 으로 등장"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "Observation date"
+        },
+        {
+          "name": "rate_type",
+          "type": "string",
+          "description": "Rate series identifier (examples include BC_20year, Over_10_Years, Real_Rate)"
+        },
+        {
+          "name": "rate",
+          "type": "number",
+          "description": "Rate value"
+        },
+        {
+          "name": "extrapolation_factor",
+          "type": "number or null",
+          "description": "Extrapolation factor where applicable"
+        }
+      ],
+      "response_format": "JSON — { \"meta\": {\"total\": N}, \"data\": [ {date, rate_type, rate, extrapolation_factor}, ... ] }",
+      "example": "https://eodhd.com/api/ust/long-term-rates?api_token=YOUR_TOKEN&filter[year]=2020&fmt=json  →  예시 응답: {\"meta\":{\"total\":60},\"data\":[{\"date\":\"2026-01-02\",\"rate_type\":\"BC_20year\",\"rate\":4.81,\"extrapolation_factor\":null}, {\"date\":\"2026-01-02\",\"rate_type\":\"Over_10_Years\",\"rate\":4.78,\"extrapolation_factor\":null}, {\"date\":\"2026-01-02\",\"rate_type\":\"Real_Rate\",\"rate\":2.55,\"extrapolation_factor\":null}, ...]}"
+    },
+    {
+      "name": "US Treasury Yield Rates (Par Yield Curve)",
+      "method": "GET",
+      "url_pattern": "/api/ust/yield-rates",
+      "description": "Daily Treasury Par Yield Curve Rates (테너별 명목 수익률 곡선). (원문: \"Daily Treasury Par Yield Curve Rates (nominal yield curve by tenor).\")",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "Your API access token"
+        },
+        {
+          "name": "filter[year]",
+          "type": "integer",
+          "required": false,
+          "default": "현재 연도 (미지정 시)",
+          "description": "Filter by year (1900 – current year + 1). If not mentioned – current year."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 코드 예시 URL에 fmt=json 으로 등장"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "Observation date"
+        },
+        {
+          "name": "tenor",
+          "type": "string",
+          "description": "Tenor (e.g., 1M, 6M, 2Y, 10Y)"
+        },
+        {
+          "name": "rate",
+          "type": "number",
+          "description": "Par yield for the given tenor"
+        }
+      ],
+      "response_format": "JSON — { \"meta\": {\"total\": N}, \"data\": [ {date, tenor, rate}, ... ] }",
+      "example": "https://eodhd.com/api/ust/yield-rates?api_token=YOUR_TOKEN&filter[year]=2023&fmt=json  →  예시 응답: {\"meta\":{\"total\":280},\"data\":[{\"date\":\"2026-01-02\",\"tenor\":\"1M\",\"rate\":3.72}, {\"date\":\"2026-01-02\",\"tenor\":\"1.5M\",\"rate\":3.71}, {\"date\":\"2026-01-02\",\"tenor\":\"3M\",\"rate\":3.65}, ...]}"
+    },
+    {
+      "name": "US Treasury Real Yield Rates (Par Real Yield Curve)",
+      "method": "GET",
+      "url_pattern": "/api/ust/real-yield-rates",
+      "description": "Daily Treasury Par Real Yield Curve Rates (테너별 실질 수익률 곡선). (원문: \"Daily Treasury Par Real Yield Curve Rates (real yield curve by tenor).\")",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "Your API access token"
+        },
+        {
+          "name": "filter[year]",
+          "type": "integer",
+          "required": false,
+          "default": "현재 연도 (미지정 시)",
+          "description": "Filter by year (1900 – current year + 1). If not mentioned – current year."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "응답 포맷. 코드 예시 URL에 fmt=json 으로 등장"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "description": "Observation date"
+        },
+        {
+          "name": "tenor",
+          "type": "string",
+          "description": "Tenor (e.g., 5Y, 10Y, 30Y)"
+        },
+        {
+          "name": "rate",
+          "type": "number",
+          "description": "Real yield for the given tenor"
+        }
+      ],
+      "response_format": "JSON — { \"meta\": {\"total\": N}, \"data\": [ {date, tenor, rate}, ... ] }",
+      "example": "https://eodhd.com/api/ust/real-yield-rates?api_token=YOUR_TOKEN&filter[year]=2024&fmt=json  →  예시 응답: {\"meta\":{\"total\":100},\"data\":[{\"date\":\"2026-01-02\",\"tenor\":\"5Y\",\"rate\":1.46}, {\"date\":\"2026-01-02\",\"tenor\":\"10Y\",\"rate\":1.94}, {\"date\":\"2026-01-02\",\"tenor\":\"30Y\",\"rate\":2.63}, ...]}"
+    }
+  ],
+  "rate_limits": "API 콜 소비량: \"1 call per request\" (페이지 상단 명시, 엔드포인트 4종 공통). 일일 한도는 이 페이지에 별도 명시 없음 — EODHD 공통 정책(플랜별 일일 호출 한도)이 적용되나 본 페이지엔 미기재.",
+  "pricing_notes": "페이지 명시(원문): \"Available in plans: All-In-One, EOD Historical Data: All World, EOD + Intraday: All World Extended, Free plan.\" → 즉 무료(Free) 플랜에도 포함되며, All-In-One / EOD All World / EOD+Intraday All World Extended 유료 플랜에서도 이용 가능.",
+  "caveats": [
+    "beta API — 페이지 제목에 (beta) 명시. 스키마·동작 변경 가능성 있음.",
+    "데이터 대상이 미국 재무부(US Treasury) 금리이므로 stockpick(한국 코스피/코스닥) 종목 분석과 직접 무관. 무위험금리 베이스라인·할인율 정성 참고 용도 외 한국주식 데이터엔 사용 불가.",
+    "filter[year] 범위는 1900~현재+1로 명시되나, 실제 데이터 시작 연도(커버리지)는 이 페이지에 명시 안 됨 — 미국 재무부 원천상 일부 시리즈는 비교적 최근부터 시작할 수 있으므로 실측 필요(미확인).",
+    "filter[year] 미지정 시 '현재 연도'만 반환 — 전체 이력 일괄 다운로드는 연도별 반복 호출 필요(연도당 1콜).",
+    "page[limit]·page[offset] 는 bill-rates 요청 예시에만 등장하고 파라미터 설명·기본값·최대값이 페이지에 명시되지 않음(다른 3개 엔드포인트에선 예시조차 없음). 페이지네이션 적용 범위·한계 미확정(미확인).",
+    "fmt 파라미터는 코드 예시 URL(fmt=json)에만 등장하고 파라미터 표에는 없음 — 다른 EODHD API 관례상 csv 등 지원 가능성 있으나 본 페이지 미명시.",
+    "long-term-rates 는 'Real Long-Term Rate Averages' + 'Long-Term Rates' 두 원천을 한 데이터셋으로 결합한 것이라 rate_type 으로 시리즈를 구분해야 함(혼합 주의).",
+    "교차검증: 단일 페이지(공식 EODHD 문서)만 출처. 다만 동일 URL을 프록시로 3회 호출해 본문·코드·표·JSON 예시가 일관 재현됨을 확인(환각 아님). web.archive.org 는 fetch 차단으로 미확보."
+  ]
+}

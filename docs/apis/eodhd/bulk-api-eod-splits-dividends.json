@@ -1,0 +1,201 @@
+{
+  "section": "bulk-api-eod-splits-dividends",
+  "category": "bulk",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/bulk-api-eod-splits-dividends",
+  "fetch_status": "partial — r.jina.ai 프록시로 본문 텍스트 확보(2회 교차 검증). 단 응답 필드 표/예시 출력은 페이지에 텍스트가 아닌 이미지(\"Bulk Download EOD Data JSON Output for APPL and MSFT\")로만 존재 → 응답 필드 일부는 페이지에서 추출 불가. web.archive.org 폴백은 환경 차단(WebFetch 불가)으로 미사용.",
+  "auth": "쿼리 파라미터 api_token={YOUR_API_TOKEN} (필수). 예: ...?api_token={YOUR_API_TOKEN}. 무료 가입으로 토큰 발급 안내 있음(데모 토큰 별도 명시는 본문에 없음).",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지는 단일 벌크 엔드포인트(eod-bulk-last-day/{EXCHANGE})를 type 파라미터로 EOD / splits / dividends 3가지 용도로 분기하는 구조다. 거래소 전체의 최근(기본=직전 거래일) 1일치 데이터를 한 번의 요청으로 내려받는 것이 목적 — \"수천 건의 개별 종목 요청 없이 거래소 전체를 한 요청으로\" 받기 위한 API다.\n\n핵심 사실(본문 텍스트 실측):\n- 기본(type 미지정) = 거래소 전체 종가(EOD).\n- type=splits = 해당일 발생한 주식분할, type=dividends = 해당일 배당.\n- date 파라미터로 특정 과거 거래일 지정 가능(예 date=2010-09-21). 기본은 마지막 거래일.\n- symbols 파라미터로 일부 종목만 받을 수 있으나 splits·dividends 에서는 동작하지 않는다(전체 거래소만).\n- filter=extended 사용 시 확장 데이터셋: company name, EMA 50, EMA 200, 그리고 14/50/200일 평균 거래량 포함. \"데이터는 과거 30일치만 제공되며, 더 깊은 기간이 필요하면 Technical API 를 사용하라\"고 명시.\n- fmt 로 출력 포맷(csv/json) 선택.\n\n응답 필드 자체(컬럼명·예시 행)는 페이지에 표/코드블록이 아니라 이미지(\"Bulk Download EOD Data JSON Output for APPL and MSFT\")로만 제시되어 텍스트 추출 불가. 따라서 기본 OHLCV 컬럼명은 이 페이지 근거로 단정하지 않음(EODHD EOD 공통 규약상 통상 ticker/date/open/high/low/close/adjusted_close/volume 이나 본 페이지 텍스트 미기재 → caveat 참조).",
+  "endpoints": [
+    {
+      "name": "Bulk EOD (거래소 전체 종가, 기본)",
+      "method": "GET",
+      "url_pattern": "/eod-bulk-last-day/{EXCHANGE}",
+      "description": "지정 거래소의 직전 거래일(또는 date 지정일) 전체 종목 EOD 데이터를 한 요청으로 반환. type 미지정 시 기본 동작.",
+      "path_params": [
+        {
+          "name": "EXCHANGE",
+          "type": "string",
+          "description": "거래소 코드. 예: US (미국 전체). 본문 예시는 US 사용."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "발급받은 API 토큰. 필수."
+        },
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "required": false,
+          "default": "마지막 거래일",
+          "description": "특정 과거 거래일 지정. 예: date=2010-09-21. 미지정 시 직전 거래일."
+        },
+        {
+          "name": "symbols",
+          "type": "string (콤마구분)",
+          "required": false,
+          "description": "일부 종목만 요청. 예: symbols=MSFT,AAPL. EOD 에서만 동작(splits/dividends 에선 무시)."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "출력 포맷. csv 또는 json. (csv 기본은 EODHD 공통 규약; 본 페이지 텍스트엔 기본값 명시 없음 — caveat 참조)"
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "filter=extended 지정 시 확장 필드(company name, EMA 50, EMA 200, 14/50/200일 평균거래량) 포함. 확장 데이터는 과거 30일치만 제공."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(기본 OHLCV 컬럼)",
+          "type": "unknown",
+          "description": "페이지에 이미지로만 제시되어 텍스트 추출 불가. 본 페이지 근거로 컬럼명 단정 불가."
+        },
+        {
+          "name": "company name",
+          "type": "string",
+          "description": "filter=extended 시 포함."
+        },
+        {
+          "name": "EMA 50",
+          "type": "number",
+          "description": "filter=extended 시 포함. 50일 지수이동평균."
+        },
+        {
+          "name": "EMA 200",
+          "type": "number",
+          "description": "filter=extended 시 포함. 200일 지수이동평균."
+        },
+        {
+          "name": "average volume 14/50/200 days",
+          "type": "number",
+          "description": "filter=extended 시 포함. 14·50·200일 평균 거래량."
+        }
+      ],
+      "response_format": "csv (기본, 본 페이지 텍스트 미명시) 또는 json (fmt=json)",
+      "example": "https://eodhd.com/api/eod-bulk-last-day/US?api_token={YOUR_API_TOKEN}  |  https://eodhd.com/api/eod-bulk-last-day/US?api_token={YOUR_API_TOKEN}&date=2010-09-21  |  symbols 예: ...&symbols=MSFT,AAPL  |  확장: ...&filter=extended"
+    },
+    {
+      "name": "Bulk Splits (거래소 전체 분할)",
+      "method": "GET",
+      "url_pattern": "/eod-bulk-last-day/{EXCHANGE}?type=splits",
+      "description": "지정 거래소의 해당일 발생 주식분할 데이터를 반환. symbols 파라미터는 동작하지 않음(전체 거래소만).",
+      "path_params": [
+        {
+          "name": "EXCHANGE",
+          "type": "string",
+          "description": "거래소 코드. 예: US."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "발급받은 API 토큰. 필수."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": true,
+          "description": "splits 고정. 분할 데이터 모드."
+        },
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "required": false,
+          "default": "마지막 거래일",
+          "description": "특정 거래일 지정. 미지정 시 직전 거래일."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "csv 또는 json."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(분할 컬럼)",
+          "type": "unknown",
+          "description": "페이지에 응답 필드 텍스트/예시 없음 → 추출 불가."
+        }
+      ],
+      "response_format": "csv 또는 json",
+      "example": "https://eodhd.com/api/eod-bulk-last-day/US?api_token={YOUR_API_TOKEN}&type=splits"
+    },
+    {
+      "name": "Bulk Dividends (거래소 전체 배당)",
+      "method": "GET",
+      "url_pattern": "/eod-bulk-last-day/{EXCHANGE}?type=dividends",
+      "description": "지정 거래소의 해당일 배당 데이터를 반환. symbols 파라미터는 동작하지 않음(전체 거래소만).",
+      "path_params": [
+        {
+          "name": "EXCHANGE",
+          "type": "string",
+          "description": "거래소 코드. 예: US."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "발급받은 API 토큰. 필수."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": true,
+          "description": "dividends 고정. 배당 데이터 모드."
+        },
+        {
+          "name": "date",
+          "type": "string (YYYY-MM-DD)",
+          "required": false,
+          "default": "마지막 거래일",
+          "description": "특정 거래일 지정. 미지정 시 직전 거래일."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "csv 또는 json."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(배당 컬럼)",
+          "type": "unknown",
+          "description": "페이지에 응답 필드 텍스트/예시 없음 → 추출 불가."
+        }
+      ],
+      "response_format": "csv 또는 json",
+      "example": "https://eodhd.com/api/eod-bulk-last-day/US?api_token={YOUR_API_TOKEN}&type=dividends"
+    }
+  ],
+  "rate_limits": "본문 명시: \"Each symbol request costs 1 API call. For example, multiple tickers request with ten symbols costs 110 API calls; however entire exchange request costs 100 API calls.\" → 즉 거래소 전체 벌크 1요청 = 100 API 콜. symbols 로 N개 지정 시 = 100 + N 콜(예시: 10개 = 110콜). 일일 한도 자체(100,000콜/일 등)는 본 페이지 텍스트엔 명시 없음(메모 research-eodhd 참조: 유료 100,000콜/일, 1000요청/분 — 본 페이지 외 근거).",
+  "pricing_notes": "본 페이지는 \"무료 가입으로 API 토큰 발급\" 안내만 있고 어느 유료 플랜에 Bulk API 가 포함되는지는 명시하지 않음(NOT PRESENT). 별도 메모(research-eodhd, 2026-06-16 실측): Bulk EOD/Splits/Dividends 는 EOD All World($19.99/월·$199/년) 이상 플랜에서 사용 가능한 EOD 데이터 범주. 무료(Free, 20콜/일)로는 콜 소비 모델상(거래소 벌크 1회=100콜) 실사용 불가. 정확한 플랜 매핑은 EODHD pricing 페이지 별도 확인 권고.",
+  "caveats": [
+    "응답 필드(컬럼명·예시 행)는 이 페이지에 표/코드블록이 아닌 이미지('Bulk Download EOD Data JSON Output for APPL and MSFT')로만 제시되어 텍스트 추출 불가 → 기본 OHLCV 컬럼명을 본 페이지 근거로 단정하면 환각 위험. 정확한 응답 스키마는 EOD(/eod) 또는 별도 Bulk 문서/실호출로 확인 필요.",
+    "fmt 기본값(csv) 과 date·filter 기본값은 본문에 '기본값(default)'으로 명시되어 있지 않음 — EODHD 공통 규약상 추정(csv)이며 본 페이지 텍스트로는 미확인.",
+    "'type' 파라미터의 허용값(splits/dividends)을 정의하는 전용 문단은 없고 예시 URL 로만 드러남. type 미지정=EOD 기본 동작.",
+    "symbols 파라미터는 splits·dividends 모드에서 동작하지 않음(거래소 전체만 가능) — 본문 명시.",
+    "filter=extended 확장 데이터(company name/EMA/avgvol)는 과거 30일치만 제공. 더 깊은 기간은 Technical API 사용하라고 명시.",
+    "어느 유료 플랜에 포함되는지 본 페이지에 미기재 → pricing_notes 의 플랜 매핑은 별도 메모/페이지 근거(단일 페이지 단독 근거 아님).",
+    "API 콜 소비(거래소 전체=100콜, symbols 10개=110콜)는 본문 명시되나, 일일 콜 한도는 이 페이지엔 없음.",
+    "web.archive.org 폴백이 환경에서 차단되어 archive 교차검증 미수행 — r.jina.ai 2회 fetch 로만 검증.",
+    "EODHD 일반 약관 주의(별도 메모): 구독 해지/만료 후 1개월 내 데이터 전량 삭제 의무 → 벌크로 받은 과거 데이터의 장기 재현성 보관에 라이선스 제약. 백테스트 재현성 설계 시 BLOCKING 고려."
+  ]
+}

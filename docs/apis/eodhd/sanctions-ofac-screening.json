@@ -1,0 +1,333 @@
+{
+  "section": "sanctions-ofac-screening",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/sanctions-api-ofac-screening-data-entities-vessels",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유로 본문 확보, 2회 교차 fetch 로 예시 URL·JSON 응답·envelope·콜비용·플랜 일치 확인. SPA 직접 fetch 미시도 — 프록시로 충분)",
+  "auth": "쿼리 파라미터 api_token=<KEY> (모든 엔드포인트 필수). 예시는 api_token=YOUR_TOKEN 형태로 기재. 401 = api_token 누락/무효.",
+  "base_url": "https://eodhd.com/api/sanctions (EODHD 공통 base https://eodhd.com/api 하위의 /sanctions 네임스페이스)",
+  "notes": "EODHD Sanctions API — OFAC(미국 재무부 해외자산통제국) 공개 제재 데이터를 스크리닝·리서치용으로 미러링하는 REST API. 4개 엔드포인트(entities/vessels/programs/sources). 응답은 JSON 객체 envelope 구조: data(레코드 배열), meta(total 총건수 + page 활성 페이지 윈도우 offset/limit), links(pagination 링크, next 등). 페이지네이션은 offset/limit 방식이며 page[limit](기본 20, 최대 100)·page[offset](기본 0) 쿼리로 제어(entities/vessels 만 해당, programs/sources 는 전체 목록 반환). 소스는 현재 ofac 만 존재. entities 의 identifiers 객체는 OFAC 가 제공하는 자유형식 키(예: \"Tax ID No.\")를 그대로 사용. 데이터는 미국 영업일(평일)마다 1회 갱신되며 당일 인트라데이 변경은 다음 갱신까지 미반영. ⚠️ stockpick(코스피/코스닥 한국 주식 분석) 도메인과 직접 관련 없음 — 제재 대상 개인/기업/선박/항공기 스크리닝 용도.",
+  "endpoints": [
+    {
+      "name": "Sanctions Entities",
+      "method": "GET",
+      "url_pattern": "/api/sanctions/entities",
+      "description": "제재 대상 레코드(개인/기업/선박/항공기) 검색. 이름·별칭 자유텍스트 검색 및 type/program/country/active/source 필터 지원. offset/limit 페이지네이션.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰"
+        },
+        {
+          "name": "q",
+          "type": "string",
+          "required": false,
+          "description": "이름과 별칭(aliases)에 대한 자유텍스트 검색. 최소 2자."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "individual, entity, vessel, 또는 aircraft"
+        },
+        {
+          "name": "program",
+          "type": "string",
+          "required": false,
+          "description": "제재 프로그램 코드 (예: RUSSIA-EO14024)"
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "required": false,
+          "description": "연관 국가"
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "description": "true 또는 false. 현재 활성 또는 해제(delisted) 지정으로 제한."
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "현재 ofac"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "default": "20",
+          "description": "페이지당 행 수, 1-100"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "건너뛸 행 수"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "source",
+          "type": "string",
+          "description": "현재 ofac"
+        },
+        {
+          "name": "source_uid",
+          "type": "string",
+          "description": "소스에서의 레코드 고유 식별자"
+        },
+        {
+          "name": "entity_type",
+          "type": "string",
+          "description": "individual, entity, vessel, 또는 aircraft"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "description": "주요 지정 명칭"
+        },
+        {
+          "name": "aliases",
+          "type": "array",
+          "description": "알려진 대체 명칭"
+        },
+        {
+          "name": "programs",
+          "type": "array",
+          "description": "제재 프로그램 코드 배열"
+        },
+        {
+          "name": "country",
+          "type": "string|null",
+          "description": "연관 국가"
+        },
+        {
+          "name": "listed_date",
+          "type": "string|null",
+          "description": "지정(designation) 날짜"
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "description": "현재 지정 상태"
+        },
+        {
+          "name": "remarks",
+          "type": "string|null",
+          "description": "자유텍스트 비고"
+        },
+        {
+          "name": "identifiers",
+          "type": "object",
+          "description": "라벨을 키로 하는 자유형식 속성 (OFAC 원본 키 사용, 예: \"Tax ID No.\")"
+        }
+      ],
+      "example": "https://eodhd.com/api/sanctions/entities?api_token=YOUR_TOKEN&program=RUSSIA-EO14024&type=entity\n\n응답 예시:\n{\n  \"data\": [\n    {\n      \"source\": \"ofac\",\n      \"source_uid\": \"31415\",\n      \"entity_type\": \"entity\",\n      \"name\": \"FEDERAL STATE AUTONOMOUS SCIENTIFIC ESTABLISHMENT\",\n      \"aliases\": [\"FSASE\"],\n      \"programs\": [\"RUSSIA-EO14024\"],\n      \"country\": \"Russia\",\n      \"listed_date\": null,\n      \"is_active\": true,\n      \"remarks\": null,\n      \"identifiers\": { \"Tax ID No.\": [\"7704028201\"] }\n    }\n  ],\n  \"meta\": { \"total\": 19056, \"page\": { \"offset\": 0, \"limit\": 20 } },\n  \"links\": { \"next\": \"https://eodhd.com/api/sanctions/entities?page[offset]=20&page[limit]=20\" }\n}"
+    },
+    {
+      "name": "Sanctions Vessels",
+      "method": "GET",
+      "url_pattern": "/api/sanctions/vessels",
+      "description": "제재 대상 선박 검색. 선박·소유주 이름 자유텍스트 검색 및 imo/flag/vessel_type/program 필터 지원. offset/limit 페이지네이션.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰"
+        },
+        {
+          "name": "q",
+          "type": "string",
+          "required": false,
+          "description": "선박명과 소유주명에 대한 자유텍스트 검색. 최소 2자."
+        },
+        {
+          "name": "imo",
+          "type": "string",
+          "required": false,
+          "description": "IMO 번호로 필터"
+        },
+        {
+          "name": "flag",
+          "type": "string",
+          "required": false,
+          "description": "선적국(flag state)으로 필터"
+        },
+        {
+          "name": "vessel_type",
+          "type": "string",
+          "required": false,
+          "description": "선박 유형으로 필터"
+        },
+        {
+          "name": "program",
+          "type": "string",
+          "required": false,
+          "description": "제재 프로그램 코드"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "현재 ofac"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "default": "20",
+          "description": "페이지당 행 수, 1-100"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "건너뛸 행 수"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "source",
+          "type": "string",
+          "description": "현재 ofac"
+        },
+        {
+          "name": "entity_source_uid",
+          "type": "string",
+          "description": "연관 엔티티의 소스 식별자"
+        },
+        {
+          "name": "entity_name",
+          "type": "string",
+          "description": "지정된 선박 명칭"
+        },
+        {
+          "name": "imo_number",
+          "type": "string|null",
+          "description": "IMO 선박 식별번호"
+        },
+        {
+          "name": "mmsi",
+          "type": "string|null",
+          "description": "해상이동업무식별번호(Maritime Mobile Service Identity)"
+        },
+        {
+          "name": "call_sign",
+          "type": "string|null",
+          "description": "무선 호출부호"
+        },
+        {
+          "name": "flag",
+          "type": "string|null",
+          "description": "선적국"
+        },
+        {
+          "name": "vessel_type",
+          "type": "string|null",
+          "description": "선박 유형 지정"
+        },
+        {
+          "name": "tonnage",
+          "type": "number|null",
+          "description": "재화중량톤수 또는 등록톤수"
+        },
+        {
+          "name": "gross_tonnage",
+          "type": "number|null",
+          "description": "총톤수 값"
+        },
+        {
+          "name": "owner",
+          "type": "string|null",
+          "description": "등록 소유주"
+        },
+        {
+          "name": "programs",
+          "type": "array",
+          "description": "제재 프로그램 코드 배열"
+        },
+        {
+          "name": "country",
+          "type": "string|null",
+          "description": "연관 국가"
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "description": "현재 지정 상태"
+        }
+      ],
+      "example": "https://eodhd.com/api/sanctions/vessels?api_token=YOUR_TOKEN&flag=Panama"
+    },
+    {
+      "name": "Sanctions Programs",
+      "method": "GET",
+      "url_pattern": "/api/sanctions/programs",
+      "description": "제재 프로그램 코드 전체 목록과 각 프로그램의 지정 레코드 수 반환. 페이지네이션 없음(전체 목록).",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (그 외 파라미터 없음)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "program",
+          "type": "string",
+          "description": "제재 프로그램 코드"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "description": "해당 프로그램에 지정된 레코드 수"
+        }
+      ]
+    },
+    {
+      "name": "Sanctions Sources",
+      "method": "GET",
+      "url_pattern": "/api/sanctions/sources",
+      "description": "사용 가능한 소스 식별자 전체 목록 반환. 페이지네이션 없음(전체 목록). 현재 ofac 만 존재.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "인증 토큰 (그 외 파라미터 없음)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "소스 식별자 (예: ofac)"
+        }
+      ]
+    }
+  ],
+  "rate_limits": "엔드포인트별 콜 소비: 요청당 1 API call (모든 엔드포인트 공통, 페이지 명시 \"Cost: 1 API call per request\"). 일일 한도는 이 페이지에 별도 기재 없음 (EODHD 플랜 공통 한도 적용 — 본 페이지 미기재).",
+  "pricing_notes": "All-In-One 플랜에 포함. 403 에러 메시지가 \"Token is valid but the plan does not include the Sanctions API (requires All-In-One)\" 로 플랜 제한을 명시. 별도 무료/EOD/Fundamentals 플랜 포함 여부는 페이지에 언급 없음.",
+  "caveats": [
+    "데이터셋은 미국 영업일(평일)마다 갱신됨. 당일(인트라데이) 변경은 다음 갱신 전까지 반영되지 않음.",
+    "이 API 는 스크리닝·리서치용으로 공개된 OFAC 데이터를 미러링한 것이며 법률 또는 컴플라이언스 자문이 아님(\"It is not legal or compliance advice\").",
+    "entities 의 identifiers 객체는 OFAC 에서 가져온 자유형식 키를 사용 — 키 스키마가 고정되어 있지 않으므로 코드에서 특정 키 존재를 가정하면 안 됨.",
+    "HTTP 상태코드: 200(data/meta/links 포함 성공), 401(api_token 누락/무효), 403(플랜에 미포함 — All-In-One 필요), 422(잘못된 파라미터 — 알 수 없는 type, 잘못된 값, 또는 검색어 2자 미만).",
+    "source 는 현재 ofac 단일 값만 존재 — 향후 확장 가능성 있으나 본 페이지엔 ofac 만 기재.",
+    "페이지네이션은 entities/vessels 만 적용(page[limit] 1-100, page[offset]); programs/sources 는 전체 목록 일괄 반환.",
+    "⚠️ stockpick(한국 코스피/코스닥 주식 분석) 도메인과 무관 — 제재 대상 스크리닝 API. 한국 주식 데이터 파이프라인에 직접 활용 불가. 본 추출은 명세 아카이브 목적.",
+    "fetch 는 r.jina.ai 렌더 프록시 경유 — 원본 SPA HTML 직접 fetch 는 미시도. 다만 예시 URL·JSON 응답 본문·envelope 설명·콜 비용·플랜이 2회 fetch 에서 일관되게 일치하여 신뢰도 높음. listed_date 가 예시에서 null 인 점·meta.total=19056 은 예시 시점 값임.",
+    "유효기한 추정: API 명세(엔드포인트/파라미터/필드)는 비교적 안정적이나 EODHD 플랜 구성·콜 비용 정책은 변동 가능 — 약 6~12개월 후 재확인 권장."
+  ]
+}

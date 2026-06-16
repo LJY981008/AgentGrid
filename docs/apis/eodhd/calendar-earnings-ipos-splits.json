@@ -1,0 +1,574 @@
+{
+  "section": "calendar-earnings-ipos-splits",
+  "category": "general",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/calendar-upcoming-earnings-ipos-and-splits",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시 경유 본문 확보, 2회 교차검증)",
+  "auth": "쿼리 파라미터 ?api_token=<YOUR_API_TOKEN> (모든 엔드포인트 필수)",
+  "base_url": "https://eodhd.com/api/calendar",
+  "notes": "EODHD Calendar API는 다가오는/과거의 실적(earnings), 실적 추세(trends), IPO, 분할(splits), 배당(dividends) 일정을 제공하는 5개 GET 엔드포인트로 구성된다. 두 가지 파라미터 스타일이 혼재한다: (1) earnings/ipos/splits는 from/to 날짜창 + symbols(콤마 구분) 방식 — symbols 설정 시 from/to 무시, 날짜 미지정 시 기본창은 \"today + 7 days\". (2) dividends만 JSON:API 스타일 — filter[symbol] 또는 filter[date_eq] 중 최소 하나 필수, filter[date_from]/filter[date_to] 범위, page[limit](1~1000, 기본 1000)·page[offset] 페이지네이션, 응답에 meta/data/links.next. 출력 포맷 fmt=json|csv(기본 csv)이나 trends·dividends는 JSON only. 코드 예시는 Python/PHP/R/cURL 제공. 페이지 명시 데이터 커버리지: IPOs는 2015년 1월~ 향후 2~3주, Splits는 2015년 1월~ 향후 수개월(전체 이력은 별도 Splits and Dividends API 참조). 주의: splits 응답에는 \"4:1\" 같은 ratio 문자열 필드가 아니라 old_shares/new_shares 수치 필드가 들어간다. earnings 응답 top-level에는 symbols 필드가 없다(type/description/from/to/earnings만).",
+  "endpoints": [
+    {
+      "name": "Earnings",
+      "method": "GET",
+      "url_pattern": "/api/calendar/earnings",
+      "description": "과거 및 다가오는 실적 데이터(종목·발표일·실제 EPS vs 추정 EPS·서프라이즈 %). 날짜창 또는 symbols로 조회.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "default": "today",
+          "description": "조회 시작일. 미지정 시 today"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "default": "today + 7 days",
+          "description": "조회 종료일. 미지정 시 today+7일"
+        },
+        {
+          "name": "symbols",
+          "type": "string(콤마구분)",
+          "required": false,
+          "description": "하나 이상의 티커(콤마구분). 설정 시 from/to 무시."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "출력 포맷 json 또는 csv"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "\"Earnings\""
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "데이터셋 설명(\"Historical and upcoming Earnings\")"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "description": "날짜창 조회 시 시작일"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "description": "날짜창 조회 시 종료일"
+        },
+        {
+          "name": "earnings",
+          "type": "array",
+          "description": "실적 레코드 배열"
+        },
+        {
+          "name": "earnings[].code",
+          "type": "string",
+          "description": "티커(EODHD 형식, 예 PIGEF.US)"
+        },
+        {
+          "name": "earnings[].report_date",
+          "type": "YYYY-MM-DD",
+          "description": "실적 발표일"
+        },
+        {
+          "name": "earnings[].date",
+          "type": "YYYY-MM-DD",
+          "description": "회계 기간 종료일(fiscal period end)"
+        },
+        {
+          "name": "earnings[].before_after_market",
+          "type": "string|null",
+          "description": "BeforeMarket / AfterMarket 또는 null"
+        },
+        {
+          "name": "earnings[].currency",
+          "type": "string|null",
+          "description": "보고 통화"
+        },
+        {
+          "name": "earnings[].actual",
+          "type": "number",
+          "description": "실제 보고 EPS"
+        },
+        {
+          "name": "earnings[].estimate",
+          "type": "number|null",
+          "description": "컨센서스 EPS 추정"
+        },
+        {
+          "name": "earnings[].difference",
+          "type": "number|null",
+          "description": "actual − estimate"
+        },
+        {
+          "name": "earnings[].percent",
+          "type": "number|null",
+          "description": "서프라이즈 %"
+        }
+      ],
+      "response_format": "json 또는 csv",
+      "example": "https://eodhd.com/api/calendar/earnings?from=2018-12-02&to=2018-12-06&api_token={YOUR_API_TOKEN}&fmt=json  /  ?symbols=AAPL.US,MSFT.US,AI.PA&api_token=...&fmt=json"
+    },
+    {
+      "name": "Earnings Trends",
+      "method": "GET",
+      "url_pattern": "/api/calendar/trends",
+      "description": "하나 이상의 종목에 대한 전망/과거 실적 추세 포인트(추정·실제). JSON 전용.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "symbols",
+          "type": "string(콤마구분)",
+          "required": true,
+          "description": "하나 이상의 티커, 콤마구분(예 AAPL.US,MSFT.US,AI.PA)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "\"Trends\""
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "데이터셋 설명"
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "description": "요청된 콤마구분 티커"
+        },
+        {
+          "name": "trends",
+          "type": "array of arrays",
+          "description": "심볼별 추세 레코드 배열의 배열"
+        },
+        {
+          "name": "trends[][].code",
+          "type": "string",
+          "description": "티커(EODHD 형식)"
+        },
+        {
+          "name": "trends[][].date",
+          "type": "YYYY-MM-DD",
+          "description": "기준일(분기/연 종료)"
+        },
+        {
+          "name": "trends[][].period",
+          "type": "string",
+          "description": "상대 기간(0q, +1q, 0y, +1y)"
+        },
+        {
+          "name": "trends[][].growth",
+          "type": "number|null(stringified)",
+          "description": "직전 대비 EPS 성장"
+        },
+        {
+          "name": "trends[][].earningsEstimateAvg/Low/High",
+          "type": "stringified",
+          "description": "컨센서스/저/고 EPS 추정"
+        },
+        {
+          "name": "trends[][].earningsEstimateYearAgoEps",
+          "type": "stringified",
+          "description": "전년 동기 EPS"
+        },
+        {
+          "name": "trends[][].earningsEstimateNumberOfAnalysts",
+          "type": "stringified",
+          "description": "애널리스트 수"
+        },
+        {
+          "name": "trends[][].earningsEstimateGrowth",
+          "type": "stringified",
+          "description": "EPS 성장률 %"
+        },
+        {
+          "name": "trends[][].revenueEstimateAvg/Low/High",
+          "type": "stringified",
+          "description": "컨센서스/저/고 매출 추정"
+        },
+        {
+          "name": "trends[][].epsTrendCurrent/7daysAgo/30daysAgo/60daysAgo/90daysAgo",
+          "type": "stringified",
+          "description": "현재 및 N일 전 EPS 컨센서스"
+        },
+        {
+          "name": "trends[][].epsRevisionsUpLast7days/UpLast30days/DownLast30days",
+          "type": "stringified|null",
+          "description": "상/하향 추정치 수정 건수"
+        }
+      ],
+      "response_format": "json only",
+      "example": "https://eodhd.com/api/calendar/trends?symbols=AAPL.US,MSFT.US,AI.PA&api_token={YOUR_API_TOKEN}&fmt=json"
+    },
+    {
+      "name": "IPOs",
+      "method": "GET",
+      "url_pattern": "/api/calendar/ipos",
+      "description": "날짜창 내 과거 및 다가오는 IPO. filing/amended 일자·예상/실제 첫 거래일·가격 범위 또는 공모가·주식 수 포함.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "default": "today",
+          "description": "조회 시작일"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "default": "today + 7 days",
+          "description": "조회 종료일"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "출력 포맷 json 또는 csv"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "\"IPOs\""
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "데이터셋 설명"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "description": "조회창 시작"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "description": "조회창 종료"
+        },
+        {
+          "name": "ipos",
+          "type": "array",
+          "description": "IPO 레코드 배열"
+        },
+        {
+          "name": "ipos[].code",
+          "type": "string",
+          "description": "티커(EODHD 형식)"
+        },
+        {
+          "name": "ipos[].name",
+          "type": "string|null",
+          "description": "회사명"
+        },
+        {
+          "name": "ipos[].exchange",
+          "type": "string|null",
+          "description": "상장 거래소"
+        },
+        {
+          "name": "ipos[].currency",
+          "type": "string|null",
+          "description": "거래 통화"
+        },
+        {
+          "name": "ipos[].start_date",
+          "type": "YYYY-MM-DD|null",
+          "description": "예상/실제 첫 거래일(알려진 경우)"
+        },
+        {
+          "name": "ipos[].filing_date",
+          "type": "YYYY-MM-DD|null",
+          "description": "최초 filing 일자"
+        },
+        {
+          "name": "ipos[].amended_date",
+          "type": "YYYY-MM-DD|null",
+          "description": "최신 amended filing 일자"
+        },
+        {
+          "name": "ipos[].price_from",
+          "type": "number",
+          "description": "가격 범위 하단(미제공 시 0)"
+        },
+        {
+          "name": "ipos[].price_to",
+          "type": "number",
+          "description": "가격 범위 상단(미제공 시 0)"
+        },
+        {
+          "name": "ipos[].offer_price",
+          "type": "number",
+          "description": "최종 공모가(미가격 시 0)"
+        },
+        {
+          "name": "ipos[].shares",
+          "type": "number",
+          "description": "공모 주식 수(미제공 시 0)"
+        },
+        {
+          "name": "ipos[].deal_type",
+          "type": "string",
+          "description": "라이프사이클 상태(Filed, Expected, Amended, Priced)"
+        }
+      ],
+      "response_format": "json 또는 csv",
+      "example": "https://eodhd.com/api/calendar/ipos?from=...&to=...&api_token={YOUR_API_TOKEN}&fmt=json"
+    },
+    {
+      "name": "Splits",
+      "method": "GET",
+      "url_pattern": "/api/calendar/splits",
+      "description": "선택 종목 또는 날짜창에 대한 과거 및 다가오는 주식 분할/역분할. 각 항목에 유효일과 비율 정보 포함. 전체 이력은 Splits and Dividends API 참조.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "symbols",
+          "type": "string",
+          "required": false,
+          "description": "티커(EODHD 형식). from/to 미제공 시 필수"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "캘린더 창 시작. symbols 미제공 시 필수"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "캘린더 창 종료. symbols 미제공 시 필수"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "출력 포맷 json 또는 csv"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "type",
+          "type": "string",
+          "description": "\"Splits\""
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "데이터셋 설명"
+        },
+        {
+          "name": "from",
+          "type": "YYYY-MM-DD",
+          "description": "요청 범위 시작"
+        },
+        {
+          "name": "to",
+          "type": "YYYY-MM-DD",
+          "description": "요청 범위 종료"
+        },
+        {
+          "name": "splits",
+          "type": "array",
+          "description": "분할 레코드 배열"
+        },
+        {
+          "name": "splits[].code",
+          "type": "string",
+          "description": "티커(EODHD 형식)"
+        },
+        {
+          "name": "splits[].split_date",
+          "type": "YYYY-MM-DD",
+          "description": "분할 유효일"
+        },
+        {
+          "name": "splits[].optionable",
+          "type": "string",
+          "description": "옵션거래 가능 여부 'Y' 또는 'N'"
+        },
+        {
+          "name": "splits[].old_shares",
+          "type": "number",
+          "description": "분할 전 구주 수"
+        },
+        {
+          "name": "splits[].new_shares",
+          "type": "number",
+          "description": "분할 후 신주 수"
+        }
+      ],
+      "response_format": "json 또는 csv",
+      "example": "https://eodhd.com/api/calendar/splits?symbols=TSLA.US&from=2010-01-01&to=2030-01-01&api_token={YOUR_API_TOKEN}  /  ?from=2024-01-01&to=2024-12-31&api_token=...&fmt=json"
+    },
+    {
+      "name": "Dividends",
+      "method": "GET",
+      "url_pattern": "/api/calendar/dividends",
+      "description": "종목 또는 날짜로 필터링한 배당일 캘린더. 페이지네이션 지원. 배당 상세는 Corporate Actions Splits and Dividends API 참조.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 키"
+        },
+        {
+          "name": "filter[symbol]",
+          "type": "string",
+          "required": false,
+          "description": "단일 티커로 제한. filter[date_eq] 미제공 시 필수"
+        },
+        {
+          "name": "filter[date_eq]",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "정확한 배당일. filter[symbol] 미제공 시 필수"
+        },
+        {
+          "name": "filter[date_from]",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "이 날짜 이후(포함) 배당 반환"
+        },
+        {
+          "name": "filter[date_to]",
+          "type": "YYYY-MM-DD",
+          "required": false,
+          "description": "이 날짜 이전(포함) 배당 반환"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "default": "1000",
+          "description": "페이지당 최대 결과(1~1000)"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "페이지네이션 오프셋"
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "description": "json only"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "meta",
+          "type": "object",
+          "description": "응답 메타데이터"
+        },
+        {
+          "name": "meta.total",
+          "type": "integer",
+          "description": "전체 페이지 통틀어 총 결과 수"
+        },
+        {
+          "name": "meta.limit",
+          "type": "integer",
+          "description": "페이지당 최대 결과"
+        },
+        {
+          "name": "meta.offset",
+          "type": "integer",
+          "description": "사용된 페이지네이션 오프셋"
+        },
+        {
+          "name": "meta.symbol",
+          "type": "string|null",
+          "description": "요청 심볼 에코"
+        },
+        {
+          "name": "meta.date_eq",
+          "type": "string|null",
+          "description": "요청 정확일 에코"
+        },
+        {
+          "name": "data",
+          "type": "array",
+          "description": "배당 레코드 배열"
+        },
+        {
+          "name": "data[].date",
+          "type": "YYYY-MM-DD",
+          "description": "배당일"
+        },
+        {
+          "name": "data[].symbol",
+          "type": "string",
+          "description": "티커"
+        },
+        {
+          "name": "links",
+          "type": "object",
+          "description": "페이지네이션 링크"
+        },
+        {
+          "name": "links.next",
+          "type": "string|null",
+          "description": "다음 페이지 URL 또는 null"
+        }
+      ],
+      "response_format": "json only",
+      "example": "https://eodhd.com/api/calendar/dividends?filter[symbol]=AAPL.US&filter[date_from]=2025-01-01&filter[date_to]=2025-12-31&api_token={YOUR_API_TOKEN}&fmt=json"
+    }
+  ],
+  "rate_limits": "페이지 명시: \"Each request consumes 1 API call.\" (엔드포인트별 차등 없이 요청당 1콜). 일일/분당 한도는 본 페이지에 미기재 — 계정 전역 한도(유료 100,000콜/일·1000요청/분)는 별도 EODHD usage 문서 소관([[research-eodhd]] 참조).",
+  "pricing_notes": "페이지 명시: \"Available in plans: All-In-One, Fundamentals Data Feed plans and via 'Corporate Events Calendar & News Feed' product.\" → All-In-One 또는 Fundamentals Data Feed 플랜, 혹은 별도 'Corporate Events Calendar & News Feed' 상품으로 제공. EOD All World($19.99/월) 등 가격전용 플랜에는 미포함으로 보임(페이지에 EOD 플랜 언급 없음).",
+  "caveats": [
+    "splits 응답은 '4:1' 같은 ratio 문자열 필드가 없고 old_shares/new_shares 수치 필드로 제공 — 비율은 직접 계산 필요(new/old).",
+    "earnings 응답 top-level에는 symbols 필드가 없음(type/description/from/to/earnings만). symbols는 요청 파라미터일 뿐이며 설정 시 from/to 무시.",
+    "데이터 커버리지가 2015년 1월부터 — IPOs는 2015-01~향후 2-3주, Splits는 2015-01~향후 수개월. 30년 백테스트(기획 요건)에 부적합. 가격전용 EOD 데이터(폐지 2000~)와는 별개 데이터셋임.",
+    "dividends만 다른 파라미터 스타일(JSON:API의 filter[]·page[]) — earnings/ipos/splits의 from/to/symbols와 혼동 금지. dividends·trends는 csv 미지원(json only).",
+    "stockpick 도메인 직접 관련성 낮음: 페이지 예시·설명 전부 미국/유럽(US, PA) 티커이며 KRX(코스피/코스닥) 커버리지 언급 없음 — 한국 주식 실적/IPO/분할 캘린더로의 적합성 미확인.",
+    "전체 분할·배당 이력은 본 Calendar API가 아니라 별도 Corporate Actions Splits and Dividends API([[research-eodhd-splits-dividends]])를 쓰라고 페이지가 안내.",
+    "trends 응답 수치들이 stringified(문자열화 숫자)로 제공될 수 있어 파싱 시 형변환 필요.",
+    "검증 방식: eodhd.com이 JS SPA라 r.jina.ai 렌더 프록시 경유 본문 확보. 일부 필드 타입(number vs stringified)은 예시 JSON에서 추론한 것으로, 원문 표 표기와 정확히 일치하는지 100% 단정 불가."
+  ]
+}

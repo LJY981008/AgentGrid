@@ -1,0 +1,103 @@
+{
+  "section": "covered-tickers-list",
+  "category": "exchanges",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/covered-tickers-eodhd",
+  "fetch_status": "ok (r.jina.ai 렌더 프록시로 본문 확보. eodhd.com 직접은 SPA로 본문 누락 위험 → 프록시 경유. web.archive.org 백업은 fetch 차단됨, 단 주 프록시 성공으로 본문 교차 확인 완료)",
+  "auth": "쿼리 파라미터 api_token (필수). 예: ?api_token={YOUR_API_TOKEN}. 페이지에 \"users must sign up for a free account to obtain one\" — 무료 계정 가입 후 발급. (헤더 인증 방식은 이 페이지에 미기재)",
+  "base_url": "https://eodhd.com/api",
+  "notes": "이 페이지는 EODHD 의 \"List of Supported Exchanges and Tickers / Covered Tickers\" 문서로, 단일 엔드포인트 exchange-symbol-list 를 다룬다. 거래소 코드(EXCHANGE_CODE)에 해당하는 거래소의 전 종목 마스터(심볼·이름·국가·거래소·통화·자산유형·ISIN)를 반환한다.\n\n핵심 동작(페이지 명시): 기본적으로 \"지난 한 달 내 활성(active in the past month)\" 종목만 포함된다. delisted=1 을 주면 상장폐지/비활성(inactive) 종목까지 포함 → 생존편향 방어에 직접 사용 가능한 파라미터. type 파라미터로 자산유형 필터 가능(common_stock, preferred_stock, stock, etf, fund).\n\n거래소 코드 체계: US 통합 코드는 NYSE·NASDAQ·NYSE ARCA·OTC 마켓을 포괄하며, 개별 미국 거래소는 별도 코드로도 조회 가능. 그 외 자산군 가상 거래소 코드: CC(암호화폐), FOREX(외환), GBOND(국채), EUFUND(유럽 펀드 가상 거래소), MONEY(기준금리·벤치마크). (페이지에 명시된 EXCHANGE_CODE 예시: US, LSE, CC, FOREX, GBOND)\n\n응답은 종목 객체의 배열(JSON, fmt=json). 페이지에 폴란드 WAR 거래소 예시가 실려 있음. 코드 예시는 cURL/PHP/Python/R 4종 제공.\n\n이 프로젝트(stockpick 한국주식) 관점: 한국 거래소 코드(예: KO/KQ 류)는 이 페이지에 직접 명시되지 않음 → 실제 한국 거래소 코드는 EODHD Exchanges 목록 엔드포인트(/exchanges-list)로 별도 확인 필요. 본 covered-tickers 엔드포인트는 폐지종목(delisted=1)·종목마스터 확보용으로 유효.",
+  "endpoints": [
+    {
+      "name": "Get List of Supported Tickers for an Exchange (Covered Tickers)",
+      "method": "GET",
+      "url_pattern": "/exchange-symbol-list/{EXCHANGE_CODE}",
+      "description": "지정 거래소 코드의 전 종목 마스터 목록을 반환. 기본은 지난 한 달 내 활성 종목만, delisted=1 로 폐지·비활성 종목까지 포함. type 으로 자산유형 필터.",
+      "path_params": [
+        {
+          "name": "EXCHANGE_CODE",
+          "type": "string",
+          "description": "거래소/자산군 코드. 페이지 명시 예: US(통합 — NYSE·NASDAQ·NYSE ARCA·OTC 포괄), LSE, CC(암호화폐), FOREX(외환), GBOND(국채), EUFUND(유럽 펀드 가상거래소), MONEY(기준금리·벤치마크). 개별 미국 거래소는 별도 코드 가능."
+        }
+      ],
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "개인 API 키. 무료 계정 가입 후 발급."
+        },
+        {
+          "name": "fmt",
+          "type": "string",
+          "required": false,
+          "default": "(예시에서 json 사용)",
+          "description": "응답 포맷. 예시 URL 에 fmt=json. (csv 지원 여부는 이 페이지에 미기재)"
+        },
+        {
+          "name": "delisted",
+          "type": "integer",
+          "required": false,
+          "description": "1 로 설정 시 상장폐지(비활성, inactive) 종목 포함. 미설정 시 기본은 지난 한 달 내 활성 종목만 포함."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "description": "자산유형 필터. 지원 값: common_stock, preferred_stock, stock, etf, fund."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "Code",
+          "type": "string",
+          "description": "티커 심볼. 예: \"CDR\""
+        },
+        {
+          "name": "Name",
+          "type": "string",
+          "description": "기업/상품 전체 명칭. 예: \"CD PROJEKT SA\""
+        },
+        {
+          "name": "Country",
+          "type": "string",
+          "description": "상장 국가. 예: \"Poland\""
+        },
+        {
+          "name": "Exchange",
+          "type": "string",
+          "description": "거래소 코드. 예: \"WAR\""
+        },
+        {
+          "name": "Currency",
+          "type": "string",
+          "description": "거래 통화. 예: \"PLN\""
+        },
+        {
+          "name": "Type",
+          "type": "string",
+          "description": "자산 유형. 예: \"Common Stock\""
+        },
+        {
+          "name": "Isin",
+          "type": "string",
+          "description": "국제증권식별번호(ISIN), 존재 시. 예: \"PLOPTTC00011\""
+        }
+      ],
+      "response_format": "JSON array of ticker objects (fmt=json). 예시 객체: {\"Code\":\"CDR\",\"Name\":\"CD PROJEKT SA\",\"Country\":\"Poland\",\"Exchange\":\"WAR\",\"Currency\":\"PLN\",\"Type\":\"Common Stock\",\"Isin\":\"PLOPTTC00011\"}",
+      "example": "https://eodhd.com/api/exchange-symbol-list/{EXCHANGE_CODE}?api_token={YOUR_API_TOKEN}&fmt=json  | Python: import requests; url = f'https://eodhd.com/api/exchange-symbol-list/{EXCHANGE_CODE}?api_token={YOUR_API_TOKEN}&fmt=json'; data = requests.get(url).json(); print(data)"
+    }
+  ],
+  "rate_limits": "이 페이지에 API 콜 소비량(요청당 소비 콜 수)·일일 한도는 명시되지 않음(NOT PRESENT). EODHD 일반 정책(별도 가격/문서 페이지 기준)으로 별도 확인 필요 — 본 페이지 단독으로는 미확정.",
+  "pricing_notes": "이 페이지에는 구독 플랜 요구사항(Free / EOD Historical Data / All World / All-In-One / Fundamentals)이 명시되지 않음(NOT PRESENT). 명시된 것은 \"api_token 발급을 위해 무료 계정 가입 필요\"뿐. exchange-symbol-list 가 어느 플랜에 포함되는지는 EODHD pricing 페이지에서 별도 확인 필요. (기존 리서치: research-eodhd 메모리 참조 — EOD All World 플랜 맥락)",
+  "caveats": [
+    "콜 소비량·일일 한도·구독 플랜 포함 여부가 이 페이지에 미기재 — endpoints 의 rate/pricing 은 본 페이지 단독으로 확정 불가. EODHD pricing/일반 문서로 교차검증 필요(미확인 사항).",
+    "eodhd.com 은 JS SPA 라 WebFetch 직접 페치는 본문 누락 위험 → r.jina.ai 렌더 프록시 경유로 본문 확보함. web.archive.org 백업 페치는 환경에서 차단(unable to fetch)되어 단일 프록시 출처. 프록시 캐시(15분)·렌더 시점에 따른 누락 가능성 잔존.",
+    "fmt 파라미터: 예시에 fmt=json 만 등장. csv 등 다른 포맷 지원 여부는 이 페이지에 미기재.",
+    "한국 거래소(코스피/코스닥) 코드는 이 페이지 예시에 직접 명시되지 않음 → 실제 코드는 EODHD Exchanges 목록(/exchanges-list)에서 별도 확인 필요. 본 엔드포인트는 폐지종목(delisted=1) 확보용으로 stockpick 생존편향 방어에 유용하나, 한국 종목 실제 커버리지·폐지종목 시작연도는 별도 실측 필요(기존 EODHD 리서치: 폐지 2000~, 2018 이전 EOD only).",
+    "'active in the past month' 기본 필터: delisted 미지정 시 최근 1개월 내 활성 종목만 반환 → 폐지·장기 비활성 종목 누락 위험. 백테스트 종목마스터 구축 시 반드시 delisted=1 동반 필요.",
+    "auth 헤더 방식: 이 페이지는 쿼리 파라미터 api_token 만 명시. Authorization 헤더 등 대체 인증은 미기재."
+  ]
+}

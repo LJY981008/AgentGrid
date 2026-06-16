@@ -1,0 +1,443 @@
+{
+  "section": "options-data-us-stocks-greeks",
+  "category": "options",
+  "relevant_to_stockpick": false,
+  "captured_at": "2026-06-16",
+  "capture_method": "EODHD 공식 문서(eodhd.com/financial-apis) 워크플로우 eodhd-spec-capture(스키마 강제). 카탈로그 discover→62페이지 병렬 capture(SPA는 r.jina.ai 프록시). 2026-06-16.",
+  "source_url": "https://eodhd.com/financial-apis/options-data-api-us-stocks",
+  "fetch_status": "ok — 마케팅 페이지(대상 URL)는 SPA·본문 빈약하여 r.jina.ai 경유로 개요만 확보. 실제 REST 명세는 페이지가 가리키는 공식 docs(https://eodhd.com/marketplace/unicornbay/options/docs)를 r.jina.ai 경유로 2회 교차 확인하여 추출. web.archive.org 불필요.",
+  "auth": "쿼리 파라미터 api_token=<KEY>. 테스트용 'demo' 토큰 제공 — AAPL 티커 한정으로만 모든 요청 가능. (EODHD 표준 ?api_token= 방식과 동일)",
+  "base_url": "https://eodhd.com/api/mp/unicornbay/options (Marketplace/UnicornBay Options 제품 — 메인 EODHD /api 와 별도 경로 mp/unicornbay)",
+  "notes": "EODHD US Stock Options Data API(공급자: UnicornBay Marketplace 제품). 미국 주식 옵션 EOD 데이터. 커버리지: \"over 6,000 top traded tickers\", \"over 1.5 million bid/ask/trade events daily\", 약 2년(two-year) 히스토리. 응답은 JSON, 계약당 43개 필드. 그릭(delta/gamma/theta/vega/rho)·내재변동성(volatility)·moneyness·theoretical·vol_oi_ratio·dte 포함.\n\nAPI 구조는 JSON:API 스타일(data 배열 안 id/type/attributes, meta.offset/limit/total/fields, links.next). 엔드포인트 3종: /contracts(필터·정렬·페이지네이션 가능한 계약 조회), /eod(EOD 데이터, compact 모드 지원), /underlying-symbols(지원 티커 목록).\n\ntradetime 필드 시맨틱(룩어헤드/체결 해석 주의): volume>0 이고 last 가 non-zero 면 실제 체결 시각, 아니면 bid/ask·open interest 등 마지막 업데이트 시각(실거래 아님). 백테스트에서 '거래 발생'으로 오인 금지.\n\n업데이트 이력(페이지 기재): 2025-01 티커별 엔드포인트·다중 필터(strike/expiration 등)·정렬·compact 추가. 2025-03 tradetime 필터링 추가.\n\n⚠️ 주의: 대상 마케팅 페이지 자체에는 base_url·파라미터·필드 등 명세가 적혀 있지 않고 'full documentation' 링크로 안내. 아래 endpoints/필드는 그 링크(공식 docs)에서 추출한 것이며, 마케팅 페이지에는 그릭·IV·moneyness·vol_oi_ratio·43필드·2년 히스토리·6000+ 티커·2025 업데이트 정도만 산문으로 기재됨.",
+  "endpoints": [
+    {
+      "name": "Get Options Contracts",
+      "method": "GET",
+      "url_pattern": "/api/mp/unicornbay/options/contracts",
+      "description": "옵션 계약 조회. underlying_symbol·strike·expiration·tradetime·type 필터, 정렬, 페이지네이션, 필드 선택 지원. JSON:API 형태로 반환.",
+      "query_params": [
+        {
+          "name": "filter[contract]",
+          "type": "string",
+          "required": false,
+          "description": "특정 계약명/식별자로 필터"
+        },
+        {
+          "name": "filter[underlying_symbol]",
+          "type": "string",
+          "required": false,
+          "description": "기초자산 티커로 필터(예: AAPL)"
+        },
+        {
+          "name": "filter[exp_date_eq]",
+          "type": "date",
+          "required": false,
+          "description": "정확히 해당 만기일(YYYY-MM-DD) 계약"
+        },
+        {
+          "name": "filter[exp_date_from]",
+          "type": "date",
+          "required": false,
+          "description": "지정일 이후 만기 계약"
+        },
+        {
+          "name": "filter[exp_date_to]",
+          "type": "date",
+          "required": false,
+          "description": "지정일 이전 만기 계약"
+        },
+        {
+          "name": "filter[tradetime_eq]",
+          "type": "date",
+          "required": false,
+          "description": "정확히 해당 trade time 의 계약 (2025-03 추가)"
+        },
+        {
+          "name": "filter[tradetime_from]",
+          "type": "date",
+          "required": false,
+          "description": "지정일 이후 trade time"
+        },
+        {
+          "name": "filter[tradetime_to]",
+          "type": "date",
+          "required": false,
+          "description": "지정일 이전 trade time"
+        },
+        {
+          "name": "filter[type]",
+          "type": "enum",
+          "required": false,
+          "description": "옵션 타입. 값: put, call"
+        },
+        {
+          "name": "filter[strike_eq]",
+          "type": "number",
+          "required": false,
+          "description": "정확한 행사가"
+        },
+        {
+          "name": "filter[strike_from]",
+          "type": "number",
+          "required": false,
+          "description": "지정값 이상 행사가"
+        },
+        {
+          "name": "filter[strike_to]",
+          "type": "number",
+          "required": false,
+          "description": "지정값 이하 행사가"
+        },
+        {
+          "name": "sort",
+          "type": "enum",
+          "required": false,
+          "description": "정렬. 값: exp_date, strike, -exp_date, -strike (- 는 내림차순)"
+        },
+        {
+          "name": "page[offset]",
+          "type": "integer",
+          "required": false,
+          "default": "0",
+          "description": "페이지네이션 오프셋(시작점). 최대 10000"
+        },
+        {
+          "name": "page[limit]",
+          "type": "integer",
+          "required": false,
+          "default": "1000",
+          "description": "페이지당 최대 레코드 수. 최대 1000"
+        },
+        {
+          "name": "fields[options-contracts]",
+          "type": "string",
+          "required": false,
+          "default": "all",
+          "description": "응답에 포함할 필드 지정(콤마 구분)"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰. 테스트는 demo(AAPL 한정)"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "description": "리소스 ID (JSON:API)"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "리소스 타입 'options-contracts'"
+        },
+        {
+          "name": "contract",
+          "type": "string",
+          "description": "계약 식별자"
+        },
+        {
+          "name": "underlying_symbol",
+          "type": "string",
+          "description": "기초자산 티커"
+        },
+        {
+          "name": "exp_date",
+          "type": "date",
+          "description": "만기일"
+        },
+        {
+          "name": "expiration_type",
+          "type": "string",
+          "description": "만기 유형(monthly 등)"
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "description": "call 또는 put"
+        },
+        {
+          "name": "strike",
+          "type": "number",
+          "description": "행사가"
+        },
+        {
+          "name": "exchange",
+          "type": "string",
+          "description": "거래소(예 NASDAQ)"
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "description": "통화(USD)"
+        },
+        {
+          "name": "open",
+          "type": "number",
+          "description": "시가"
+        },
+        {
+          "name": "high",
+          "type": "number",
+          "description": "고가"
+        },
+        {
+          "name": "low",
+          "type": "number",
+          "description": "저가"
+        },
+        {
+          "name": "last",
+          "type": "number",
+          "description": "마지막 체결가"
+        },
+        {
+          "name": "last_size",
+          "type": "integer",
+          "description": "마지막 체결 수량"
+        },
+        {
+          "name": "change",
+          "type": "number",
+          "description": "가격 변동"
+        },
+        {
+          "name": "pctchange",
+          "type": "number",
+          "description": "가격 변동률"
+        },
+        {
+          "name": "previous",
+          "type": "number",
+          "description": "전일 종가"
+        },
+        {
+          "name": "previous_date",
+          "type": "date",
+          "description": "전일 종가 날짜"
+        },
+        {
+          "name": "bid",
+          "type": "number",
+          "description": "현재 매수 호가"
+        },
+        {
+          "name": "bid_date",
+          "type": "datetime",
+          "description": "매수 호가 타임스탬프"
+        },
+        {
+          "name": "bid_size",
+          "type": "integer",
+          "description": "매수 호가 수량"
+        },
+        {
+          "name": "ask",
+          "type": "number",
+          "description": "현재 매도 호가"
+        },
+        {
+          "name": "ask_date",
+          "type": "datetime",
+          "description": "매도 호가 타임스탬프"
+        },
+        {
+          "name": "ask_size",
+          "type": "integer",
+          "description": "매도 호가 수량"
+        },
+        {
+          "name": "moneyness",
+          "type": "number",
+          "description": "현재가/행사가 비율(내가격성)"
+        },
+        {
+          "name": "volume",
+          "type": "integer",
+          "description": "거래량"
+        },
+        {
+          "name": "volume_change",
+          "type": "integer",
+          "description": "전일 대비 거래량 변동"
+        },
+        {
+          "name": "volume_pctchange",
+          "type": "number",
+          "description": "거래량 변동률"
+        },
+        {
+          "name": "open_interest",
+          "type": "integer",
+          "description": "미결제약정 수"
+        },
+        {
+          "name": "open_interest_change",
+          "type": "integer",
+          "description": "미결제약정 변동"
+        },
+        {
+          "name": "open_interest_pctchange",
+          "type": "number",
+          "description": "미결제약정 변동률"
+        },
+        {
+          "name": "volatility",
+          "type": "number",
+          "description": "내재변동성(IV)"
+        },
+        {
+          "name": "volatility_change",
+          "type": "number",
+          "description": "IV 변동"
+        },
+        {
+          "name": "volatility_pctchange",
+          "type": "number",
+          "description": "IV 변동률"
+        },
+        {
+          "name": "theoretical",
+          "type": "number",
+          "description": "이론 옵션 가격"
+        },
+        {
+          "name": "delta",
+          "type": "number",
+          "description": "델타 그릭(기초자산 가격 민감도)"
+        },
+        {
+          "name": "gamma",
+          "type": "number",
+          "description": "감마 그릭(델타 민감도)"
+        },
+        {
+          "name": "theta",
+          "type": "number",
+          "description": "세타 그릭(시간가치 감소)"
+        },
+        {
+          "name": "vega",
+          "type": "number",
+          "description": "베가 그릭(변동성 민감도)"
+        },
+        {
+          "name": "rho",
+          "type": "number",
+          "description": "로 그릭(금리 민감도)"
+        },
+        {
+          "name": "tradetime",
+          "type": "date",
+          "description": "마지막 시장 활동 기록 날짜 (체결 아닐 수 있음 — caveats 참조)"
+        },
+        {
+          "name": "vol_oi_ratio",
+          "type": "number",
+          "description": "거래량/미결제약정 비율"
+        },
+        {
+          "name": "dte",
+          "type": "integer",
+          "description": "만기까지 일수(days to expiration)"
+        },
+        {
+          "name": "midpoint",
+          "type": "number",
+          "description": "매수-매도 호가 중간값"
+        }
+      ],
+      "example": "https://eodhd.com/api/mp/unicornbay/options/contracts?filter[underlying_symbol]=AAPL&filter[strike_eq]=450&filter[type]=put&filter[exp_date_eq]=2027-01-15&fields[options-contracts]=contract,bid_date,open,high,low,last&page[limit]=5&sort=-exp_date&api_token=demo"
+    },
+    {
+      "name": "Get End-of-Day Options Data",
+      "method": "GET",
+      "url_pattern": "/api/mp/unicornbay/options/eod",
+      "description": "옵션 EOD 데이터. /contracts 와 동일한 필터/정렬/페이지네이션 + compact 모드. type='options-eod'.",
+      "query_params": [
+        {
+          "name": "compact",
+          "type": "boolean",
+          "required": false,
+          "default": "0",
+          "description": "compact 모드. 1 이면 필드명 생략하고 데이터를 배열로 반환(응답 최소화)"
+        },
+        {
+          "name": "filter[underlying_symbol]",
+          "type": "string",
+          "required": false,
+          "description": "기초자산 티커 필터 (외 /contracts 의 모든 필터 동일 적용)"
+        },
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(동일)",
+          "type": "-",
+          "description": "/contracts 와 동일한 attributes 필드 집합(그릭·IV·moneyness·dte 등 43필드). 단 리소스 type='options-eod'. compact=1 시 attributes 대신 값 배열."
+        }
+      ],
+      "example": "https://eodhd.com/api/mp/unicornbay/options/eod?filter[underlying_symbol]=AAPL&compact=1&api_token=demo"
+    },
+    {
+      "name": "List Supported Stock Tickers",
+      "method": "GET",
+      "url_pattern": "/api/mp/unicornbay/options/underlying-symbols",
+      "description": "옵션 데이터가 지원되는 기초자산 티커 목록. 인증 외 파라미터 없음. compact 형태로 티커 문자열 배열 반환.",
+      "query_params": [
+        {
+          "name": "api_token",
+          "type": "string",
+          "required": true,
+          "description": "API 인증 토큰"
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "meta.total",
+          "type": "integer",
+          "description": "지원 티커 총 수"
+        },
+        {
+          "name": "meta.fields",
+          "type": "array",
+          "description": "['underlying_symbol']"
+        },
+        {
+          "name": "meta.compact",
+          "type": "boolean",
+          "description": "true"
+        },
+        {
+          "name": "data",
+          "type": "array<string>",
+          "description": "지원 티커 문자열 배열"
+        },
+        {
+          "name": "links.next",
+          "type": "string|null",
+          "description": "다음 페이지 링크"
+        }
+      ],
+      "example": "https://eodhd.com/api/mp/unicornbay/options/underlying-symbols?api_token=demo"
+    }
+  ],
+  "rate_limits": "1 API request = 10 API calls (요청당 10콜 소비). 일일 한도 100,000 API calls / 24시간. 분당 한도 1,000 API requests/minute. 24시간 기준은 \"Marketplace 제품은 메인 EODHD 플랜과 다르게 카운트됨\". 응답 상태코드: 200/401/403/404/422/429.",
+  "pricing_notes": "EODHD Marketplace(UnicornBay) 별도 add-on 제품. 대상 페이지·docs 페이지 모두 구체 플랜 티어·가격을 명시하지 않고 'Learn More & Buy' 마켓플레이스 링크로 안내(=메인 EOD/Fundamentals 구독에 자동 포함되는지 확인 불가). 테스트는 demo 토큰으로 AAPL 한정 무료 접근 가능.",
+  "caveats": [
+    "대상 마케팅 페이지(financial-apis/options-data-api-us-stocks)는 JS SPA·산문 위주로 실제 REST 명세가 없음. 모든 엔드포인트/파라미터/필드는 페이지가 가리키는 공식 docs(marketplace/unicornbay/options/docs)에서 추출 — 별도 페이지 출처임을 명시.",
+    "두 페이지 모두 정확한 가격·구독 플랜 티어를 기재하지 않음 (pricing failed). 메인 EODHD 구독 포함 여부 미확인 — 마켓플레이스 구매 페이지 별도 확인 필요.",
+    "tradetime 룩어헤드 함정: tradetime 은 '마지막 시장 활동' 시각이며 volume>0 & last≠0 일 때만 실제 체결. 그 외엔 호가/OI 업데이트 시각 → 백테스트에서 '거래 발생/유동성'으로 오해 금지.",
+    "히스토리 약 2년(two-year)뿐 — stockpick 의 30년 백테스트 요구와 전혀 맞지 않음. 또한 미국 주식 옵션 데이터로, 한국 코스피/코스닥 현물 분석이라는 stockpick 도메인과 직접 관련 없음(현 단계 채택 대상 아님).",
+    "filter 파라미터는 JSON:API 대괄호 표기(filter[...], page[...], fields[...]) — URL 인코딩 및 클라이언트 라이브러리에서 대괄호 처리 주의.",
+    "요청당 10콜 소비 + compact 모드 미사용 시 응답 크기 큼(43필드). 대량 수집 시 일일 100k콜 한도(=10,000 requests/day) 빠르게 소진 가능.",
+    "필드 타입/세부 설명은 r.jina.ai 프록시가 docs 페이지를 정규화하며 추론·요약한 부분이 일부 포함될 수 있음(특히 type 예시값 'monthly', 'NASDAQ'). 코드 의존 전 실제 demo 토큰 응답으로 1회 실측 권장."
+  ]
+}
