@@ -15,3 +15,4 @@
 | 2026-06-16 | B-pipeline — Tiingo EOD 가격 어댑터(httpx·adj_factor·모킹 테스트, 라이브 0) | 일반 구현 | [[2026-06-16-B-pipeline-tiingo-어댑터]] |
 | 2026-06-16 | B-pipeline — 저장층(Hive Parquet·decimal128·DuckDB 검증) + 라이브 파일럿(분할 교차검증) | 일반 구현 | [[2026-06-16-B-pipeline-storage-pilot]] |
 | 2026-06-16 | TASK-B — 검증 게이트 소실 탐지(expected vs actual 대조, 생존편향 누수 봉인) | 일반 구현 | [[2026-06-16-TASK-B-게이트-소실탐지]] |
+| 2026-06-16 | TASK-C/D — adj_factor quantize 공유 헬퍼(scale 37→12) + EodhdSource 어댑터(폐지 유니버스·라이브 0) | 일반 구현 | [[2026-06-16-TASK-CD-quantize-eodhd어댑터]] |

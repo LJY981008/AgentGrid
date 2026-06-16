@@ -8,8 +8,10 @@
 않는다. 도메인 계약(`..types`)과 인터페이스(`.source`)만 의존한다.
 
 수정주가 BLOCKING: 응답의 raw OHLCV 를 원본 그대로 `DailyBar` 에 담고(원본 불변), 수정주가는
-`adj_factor = adjClose / close` 로 산출해 보관한다(adjusted = raw * adj_factor). float 금지 —
-Decimal 정밀(부동소수 오차로 수익률 왜곡 방지). 결측·거래정지는 추측 채움 없이 누락 행으로 둔다.
+공유 헬퍼 `_adjust.compute_adj_factor(adjClose, close)` 로 산출해 보관한다(adjusted = raw *
+adj_factor). float 금지 — Decimal 정밀(부동소수 오차로 수익률 왜곡 방지). 산출 정밀도는 헬퍼가
+의도 정밀도(소수 12자리)로 quantize 한다(나눗셈 무한소수 꼬리 제거 — TASK-C). 결측·거래정지는
+추측 채움 없이 누락 행으로 둔다.
 
 생존편향 BLOCKING: Tiingo 무료 플랜은 폐지종목 survivorship-free 유니버스를 제공하지 않는다.
 `utilities-search` 엔드포인트는 검색어 기반이며 전체 종목 나열(limit·페이지네이션) 수단이 명세에
@@ -29,6 +31,7 @@ from typing import TYPE_CHECKING, Final
 import httpx
 
 from ..types import DailyBar
+from ._adjust import compute_adj_factor
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -290,8 +293,8 @@ class TiingoSource:
             return None
 
         adj_close = _to_decimal(row.get("adjClose"))
-        adj_factor = _compute_adj_factor(
-            adj_close=adj_close, close=close, ticker=ticker, trade_date=trade_date
+        adj_factor = compute_adj_factor(
+            adj_close, close, source=_SOURCE_LABEL, ticker=ticker, trade_date=trade_date
         )
 
         return DailyBar(
@@ -305,34 +308,6 @@ class TiingoSource:
             value=None,  # Tiingo EOD 응답에 거래대금($) 필드 없음(명세) — 추측 산출 금지
             adj_factor=adj_factor,
         )
-
-
-def _compute_adj_factor(
-    *,
-    adj_close: Decimal | None,
-    close: Decimal,
-    ticker: str,
-    trade_date: date,
-) -> Decimal:
-    """adj_factor = adjClose / close (Decimal 정밀). 경계 방어: close=0/adjClose 결측 → 1.0.
-
-    adjClose 결측 또는 close<=0 이면 수정 불가 → 무수정(1) 로 두고 WARNING(조용한 왜곡 방지).
-    정상 케이스에서 adjClose==close 면 factor==1(무분할·무배당 구간), 다르면 분할/배당 조정 반영.
-    """
-    if adj_close is None:
-        logger.warning(
-            "Tiingo adjClose 결측 — adj_factor=1 적용: ticker=%s, date=%s", ticker, trade_date
-        )
-        return Decimal("1")
-    if close <= 0:
-        logger.warning(
-            "Tiingo close<=0 — adj_factor 산출 불가, 1 적용: ticker=%s, date=%s, close=%s",
-            ticker,
-            trade_date,
-            close,
-        )
-        return Decimal("1")
-    return adj_close / close
 
 
 def _parse_retry_after(value: str | None) -> float | None:

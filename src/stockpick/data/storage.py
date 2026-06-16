@@ -40,20 +40,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # decimal128 컬럼 정밀도(precision, scale) — 실측 근거(2026-06-16, 라이브 NVDA 로 보정):
-#   - 가격(OHLC): Tiingo raw 는 소수 4자리 수준이나 여유 scale 10. 정수부 28자리(어떤 주가도 수용).
-#   - adj_factor = adjClose/close 는 기본 Decimal(prec=28) 나눗셈 결과. factor<1(분할)이면
-#     유효숫자 28자리가 선행 0 뒤에 와 scale 이 28 을 넘는다. 라이브 NVDA(10:1)에서
-#     scale=29 실측 → 초기 28 가정이 게이트에 걸려 발견(설계대로 조용히 자르지 않고 실패).
-#     정수부 1자리 보장 + scale 37(precision 38) 로 상향: 선행 0 9개(factor≈1e-9)까지, 역분할로
-#     factor≥1(역분할, 한 자릿수)도 수용. ⚠️ factor 의 28자리 꼬리는 나눗셈 인공물(의미정밀도 아님 —
-#     adjClose 가 소수 4자리). factor 산출 정밀도는 본래 어댑터 책임이라 후속 정합 필요(아래 NOTE).
-# NOTE(후속): adj_factor 의 무의미한 무한소수 꼬리를 어댑터(_compute_adj_factor)에서 의도된 정밀도로
-#   고정(adjClose·close 유효 자릿수 기반 quantize)이 정공법. 저장층은 받은 값을 손실 없이 담을 뿐
-#   (조용한 반올림 금지) — scale 상향은 그 계약을 지키는 임시 수용. M2 전 어댑터 정합 권고.
+#   - 가격(OHLC): Tiingo/EODHD raw 는 소수 4자리 수준이나 여유 scale 10. 정수부 28자리(어떤 주가도
+#     수용).
+#   - adj_factor: 어댑터 공유 헬퍼(_adjust.compute_adj_factor)가 산출 시 **의도 정밀도 소수 12자리로
+#     quantize** 한다(TASK-C). 따라서 컬럼 scale 도 12 로 맞춘다 — 헬퍼가 고정한 정밀도와 동일해야
+#     PrecisionError 없이 손실 없이 적재된다. 정수부 26자리 여유(precision 38) 로 역분할(factor
+#     한·두 자릿수)도 수용.
+# 이력(TASK-C 이전): adj_factor = adjClose/close 가 기본 Decimal(prec=28) 나눗셈 결과라 factor<1
+#   (분할)이면 선행 0 뒤 유효숫자가 와 scale 이 28~29 까지 갔다(라이브 NVDA 10:1 에서 scale 29 실측,
+#   게이트가 조용히 자르지 않고 PrecisionError 로 발견). 당시 scale 37 로 상향해 임시 수용했으나, 그
+#   꼬리는 나눗셈 인공물(의미정밀도 아님 — adjClose 가 소수 4자리)이었다. TASK-C 에서 산출 단계
+#   quantize(12자리)로 근본 해소 → scale 37→12 축소. 헬퍼의 ADJ_FACTOR_DECIMAL_PLACES 와 동일.
 _PRICE_PRECISION: Final = 38
 _PRICE_SCALE: Final = 10
 _FACTOR_PRECISION: Final = 38
-_FACTOR_SCALE: Final = 37
+_FACTOR_SCALE: Final = 12
 
 _DATASET_NAME: Final = "daily_bar"
 _ZSTD: Final = "zstd"

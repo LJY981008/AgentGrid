@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -64,9 +64,15 @@ def _read_all(base_dir: Path) -> list[dict[str, object]]:
 
 
 def test_decimal_precision_preserved(tmp_path: Path) -> None:
-    """가격·고정밀 adj_factor 가 round-trip 후 Decimal 로 손실 없이 보존(float 다운캐스트 금지)."""
-    # adjClose/close 형태의 긴 소수 factor(분할 케이스 모사) — float 면 깨질 정밀도
-    factor = Decimal("127.46") / Decimal("129.04")  # scale 28
+    """가격·adj_factor 가 round-trip 후 Decimal 로 손실 없이 보존(float 다운캐스트 금지).
+
+    TASK-C: adj_factor 는 어댑터 공유 헬퍼가 소수 12자리로 quantize 한 값이 저장층에 들어온다
+    (저장 컬럼 scale=12 와 정합). 따라서 분할 케이스 factor 도 12자리 quantize 값으로 모사한다.
+    """
+    # adjClose/close 형태 분할 factor 를 헬퍼와 동일하게 12자리 quantize(저장 컬럼 scale=12)
+    factor = (Decimal("127.46") / Decimal("129.04")).quantize(
+        Decimal("1E-12"), rounding=ROUND_HALF_EVEN
+    )
     bar = _bar("AAPL", date(2020, 8, 28), close="129.0400", adj_factor=str(factor))
     write_daily_bars(
         [bar],
@@ -163,6 +169,17 @@ def test_precision_error_on_scale_overflow(tmp_path: Path) -> None:
     # 소수 12자리 — _PRICE_SCALE=10 초과
     bar = _bar("AAPL", date(2022, 6, 1), close="105.123456789012")
     with pytest.raises(PrecisionError, match="close"):
+        write_daily_bars([bar], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
+
+
+def test_precision_error_on_adj_factor_scale_overflow(tmp_path: Path) -> None:
+    """adj_factor scale(12) 초과 Decimal → PrecisionError(TASK-C: 어댑터 quantize 미적용 값 거부).
+
+    어댑터 공유 헬퍼는 12자리로 quantize 하므로 정상 경로에선 발생 안 함. 이 테스트는 13자리 이상
+    꼬리가 저장층까지 새어 들어오면(헬퍼 우회) 조용히 반올림 않고 명시적으로 실패함을 고정한다.
+    """
+    bar = _bar("AAPL", date(2022, 6, 1), adj_factor="0.1234567890123")  # 13자리 — scale 12 초과
+    with pytest.raises(PrecisionError, match="adj_factor"):
         write_daily_bars([bar], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
 
 

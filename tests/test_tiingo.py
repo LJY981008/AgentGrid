@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 
 import httpx
 import pytest
@@ -114,15 +114,19 @@ def test_adj_factor_one_when_adjclose_equals_close() -> None:
 
 
 def test_adj_factor_computed_from_adjclose_over_close_on_split() -> None:
-    """분할 케이스: adj_factor = adjClose/close (Decimal 정밀), 1 아님. raw close 는 불변."""
+    """분할 케이스: adj_factor = quantize(adjClose/close, 12자리), 1 아님. raw close 는 불변."""
     src = _make_source(rows=[_ROW_SPLIT])
     bar = src.fetch_daily_bars("AAPL")[0]
-    # 정밀 비교: Decimal('127.46') / Decimal('129.04')
-    assert bar.adj_factor == Decimal("127.46") / Decimal("129.04")
+    # TASK-C: 공유 헬퍼가 소수 12자리로 quantize(나눗셈 무한소수 꼬리 제거)
+    expected = (Decimal("127.46") / Decimal("129.04")).quantize(
+        Decimal("1E-12"), rounding=ROUND_HALF_EVEN
+    )
+    assert bar.adj_factor == expected
     assert bar.adj_factor != Decimal("1")
+    exponent = bar.adj_factor.as_tuple().exponent  # 유한 Decimal → int(특수값 'n'/'N'/'F' 아님)
+    assert isinstance(exponent, int)
+    assert -exponent == 12  # scale 고정 12
     assert bar.close == Decimal("129.04")  # raw 원본 그대로
-    # adjusted = raw * adj_factor 가 adjClose 를 복원하는지(원본 불변 모델 일관성)
-    assert bar.close * bar.adj_factor == Decimal("127.46")
 
 
 def test_adj_factor_falls_back_to_one_when_adjclose_missing(
@@ -135,7 +139,7 @@ def test_adj_factor_falls_back_to_one_when_adjclose_missing(
     with caplog.at_level(logging.WARNING):
         bar = src.fetch_daily_bars("AAPL")[0]
     assert bar.adj_factor == Decimal("1")
-    assert any("adjClose 결측" in r.message for r in caplog.records)
+    assert any("수정종가) 결측" in r.message for r in caplog.records)
 
 
 def test_adj_factor_falls_back_when_close_zero(caplog: pytest.LogCaptureFixture) -> None:
@@ -146,7 +150,7 @@ def test_adj_factor_falls_back_when_close_zero(caplog: pytest.LogCaptureFixture)
     with caplog.at_level(logging.WARNING):
         bar = src.fetch_daily_bars("AAPL")[0]
     assert bar.adj_factor == Decimal("1")
-    assert any("close<=0" in r.message for r in caplog.records)
+    assert any("raw close<=0" in r.message for r in caplog.records)
 
 
 def test_missing_ohlcv_row_is_dropped_not_filled(caplog: pytest.LogCaptureFixture) -> None:
