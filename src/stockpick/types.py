@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from enum import Enum
 
 
@@ -31,16 +32,22 @@ class Stock:
 
 @dataclass(frozen=True, slots=True)
 class DailyBar:
-    """일봉(EOD) OHLCV. 수정주가 기준 단일화(소스별 정의 통일 — 데이터소스 리서치 caveat)."""
+    """일봉(EOD) OHLCV — 원주가(raw, 미수정) 저장.
+
+    수정주가는 adjusted = raw * adj_factor 로 재계산(원본 불변). 수정 기준은 단일 소스
+    (FDR adjusted)로 통일하고 액면분할 표본으로 교차검증(M1). 가격은 Decimal — float 금지
+    (정밀도 BLOCKING, 부동소수 오차로 수익률 왜곡 방지). 누락 필드는 추측 금지 — 명시적 None.
+    """
 
     code: str
     trade_date: date
-    open: float
-    high: float
-    low: float
-    close: float
+    open: Decimal  # 원주가(미수정)
+    high: Decimal
+    low: Decimal
+    close: Decimal
     volume: int
     value: int | None  # 거래대금(원), 미제공 시 None
+    adj_factor: Decimal = Decimal("1")  # 누적조정계수, adjusted = raw*adj_factor (무수정=1)
 
 
 @dataclass(frozen=True, slots=True)

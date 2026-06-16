@@ -8,14 +8,15 @@
 > ⚠️ **2026-06-16 도메인 전환**: MCP 신뢰성 레지스트리 → 개인 투자용 한국 주식 분석. 아래 1st/2nd/3rd 는 폐기(보존만).
 
 - [[plans/stock-1st_plan|한국주식 기준선]] — **현행** Top20 정량→수동 Top5→분산투자 추적·보정, Python+PWA, 미해결 8건
-- [[plans/PLAN_STATUS|기획 현황판]] — 전환 선언 + 데이터소스 리서치 + 미해결 질문 추적
+- [[plans/M1-데이터파이프라인|M1 착수 스펙]] — **현행** 소스·PG18 7테이블 스키마·파일럿 S0~S6·BLOCKING 가드 (실측 스코핑 종합)
+- [[plans/PLAN_STATUS|기획 현황판]] — 전환 선언 + 데이터소스 리서치 + 미해결 질문 추적(#1·#4·#8 해결)
 - ~~[[plans/1st_plan]] · [[plans/2nd_plan]] · [[plans/3rd_plan]]~~ — (구) MCP 레지스트리, 폐기
 
 ## 🏛️ 아키텍처 결정 (decisions/)
 
 > ADR 형식. 템플릿: [[templates/adr-template]]
 
-- (아직 없음 — 첫 ADR 은 DB 스키마 설계 시점 예상)
+- [[decisions/ADR-001-마이그레이션-도구-alembic|ADR-001 마이그레이션 도구 = alembic]] — 승인(2026-06-16). PG18 파티션/BRIN/ENUM 은 raw SQL 보강
 
 ## 🔬 리서치 (research/)
 
