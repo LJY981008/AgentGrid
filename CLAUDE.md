@@ -50,7 +50,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | Python 코드 작성·수정 (모든 경우) | [.claude/rules/python-conventions.md](.claude/rules/python-conventions.md) + [logging-rules.md](.claude/rules/logging-rules.md) | strict 타입·모듈경계·실패 명확 보고·**금융 BLOCKING(편향·누설)** |
 | 웹앱(PWA) 작성·수정 (M4) | [.claude/rules/webapp-conventions.md](.claude/rules/webapp-conventions.md) | PWA·읽기 위주·투자 로직 프론트 중복 금지 |
-| **LLM/외부 라이브러리 API** | 기억 금지 — tech-researcher 실측 (claude-api 스킬은 LLM 호출 시) | pandas·pykrx·FDR·KRX 시그니처 실측 |
+| **외부 데이터 API 코드** (Tiingo 등) | [.claude/rules/api-spec-reference.md](.claude/rules/api-spec-reference.md) + [docs/apis/](docs/apis/) | 캡처된 JSON 명세가 진실원천(엔드포인트·필드 환각 금지). 없으면 tech-researcher 재캡처(tiingo-spec-capture). claude-api 스킬은 LLM 호출 시 |
 | 버그·테스트/수집/백테스트 실패 | [debugging-discipline](.claude/skills/debugging-discipline/SKILL.md) | 추측 금지 + **이상결과 3분류**(버그/룩어헤드/생존편향) |
 | 하네스 변경 | [harness-update](.claude/skills/harness-update/SKILL.md) | 분류→배치→drift 매핑 |
 | 기획 작업 | `docs/plans/` (현황: [PLAN_STATUS.md](docs/plans/PLAN_STATUS.md)) | product-planner. 기준선 = stock-1st_plan |
@@ -60,7 +60,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**stockpick** — 개인 투자용 한국 주식(코스피/코스닥) 분석. 과거 30년 데이터로 **정량 룰 Top20** 생성 → **사용자 Claude 세션 토의로 수동 Top5** → 분산투자 → 추적·보정으로 안정화. AI 자동화는 미래 여지(우선순위 낮음). 1인용. 기획: [docs/plans/stock-1st_plan.md](docs/plans/stock-1st_plan.md)
+**stockpick** — 개인 투자용 **미국 주식(NYSE/NASDAQ/AMEX)** 분석. 과거 데이터로 **정량 룰 Top20** 생성 → **사용자 Claude 세션 토의로 수동 Top5** → 분산투자 → 추적·보정으로 안정화. AI 자동화는 미래 여지(우선순위 낮음). 1인용. ⚠️ 2026-06-16 한국→미국 시장 전환([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)) — 시장 무관 자산(BLOCKING·계약·스키마 PIT)은 유효, 소스·종목식별만 교체. 기획: [docs/plans/stock-1st_plan.md](docs/plans/stock-1st_plan.md)·[M1 스펙](docs/plans/M1-데이터파이프라인.md)
 
 **Tech Stack** (2026-06-16 전환):
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
