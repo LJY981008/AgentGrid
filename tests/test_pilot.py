@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from stockpick.data.pilot import PilotSymbol, _compute_split_check, run_pilot
+from stockpick.data.storage import VerificationError
 from stockpick.data.tiingo import TiingoRateLimitError
 from stockpick.types import DailyBar, Exchange
 
@@ -115,4 +116,46 @@ def test_run_pilot_propagates_rate_limit(tmp_path: Path) -> None:
     """rate limit 발생 시 즉시 전파(조용히 중단·빈 결과 금지)."""
     source = _RateLimitSource({})
     with pytest.raises(TiingoRateLimitError):
+        run_pilot(source=source, base_dir=tmp_path, delay_sec=0.0)
+
+
+def test_run_pilot_detects_silent_loss_via_cumulative_expected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """⭐ 회귀 봉인(라이브 파일럿 버그 재현): 어떤 종목 적재가 이전 종목을 조용히 소실시키면
+    run_pilot 의 누적 expected 대조가 VerificationError 로 시끄럽게 실패한다.
+
+    원래 버그: write 가 파티션 단위 purge 라 같은 NASDAQ·연도를 공유하는 이전 ticker 가 사라졌고
+    게이트는 "현재 트리"만 봐 PASS 했다. 여기선 write_daily_bars 를 'purge 후 단일 ticker만 남김'
+    으로 패치해 그 소실을 인위 재현 → 누적 expected 가 이제 누락을 잡는지 확인.
+    """
+    import stockpick.data.pilot as pilot_mod
+    from stockpick.data import storage
+
+    state: dict[str, str] = {}
+
+    def _lossy_write(bars, *, exchange, base_dir, source, ingested_at=None):  # type: ignore[no-untyped-def]
+        # 버그 재현: 매 적재마다 dataset 트리를 비우고 이번 ticker 만 남긴다(이전 ticker 소실).
+        root = base_dir / "daily_bar"
+        if root.exists():
+            for p in root.rglob("*.parquet"):
+                p.unlink()
+        tickers = {b.ticker for b in bars}
+        state["last"] = ", ".join(sorted(tickers))
+        return storage.write_daily_bars(
+            bars, exchange=exchange, base_dir=base_dir, source=source, ingested_at=ingested_at
+        )
+
+    monkeypatch.setattr(pilot_mod, "write_daily_bars", _lossy_write)
+
+    # 같은 NASDAQ 에 두 ticker — 두 번째 적재가 첫 번째를 소실시킨다.
+    source = _FakeSource(
+        {
+            "AAPL": [_bar("AAPL", date(2024, 6, 6), adj_factor="0.25")],
+            "MSFT": [_bar("MSFT", date(2024, 6, 6))],
+        }
+    )
+    # AAPL(누적 expected={AAPL}) 적재 후엔 PASS 하나, MSFT 적재가 AAPL 을 소실시키면
+    # 누적 expected={AAPL,MSFT} 대비 AAPL 누락 → 게이트 FAIL.
+    with pytest.raises(VerificationError, match="AAPL"):
         run_pilot(source=source, base_dir=tmp_path, delay_sec=0.0)

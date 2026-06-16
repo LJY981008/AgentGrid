@@ -75,6 +75,8 @@ _SQL_OHLC_VIOLATION: Final = (  # noqa: S608
     f"SELECT count(*) {_FROM} WHERE "
     f"high < low OR high < open OR high < close OR low > open OR low > close"
 )
+# ticker별 실제 적재 행수 — expected(기대) 와 대조해 누락·행수 미달(생존편향 소실)을 탐지.
+_SQL_TICKER_ROW_COUNTS: Final = f"SELECT ticker, count(*) {_FROM} GROUP BY ticker"  # noqa: S608
 
 
 class StorageError(RuntimeError):
@@ -86,12 +88,45 @@ class PrecisionError(StorageError):
 
 
 class VerificationError(StorageError):
-    """DuckDB 검증 게이트 위반(중복·adj_factor<=0·OHLC 부정합). 적재 신뢰 차단."""
+    """DuckDB 검증 게이트 위반(중복·adj_factor<=0·OHLC 부정합·기대 종목 소실). 적재 신뢰 차단."""
+
+
+@dataclass(frozen=True, slots=True)
+class TickerExpectation:
+    """ticker 1건의 기대 적재량. row_count=0 도 명시 기록(추측 채움 금지 — 빈 결과도 기대값).
+
+    ⚠️ 생존편향 BLOCKING(M1 §5): "무엇이 적재되어야 하는가"를 코드가 보유한다. 적재 후 실제
+    Parquet 행수가 이보다 적으면(누락·소실) 게이트가 시끄럽게 실패한다. row_count 는 write 직전
+    in-memory `list[DailyBar]` 의 (ticker 기준) 행수 — 어댑터가 뽑은 실측치이지 추정이 아니다.
+    """
+
+    ticker: str
+    row_count: int
+
+
+def build_expected(bars: Sequence[DailyBar]) -> dict[str, TickerExpectation]:
+    """write 직전 in-memory `list[DailyBar]` → ticker별 기대 적재량 맵(소실 탐지 기준값).
+
+    같은 입력을 write_daily_bars 와 verify_parquet 양쪽에 흘려 "기대(expected) vs 실제(actual)"
+    를 대조하기 위한 포착 헬퍼. 빈 입력이면 빈 맵(no-op 적재와 정합). ticker 별 행수를 정확히
+    센다(중복 trade_date 가 입력에 있으면 그 행수까지 기대에 포함 — 멱등 덮어쓰기는 write 책임).
+    """
+    expected: dict[str, int] = {}
+    for bar in bars:
+        expected[bar.ticker] = expected.get(bar.ticker, 0) + 1
+    return {t: TickerExpectation(ticker=t, row_count=n) for t, n in expected.items()}
 
 
 @dataclass(frozen=True, slots=True)
 class VerificationReport:
-    """DuckDB 검증 결과 리포트. passed=False 면 게이트 실패(VerificationError 동반)."""
+    """DuckDB 검증 결과 리포트. passed=False 면 게이트 실패(VerificationError 동반).
+
+    expected 대조(생존편향 가드)는 verify_parquet 에 expected 를 넘긴 경우만 채워진다:
+      - missing_tickers: 기대에 있는데 Parquet 에 0행(조용한 소실 — BLOCKING 실패)
+      - shortfall_tickers: {ticker: (expected, actual)} 기대보다 실제 행수가 적음(부분 소실 — 실패)
+      - orphan_tickers: 기대에 없는데 Parquet 에 존재(추가 데이터 — 경고만, fail 아님)
+    expected 미전달이면 세 집합 모두 비어 있고 expected_checked=False(대조 안 함 — 옛 약점 잔존).
+    """
 
     row_count: int
     ticker_count: int
@@ -100,13 +135,20 @@ class VerificationReport:
     duplicate_count: int
     nonpositive_adj_factor_count: int
     ohlc_violation_count: int
+    expected_checked: bool = False
+    missing_tickers: tuple[str, ...] = ()
+    shortfall_tickers: tuple[tuple[str, int, int], ...] = ()  # (ticker, expected, actual)
+    orphan_tickers: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
+        # orphan 은 정합 위반이 아니라 경고(추가 데이터일 뿐) — passed 에 포함하지 않는다.
         return (
             self.duplicate_count == 0
             and self.nonpositive_adj_factor_count == 0
             and self.ohlc_violation_count == 0
+            and not self.missing_tickers
+            and not self.shortfall_tickers
         )
 
 
@@ -241,24 +283,46 @@ def write_daily_bars(
     return dataset_root
 
 
-def verify_parquet(base_dir: Path) -> VerificationReport:
+def verify_parquet(
+    base_dir: Path,
+    *,
+    expected: dict[str, TickerExpectation] | None = None,
+) -> VerificationReport:
     """적재된 Parquet 트리를 DuckDB 로 스캔해 금융 무결성을 게이트로 검증(M1 §5).
 
     검증 항목:
       (a) 중복 (ticker, trade_date) = 0       — 멱등 위반·이중 적재 탐지
       (b) adj_factor > 0                       — 수정계수 0/음수는 수익률 계산 붕괴
       (c) OHLC 정합: high>=low, high>=open/close, low<=open/close — 가격 무결성
-      (d) 리포트: 행수·종목수·기간(min/max trade_date)
-    위반이 하나라도 있으면 VerificationError(게이트 실패). 트리가 비면 0행 리포트(passed=True).
+      (d) ⭐ expected 대조(생존편향 BLOCKING): expected 를 주면 ticker별 기대 행수 vs 실제 행수를
+          대조해 **누락(missing)·행수 미달(shortfall)** 을 시끄럽게 실패시킨다. orphan(기대에
+          없는데 존재)은 경고만. expected=None 이면 이 대조를 건너뛴다(옛 약점 — 호출부가 expected
+          를 넘겨야 소실을 탐지).
+      (e) 리포트: 행수·종목수·기간(min/max trade_date)
+    위반이 하나라도 있으면 VerificationError(게이트 실패). 트리가 비어도 expected 가 비어있지
+    않으면 전부 missing 으로 실패한다(전량 소실 = 가장 위험한 케이스).
 
-    Java 비유: 적재 후 통합 테스트의 어서션 묶음 — repository.saveAll() 직후 select 로 불변식
-    (유니크 제약·체크 제약)을 재확인하는 것과 같다. 여기선 DB 제약 대신 Parquet 스캔으로 검사.
+    ⚠️ 이 expected 대조는 라이브 파일럿 회귀(같은 파티션의 이전 ticker 가 조용히 소실됐는데 게이트가
+    "현재 트리"만 봐 PASS 한 버그)를 봉인하는 핵심 가드다. 게이트가 "무엇이 있어야 하는가"를 알아야
+    누락을 잡는다(M1 §5 생존편향: 미확보분 정량 고지).
+
+    Java 비유: 적재 후 통합 테스트의 어서션 묶음 — repository.saveAll() 직후 select count 로 저장
+    예상 건수(expected)와 실제 건수를 대조하는 것과 같다. DB 제약 대신 Parquet 스캔으로 검사.
     """
     dataset_root = base_dir / _DATASET_NAME
     files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
     if not files:
-        logger.warning("검증 대상 Parquet 없음 — 빈 리포트: dataset=%s", dataset_root)
-        return VerificationReport(
+        # 빈 트리: expected 가 있으면 전량 소실(전부 missing) — passed=False. 없으면 0행 PASS.
+        missing = tuple(sorted(expected)) if expected else ()
+        if missing:
+            logger.error(
+                "검증 대상 Parquet 없음인데 기대 종목 %d개 존재 — 전량 소실(BLOCKING): %s",
+                len(missing),
+                ", ".join(missing),
+            )
+        else:
+            logger.warning("검증 대상 Parquet 없음 — 빈 리포트: dataset=%s", dataset_root)
+        report = VerificationReport(
             row_count=0,
             ticker_count=0,
             min_date=None,
@@ -266,7 +330,12 @@ def verify_parquet(base_dir: Path) -> VerificationReport:
             duplicate_count=0,
             nonpositive_adj_factor_count=0,
             ohlc_violation_count=0,
+            expected_checked=expected is not None,
+            missing_tickers=missing,
         )
+        if not report.passed:
+            _raise_verification_error(report)
+        return report
 
     import duckdb
 
@@ -284,8 +353,11 @@ def verify_parquet(base_dir: Path) -> VerificationReport:
         duplicate_count = _scalar_int(con, _SQL_DUPLICATES, params)
         nonpositive_adj = _scalar_int(con, _SQL_NONPOSITIVE_ADJ, params)
         ohlc_violation = _scalar_int(con, _SQL_OHLC_VIOLATION, params)
+        actual_counts = _ticker_row_counts(con, _SQL_TICKER_ROW_COUNTS, params)
     finally:
         con.close()
+
+    missing, shortfall, orphan = _diff_expected(expected, actual_counts)
 
     report = VerificationReport(
         row_count=row_count,
@@ -295,9 +367,14 @@ def verify_parquet(base_dir: Path) -> VerificationReport:
         duplicate_count=duplicate_count,
         nonpositive_adj_factor_count=nonpositive_adj,
         ohlc_violation_count=ohlc_violation,
+        expected_checked=expected is not None,
+        missing_tickers=missing,
+        shortfall_tickers=shortfall,
+        orphan_tickers=orphan,
     )
     logger.info(
-        "Parquet 검증: rows=%d, tickers=%d, period=%s~%s, dup=%d, adj<=0=%d, ohlc=%d, passed=%s",
+        "Parquet 검증: rows=%d, tickers=%d, period=%s~%s, dup=%d, adj<=0=%d, ohlc=%d, "
+        "expected_checked=%s, missing=%d, shortfall=%d, orphan=%d, passed=%s",
         report.row_count,
         report.ticker_count,
         report.min_date,
@@ -305,15 +382,64 @@ def verify_parquet(base_dir: Path) -> VerificationReport:
         report.duplicate_count,
         report.nonpositive_adj_factor_count,
         report.ohlc_violation_count,
+        report.expected_checked,
+        len(report.missing_tickers),
+        len(report.shortfall_tickers),
+        len(report.orphan_tickers),
         report.passed,
     )
-    if not report.passed:
-        raise VerificationError(
-            "Parquet 무결성 게이트 실패(금융 BLOCKING): "
-            f"중복={report.duplicate_count}, adj_factor<=0={report.nonpositive_adj_factor_count}, "
-            f"OHLC위반={report.ohlc_violation_count}. 적재 데이터를 신뢰할 수 없습니다."
+    # orphan 은 fail 아님(추가 데이터) — 그러나 기대와 어긋난 신호이므로 경고로 시끄럽게 남긴다.
+    if report.orphan_tickers:
+        logger.warning(
+            "Parquet 검증 orphan(기대에 없는데 적재됨) %d개: %s",
+            len(report.orphan_tickers),
+            ", ".join(report.orphan_tickers),
         )
+    if not report.passed:
+        _raise_verification_error(report)
     return report
+
+
+def _diff_expected(
+    expected: dict[str, TickerExpectation] | None,
+    actual_counts: dict[str, int],
+) -> tuple[tuple[str, ...], tuple[tuple[str, int, int], ...], tuple[str, ...]]:
+    """expected(기대) vs actual(실제 ticker별 행수) 대조 → (missing, shortfall, orphan).
+
+    - missing: 기대에 있는데 실제 0행(키 부재) — 조용한 소실(BLOCKING)
+    - shortfall: 실제 행수 < 기대 행수 — 부분 소실(BLOCKING). (ticker, expected, actual)
+    - orphan: 기대에 없는데 실제 존재 — 추가 데이터(경고만)
+    expected=None 이면 대조 안 함(세 집합 모두 빈 tuple). actual 이 기대 이상이면 정상(재적재 등).
+    """
+    if expected is None:
+        return (), (), ()
+    missing: list[str] = []
+    shortfall: list[tuple[str, int, int]] = []
+    for ticker, exp in expected.items():
+        actual = actual_counts.get(ticker, 0)
+        if actual == 0:
+            missing.append(ticker)
+        elif actual < exp.row_count:
+            shortfall.append((ticker, exp.row_count, actual))
+    orphan = [t for t in actual_counts if t not in expected]
+    return tuple(sorted(missing)), tuple(sorted(shortfall)), tuple(sorted(orphan))
+
+
+def _raise_verification_error(report: VerificationReport) -> None:
+    """게이트 실패를 어느 항목이 얼마나 위반했는지 명시해 raise(빈 통과·조용한 실패 금지)."""
+    missing = ", ".join(report.missing_tickers) if report.missing_tickers else "없음"
+    shortfall = (
+        ", ".join(f"{t}(기대={e},실제={a})" for t, e, a in report.shortfall_tickers)
+        if report.shortfall_tickers
+        else "없음"
+    )
+    raise VerificationError(
+        "Parquet 무결성 게이트 실패(금융 BLOCKING): "
+        f"중복={report.duplicate_count}, adj_factor<=0={report.nonpositive_adj_factor_count}, "
+        f"OHLC위반={report.ohlc_violation_count}, "
+        f"누락(소실)={missing}, 행수미달={shortfall}. "
+        "기대 종목이 조용히 누락되면 생존편향 누수이므로 적재 데이터를 신뢰할 수 없습니다."
+    )
 
 
 def _scalar_int(con: DuckDBPyConnection, sql: str, params: dict[str, object]) -> int:
@@ -330,3 +456,15 @@ def _scalar_str(con: DuckDBPyConnection, sql: str, params: dict[str, object]) ->
     if row is None or row[0] is None:
         return None
     return str(row[0])
+
+
+def _ticker_row_counts(
+    con: DuckDBPyConnection, sql: str, params: dict[str, object]
+) -> dict[str, int]:
+    """ticker별 실제 적재 행수 맵(expected 대조용). GROUP BY 결과를 {ticker: count} 로 환원."""
+    counts: dict[str, int] = {}
+    for row in con.execute(sql, params).fetchall():
+        if row[0] is None:
+            continue
+        counts[str(row[0])] = int(row[1])
+    return counts

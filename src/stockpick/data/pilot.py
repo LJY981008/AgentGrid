@@ -36,7 +36,13 @@ from typing import Final
 
 from ..types import DailyBar, Exchange
 from .source import DataSource
-from .storage import VerificationReport, verify_parquet, write_daily_bars
+from .storage import (
+    TickerExpectation,
+    VerificationReport,
+    build_expected,
+    verify_parquet,
+    write_daily_bars,
+)
 from .tiingo import TiingoRateLimitError, TiingoSource
 
 logger = logging.getLogger(__name__)
@@ -134,8 +140,16 @@ def run_pilot(
 
     각 종목: fetch → 적재 → 검증 → 분할 체크. 429(rate limit)는 즉시 중단(부분 결과 반환,
     명확 로그). 빈 결과(데이터 없음)는 적재 no-op 후 0행 리포트(추측 채움 금지).
+
+    ⭐ 소실 탐지(생존편향 BLOCKING): 파일럿은 base_dir 에 종목을 **누적** 적재하므로, i번째
+    종목 적재 후 verify 에 넘기는 expected 는 0..i 까지 적재한 **누적 기대(ticker별 행수)** 다.
+    이렇게 해야 같은 파티션의 이전 ticker 가 조용히 소실되면(라이브 회귀 버그) verify 가 누락으로
+    시끄럽게 실패한다 — "현재 트리만 보던" 옛 약점을 봉인한다. 빈 결과(0행) ticker 는 expected 에
+    넣지 않는다(적재되지 않으므로 actual 0 과 정합 — 추측 채움 금지). 0행은 데이터 부족이지 소실이
+    아니다(소실은 적재됐던 ticker 가 사라지는 것).
     """
     results: list[SymbolResult] = []
+    cumulative_expected: dict[str, TickerExpectation] = {}
     for i, symbol in enumerate(_UNIVERSE):
         if i > 0:
             time.sleep(delay_sec)
@@ -156,7 +170,11 @@ def run_pilot(
             base_dir=base_dir,
             source=source.name,
         )
-        report = verify_parquet(base_dir)
+        # 누적 기대 갱신: 이 종목이 적재한 (ticker별) 행수를 합산. 빈 결과(0행)는 적재 no-op 이라
+        # expected 에 넣지 않는다(actual 0 과 일치 — 데이터 부족≠소실). 같은 ticker 재등장 시 행수
+        # 합산이지만 멱등 덮어쓰기로 actual 은 고유 (ticker,date) 집합 → 중복 게이트가 별도로 잡음.
+        cumulative_expected.update(build_expected(bars))
+        report = verify_parquet(base_dir, expected=cumulative_expected)
 
         dates = [b.trade_date for b in bars]
         results.append(

@@ -20,6 +20,7 @@ import pytest
 from stockpick.data.storage import (
     PrecisionError,
     VerificationError,
+    build_expected,
     verify_parquet,
     write_daily_bars,
 )
@@ -191,3 +192,103 @@ def test_value_nullable_roundtrip(tmp_path: Path) -> None:
     write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
     rows = _read_all(tmp_path)
     assert rows[0]["value"] is None
+
+
+# --- expected(기대) vs actual(실제) 대조 — 조용한 소실 탐지(생존편향 BLOCKING) ---
+
+
+def test_verify_detects_silently_missing_ticker(tmp_path: Path) -> None:
+    """⭐ 핵심 회귀(옛 버그가 PASS 했던 시나리오): expected={A,B,C} 인데 Parquet 에 A,B 만 있으면
+    (C 가 조용히 소실) 게이트가 **반드시 FAIL** 하고 누락 ticker(C)를 보고한다.
+
+    이전 게이트는 "현재 트리"(A,B)만 보고 dup/adj/OHLC 가 깨끗하니 PASS 했다 — 그래서 같은
+    파티션의 이전 ticker 소실을 못 잡았다. expected 대조로 이제 잡는다.
+    """
+    # A, B, C 를 기대값으로 포착 — 그러나 C 는 적재하지 않는다(소실 시뮬레이션).
+    all_bars = [
+        _bar("A", date(2024, 6, 6)),
+        _bar("B", date(2024, 6, 6)),
+        _bar("C", date(2024, 6, 6)),
+    ]
+    expected = build_expected(all_bars)
+    # A, B 만 실제 적재(C 소실)
+    write_daily_bars(all_bars[:2], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
+
+    with pytest.raises(VerificationError, match="C") as exc:
+        verify_parquet(tmp_path, expected=expected)
+    assert "누락" in str(exc.value)
+
+
+def test_verify_passes_when_all_expected_present(tmp_path: Path) -> None:
+    """expected 전부 존재 + 행수 일치 시 PASS, expected_checked=True."""
+    bars = [
+        _bar("A", date(2024, 6, 5)),
+        _bar("A", date(2024, 6, 6)),
+        _bar("B", date(2024, 6, 6)),
+    ]
+    expected = build_expected(bars)
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
+    report = verify_parquet(tmp_path, expected=expected)
+    assert report.passed
+    assert report.expected_checked
+    assert report.missing_tickers == ()
+    assert report.shortfall_tickers == ()
+
+
+def test_verify_fails_on_row_count_shortfall(tmp_path: Path) -> None:
+    """기대 행수보다 실제 행수가 적으면(부분 소실) FAIL + (ticker,expected,actual) 보고."""
+    expected_bars = [
+        _bar("A", date(2024, 6, 5)),
+        _bar("A", date(2024, 6, 6)),  # A 는 2행 기대
+    ]
+    expected = build_expected(expected_bars)
+    # 실제로는 A 1행만 적재(1행 소실)
+    write_daily_bars(
+        expected_bars[:1], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo"
+    )
+    with pytest.raises(VerificationError, match="행수미달") as exc:
+        verify_parquet(tmp_path, expected=expected)
+    assert "A" in str(exc.value)
+    assert "기대=2" in str(exc.value)
+
+
+def test_verify_warns_orphan_but_passes(tmp_path: Path) -> None:
+    """orphan(기대에 없는데 적재됨)은 경고만 — PASS(추가 데이터는 정합 위반 아님)."""
+    bars = [_bar("A", date(2024, 6, 6)), _bar("ORPHAN", date(2024, 6, 6))]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
+    # 기대엔 A 만 — ORPHAN 은 기대 밖
+    expected = build_expected([_bar("A", date(2024, 6, 6))])
+    report = verify_parquet(tmp_path, expected=expected)
+    assert report.passed  # orphan 은 fail 아님
+    assert report.orphan_tickers == ("ORPHAN",)
+    assert report.missing_tickers == ()
+
+
+def test_verify_empty_tree_with_expected_fails_all_missing(tmp_path: Path) -> None:
+    """빈 트리인데 expected 가 있으면 전량 소실(전부 missing) → FAIL(가장 위험한 케이스)."""
+    expected = build_expected([_bar("A", date(2024, 6, 6)), _bar("B", date(2024, 6, 6))])
+    # 아무것도 적재하지 않음
+    with pytest.raises(VerificationError, match="누락") as exc:
+        verify_parquet(tmp_path, expected=expected)
+    assert "A" in str(exc.value)
+    assert "B" in str(exc.value)
+
+
+def test_verify_no_expected_skips_diff(tmp_path: Path) -> None:
+    """expected 미전달이면 대조 건너뜀(expected_checked=False) — 기존 호출부 호환."""
+    bars = [_bar("A", date(2024, 6, 6))]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="tiingo")
+    report = verify_parquet(tmp_path)  # expected 없음
+    assert report.passed
+    assert report.expected_checked is False
+    assert report.missing_tickers == ()
+
+
+def test_build_expected_counts_rows_per_ticker() -> None:
+    """build_expected: ticker별 행수 정확 집계(빈 입력은 빈 맵)."""
+    assert build_expected([]) == {}
+    exp = build_expected(
+        [_bar("A", date(2024, 6, 5)), _bar("A", date(2024, 6, 6)), _bar("B", date(2024, 6, 6))]
+    )
+    assert exp["A"].row_count == 2
+    assert exp["B"].row_count == 1
