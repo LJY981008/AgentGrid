@@ -73,12 +73,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Development Commands
 
+> 환경은 **Docker 기반 uv**(어디서 돌려도 동일 — `uv.lock` + 이미지 고정). 로컬 uv 설치 불필요.
+> 베이스: `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.11.21` 바이너리 주입, 2단계 sync(의존성/소스 레이어 분리), non-root. 상세 주석: `Dockerfile`.
+
 ```bash
-docker compose up -d                               # PostgreSQL (운영 서빙)
-uv sync                                            # 의존성·가상환경 (M1 의존성 추가 후)
-ruff check src tests && mypy && PYTHONPATH=src pytest -q   # 검증 (Stop 훅 자동)
+docker compose up -d                               # PostgreSQL(운영) + app(개발 컨테이너, sleep 상주)
+docker compose build app                           # 이미지 빌드(베이스 pull 네트워크 필요)
+
+# 검증은 app 컨테이너 안에서 — 소스는 ./src·./tests 바인드 마운트(수정 즉시 반영, editable 설치)
+docker compose exec app ruff check src tests       # 린트
+docker compose exec app mypy                        # 타입(strict)
+docker compose exec app pytest -q                   # 테스트
+# 또는 일회성: docker compose run --rm app ruff check src tests
+
+# 개발 도구는 [dependency-groups].dev (PEP 735) — `uv sync` 가 기본 설치(extra 아님)
+# 런타임 의존성 추가 시: docker compose exec app uv add <pkg> → uv.lock 갱신 → 재빌드
 .claude/hooks/tests/run.sh                         # 훅 회귀 테스트 (38케이스)
 ```
+
+> uv.lock 재생성(로컬 uv 없음): `docker run --rm -v "$PWD":/app -w /app ghcr.io/astral-sh/uv:python3.12-trixie-slim uv lock`
+> ⚠️ 호스트 5432 선점 시(다른 PG 컨테이너) `docker compose up -d` 충돌 — `--no-deps app` 로 app 만 띄우거나 포트 매핑 조정.
 
 ---
 
@@ -86,6 +100,9 @@ ruff check src tests && mypy && PYTHONPATH=src pytest -q   # 검증 (Stop 훅 �
 
 | 경로 | 역할 |
 |---|---|
+| `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(멀티스테이지·non-root·BuildKit 캐시) |
+| `compose.yaml` | `postgres`(PG18 운영) + `app`(개발 컨테이너, 소스 바인드 마운트) |
+| `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/`·`backtest/` 모듈 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M4, 경로 예약) |

@@ -5,6 +5,31 @@
 name: stockpick
 
 services:
+  # 개발/실행 컨테이너 — uv 기반 재현 환경(어디서 돌려도 동일: uv.lock + 이미지 고정).
+  #   상주(sleep infinity)로 띄우고 검증은 `docker compose exec app ...` 또는
+  #   `docker compose run --rm app ...` 로 실행.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stockpick-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # 컨테이너 내부에서 PG 접속 — 호스트가 아니라 서비스명 postgres:5432
+      DATABASE_URL: postgresql://stockpick:stockpick-local@postgres:5432/stockpick
+      PYTHONPATH: src
+    volumes:
+      # 개발용 바인드 마운트 — 소스 수정 즉시 컨테이너 반영(재빌드 불필요).
+      #   editable 설치된 .pth(=/app/src) 위로 호스트 ./src 가 덮여 경로 동일.
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./pyproject.toml:/app/pyproject.toml
+      # ⚠️ .venv 는 마운트하지 않음 — 호스트엔 .venv 없고, 이미지의 .venv(컨테이너 플랫폼 빌드)를 써야 함.
+    # 코드가 아직 서버/CLI 진입점 없음 — 상주만(Dockerfile CMD 와 동일, 명시).
+    command: ["sleep", "infinity"]
+
   postgres:
     image: postgres:18-alpine
     container_name: stockpick-postgres
