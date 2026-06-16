@@ -17,7 +17,8 @@
 > ADR 형식. 템플릿: [[templates/adr-template]]
 
 - [[decisions/ADR-001-마이그레이션-도구-alembic|ADR-001 마이그레이션 도구 = alembic]] — 승인(2026-06-16). PG18 파티션/BRIN/ENUM 은 raw SQL 보강
-- [[decisions/ADR-002-미국-데이터소스-아키텍처|ADR-002 미국 데이터소스 아키텍처]] — 승인(2026-06-16). 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·RabbitMQ·LLM정규화 기각
+- [[decisions/ADR-002-미국-데이터소스-아키텍처|ADR-002 미국 데이터소스 아키텍처]] — 승인(2026-06-16). 가격 Tiingo→(M2 EODHD) / 재무 EDGAR(filed=PIT) / SimFin·RabbitMQ·LLM정규화 기각
+- [[decisions/ADR-003-M2-가격소스-EODHD|ADR-003 M2 가격소스 = EODHD]] — 승인(2026-06-16). 가성비 1위 $19.99/월·raw+adjusted 분리·폐지 2000~·Linux. ADR-002 가격 graduation 개정
 
 ## 📡 API 명세 (apis/) — 환각 방지 권위 레퍼런스
 

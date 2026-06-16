@@ -41,7 +41,7 @@
 
 **추가 확정 결정 (2026-06-16)**:
 - **마이그레이션 도구** = alembic ([ADR-001](../decisions/ADR-001-마이그레이션-도구-alembic.md))
-- **미국 데이터 아키텍처** = [ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md): 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT)+edgartools / 결합 `merge_asof`. **SimFin 기각**(PIT 미충족) · **RabbitMQ·LLM 런타임 정규화 기각**(과설계·무결성). history 30년→유효구간(가격 1998~·재무 2009~) 재정의
+- **미국 데이터 아키텍처** = [ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md): 가격 Tiingo(파일럿)→**EODHD**(M2, [ADR-003](../decisions/ADR-003-M2-가격소스-EODHD.md) — 가성비 1위 $19.99/월·raw+adjusted·폐지 2000~) / 재무 EDGAR(filed=PIT)+edgartools / 결합 `merge_asof`. **SimFin 기각**(PIT 미충족) · **RabbitMQ·LLM 런타임 정규화 기각**. history: 30년 강제 아님(예시) → 데이터 가용범위 전부(많을수록 검증 정확도↑). 유료 해지-삭제 조항은 재현성과 무관(과거 EOD 불변·재구독 재취득)
 - **수정주가 통일** = Tiingo adjClose/Sharadar closeadj 기준, 원주가+adj_factor 분리, 분할표본 교차검증
 - **데이터 신뢰성 게이트** = M1은 넓게 수집 + 종목·기간별 품질 꼬리표 저장(단일 임계로 파기 안 함). 표준(1%)·엄격(0.5%) 임계는 **M2 백테스트 민감도 분석**(두 시나리오 gap = 강건성 진단, gap으로 임계 골라잡기=과적합 금지)
 

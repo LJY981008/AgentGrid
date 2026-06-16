@@ -64,7 +64,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack** (2026-06-16 전환):
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
-- 데이터(미국, [ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)): 가격 **Tiingo**(파일럿)→**Sharadar SEP**(M2) / 재무 **SEC EDGAR**(filed=PIT)+edgartools. 명세=[docs/apis/](docs/apis/). (구 한국 FDR/pykrx/KRX 보류)
+- 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY). (구 한국 FDR/pykrx/KRX 보류)
 - 저장: **Parquet**(`pyarrow`)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙) — `compose.yaml`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
 - 웹앱(M4): PWA/반응형 웹 (`webapp/`, 프레임워크 미정)
 - 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증) — 하위는 상위 import 금지
