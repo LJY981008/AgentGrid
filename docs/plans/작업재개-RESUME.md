@@ -1,7 +1,7 @@
 # 🔄 작업 재개 플랜 (compact 생존용 — 이 문서 하나로 바로 이어가기)
 
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-16.
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 도메인전환 + M1 데이터 파이프라인 **파일럿(Tiingo) 검증 완료**. 다음 = 게이트 보강 → EODHD 명세·어댑터 → S5 전체 유니버스(결제 후).
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 완료 + **Tiingo·EODHD 명세 캐처 완료**(`docs/apis/`). 다음 = TASK-B 게이트 보강 → TASK-D EodhdSource 어댑터 → S5 전체 유니버스(결제 후).
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
 - **시장**: 미국(NYSE/NASDAQ/AMEX). 한국 보류(나중 재사용 가능).
@@ -33,11 +33,10 @@
 
 ## 🎯 남은 작업 (순서·실행단위 — "이거 하자" 하면 바로)
 
-### TASK-A: EODHD 명세 캐처 (무료, 사용자 다음 지시 대기) ⭐
-- Tiingo처럼 **EODHD 공식 문서 전 페이지** → `docs/apis/eodhd/{섹션}.json` + `_index.json` + README/HOME 링크. 사용자 지시: "플랫폼 많으니 **전부 저장**".
-- 워크플로우 `tiingo-spec-capture` 패턴 재사용(스키마 강제, r.jina.ai 프록시 우선). 결과는 메인이 JSON 파일로 기록.
-- 핵심 섹션: EOD historical(raw + adjusted), **delisted**, splits, dividends, bulk download, search, fundamentals(참고·재무는 EDGAR), general/auth.
-- ⚠️ EODHD 인증은 `?api_token=` 쿼리(Tiingo와 다름) — 명세 실측. 키=`EODHD_API_KEY`.
+### TASK-A: EODHD 명세 캐처 ✅ **완료**(커밋 397b244)
+- `docs/apis/eodhd/` 62섹션 JSON + `_index.json` + README(HOME 링크). 워크플로우 `eodhd-spec-capture`(discover→capture). 189 엔드포인트, OK 54/PARTIAL 8.
+- 인증 실측 = `?api_token=<KEY>` 쿼리, base `https://eodhd.com/api`, 심볼 `{TICKER}.{EX}`. 핵심 EOD = `GET /api/eod/{SYM}`(raw OHLC + `adjusted_close`→adj_factor).
+- bulk-api-eod-splits-dividends 만 partial(보강 여지). 비핵심(intraday/options/crypto 등)도 전부 저장됨.
 
 ### TASK-B: 게이트 소실 미탐지 보강 (무료, S5 전 **필수**)
 - `storage.py` verify 게이트가 "현재 트리만" 봐서 종목 조용한 소실을 못 잡음(파일럿서 노출된 BLOCKING).
@@ -46,8 +45,8 @@
 ### TASK-C: adj_factor quantize (무료)
 - `tiingo.py` `_compute_adj_factor` 나눗셈 꼬리(scale 37 밴드에이드) → 의도 정밀도로 quantize.
 
-### TASK-D: EodhdSource 어댑터 (무료 개발, TASK-A 후)
-- `src/stockpick/data/eodhd.py`: `EodhdSource(DataSource)`. 명세(`docs/apis/eodhd/`) 준거. raw OHLC + adjusted_close 분리→adj_factor. `iter_universe` 폐지 포함(EODHD delisted API — Tiingo와 달리 실구현 가능). 키 `os.environ`(비노출). 모킹 테스트.
+### TASK-D: EodhdSource 어댑터 (무료 개발, **TASK-A 완료로 착수 가능**)
+- `src/stockpick/data/eodhd.py`: `EodhdSource(DataSource)`. 명세 `docs/apis/eodhd/`(특히 `end-of-day-historical-data.json`·`search`·`exchanges`·`delisted`·`sp-dow-jones-historical-constituents`·`us-stock-symbol-rename-history`) 준거. `GET /api/eod/{SYM}` raw OHLC+`adjusted_close`→adj_factor(=adjusted_close/close). 인증 `?api_token=`(쿼리, 키 `os.environ` 비노출). `iter_universe` 폐지 포함 실구현(exchanges/search/historical-constituents). 모킹 테스트(httpx MockTransport). Tiingo 어댑터(`tiingo.py`) 패턴 참고.
 
 ### TASK-E: S5 전체 유니버스 + S6 게이트 (EODHD 결제 $19.99 후 라이브)
 - 전체 미국 종목(폐지 포함) 벌크 적재 → 생존편향-correct. + 재무 EDGAR 결합(merge_asof PIT). S6 신뢰성 게이트 전항목 PASS → **M1 완료 선언** → M2 백테스트.
