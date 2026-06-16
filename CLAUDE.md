@@ -95,6 +95,7 @@ docker compose exec app pytest -q                   # 테스트
 .claude/hooks/tests/run.sh                         # 훅 회귀 테스트 (38케이스)
 ```
 
+> 라이브 수집·파일럿: `app` 서비스가 `.env`(gitignore·이미지 미포함)의 `TIINGO_API_KEY` 를 interpolation 주입. 키 변경/추가 후 `docker compose up -d --no-deps app` 로 컨테이너 재생성해야 반영. 자동 테스트는 모킹이라 키 불요.
 > uv.lock 재생성(로컬 uv 없음): `docker run --rm -v "$PWD":/app -w /app ghcr.io/astral-sh/uv:python3.12-trixie-slim uv lock`
 > ⚠️ 호스트 5432 선점 시(다른 PG 컨테이너) `docker compose up -d` 충돌 — `--no-deps app` 로 app 만 띄우거나 포트 매핑 조정.
 

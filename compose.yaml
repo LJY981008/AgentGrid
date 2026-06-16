@@ -20,6 +20,10 @@ services:
       # 컨테이너 내부에서 PG 접속 — 호스트가 아니라 서비스명 postgres:5432
       DATABASE_URL: postgresql://stockpick:stockpick-local@postgres:5432/stockpick
       PYTHONPATH: src
+      # 데이터 소스 API 키 — 호스트 .env(gitignore·이미지 미포함)에서 interpolation 주입.
+      #   라이브 수집·파일럿 실행용. 미설정 시 빈값(테스트는 모킹이라 불필요). 적용엔 컨테이너 재생성:
+      #   docker compose up -d --no-deps app
+      TIINGO_API_KEY: "${TIINGO_API_KEY:-}"
     volumes:
       # 개발용 바인드 마운트 — 소스 수정 즉시 컨테이너 반영(재빌드 불필요).
       #   editable 설치된 .pth(=/app/src) 위로 호스트 ./src 가 덮여 경로 동일.
