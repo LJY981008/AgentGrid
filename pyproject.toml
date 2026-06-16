@@ -5,7 +5,9 @@ description = "개인 투자용 미국 주식 주가 분석 — 30년 데이터 
 requires-python = ">=3.12"
 # 런타임 의존성(pandas·pyarrow·duckdb·tiingo 등)은 B-pipeline 단계에서 `uv add` 로 실측 고정 — 추측 고정 금지
 dependencies = [
+    "duckdb>=1.5.3",
     "httpx>=0.28.1",
+    "pyarrow>=24.0.0",
 ]
 
 # 개발 도구는 PEP 735 dependency-group(uv 네이티브) — `uv sync` 가 기본 설치.
