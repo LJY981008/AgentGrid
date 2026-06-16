@@ -1,7 +1,7 @@
 # 🔄 작업 재개 플랜 (compact 생존용 — 이 문서 하나로 바로 이어가기)
 
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-16.
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 완료 + **Tiingo·EODHD 명세 캐처 완료**(`docs/apis/`). 다음 = TASK-B 게이트 보강 → TASK-D EodhdSource 어댑터 → S5 전체 유니버스(결제 후).
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 + Tiingo·EODHD 명세 + **TASK-A~D 완료**(EODHD 명세·게이트 소실탐지·adj_factor quantize·EodhdSource 어댑터, 전부 모킹 검증 77 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제 후 라이브** (라이브 전 httpx 토큰누출 가드 필수, 아래 TASK-E). 무료 개발분은 사실상 소진 — 남은 건 결제 + EDGAR 재무층 + db-architect 마이그레이션.
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
 - **시장**: 미국(NYSE/NASDAQ/AMEX). 한국 보류(나중 재사용 가능).
@@ -38,19 +38,20 @@
 - 인증 실측 = `?api_token=<KEY>` 쿼리, base `https://eodhd.com/api`, 심볼 `{TICKER}.{EX}`. 핵심 EOD = `GET /api/eod/{SYM}`(raw OHLC + `adjusted_close`→adj_factor).
 - bulk-api-eod-splits-dividends 만 partial(보강 여지). 비핵심(intraday/options/crypto 등)도 전부 저장됨.
 
-### TASK-B: 게이트 소실 미탐지 보강 (무료, S5 전 **필수**)
-- `storage.py` verify 게이트가 "현재 트리만" 봐서 종목 조용한 소실을 못 잡음(파일럿서 노출된 BLOCKING).
-- 적재 전후 **ticker 집합·기대 행수 대비 누락 탐지** 추가 + 회귀 테스트.
+### TASK-B: 게이트 소실 미탐지 보강 ✅ **완료**(734a52f)
+- `storage.py` `verify_parquet(expected=)` — 적재 전후 ticker 집합·행수 대조, missing/shortfall→VerificationError. `build_expected()`·`TickerExpectation`. pilot 누적 expected 전달. sabotage 검증 완료.
+- ⚠️ S5 연결 시: expected 원천을 **종목마스터(상장+폐지 합집합)**로 교체해야 진짜 생존편향 가드(M1 §5 폐지 하한 결합, db-architect).
 
-### TASK-C: adj_factor quantize (무료)
-- `tiingo.py` `_compute_adj_factor` 나눗셈 꼬리(scale 37 밴드에이드) → 의도 정밀도로 quantize.
+### TASK-C: adj_factor quantize ✅ **완료**(42df8d1)
+- `src/stockpick/data/_adjust.py` 공유 `compute_adj_factor` — adjusted/raw 소수 12자리 quantize. storage scale 37→12. tiingo·eodhd 공용. (방향=adjusted/raw, 계약 adjusted=raw*adj_factor)
 
-### TASK-D: EodhdSource 어댑터 (무료 개발, **TASK-A 완료로 착수 가능**)
-- `src/stockpick/data/eodhd.py`: `EodhdSource(DataSource)`. 명세 `docs/apis/eodhd/`(특히 `end-of-day-historical-data.json`·`search`·`exchanges`·`delisted`·`sp-dow-jones-historical-constituents`·`us-stock-symbol-rename-history`) 준거. `GET /api/eod/{SYM}` raw OHLC+`adjusted_close`→adj_factor(=adjusted_close/close). 인증 `?api_token=`(쿼리, 키 `os.environ` 비노출). `iter_universe` 폐지 포함 실구현(exchanges/search/historical-constituents). 모킹 테스트(httpx MockTransport). Tiingo 어댑터(`tiingo.py`) 패턴 참고.
+### TASK-D: EodhdSource 어댑터 ✅ **완료**(42df8d1)
+- `src/stockpick/data/eodhd.py`: `EodhdSource(DataSource)`. `GET /api/eod/{TICKER}.{EX}`, 인증 `?api_token=`(쿼리), raw OHLC+`adjusted_close`→adj_factor(공유헬퍼), value=None. `iter_universe` 폐지 포함(exchange-symbol-list 활성+delisted=1 병합). cik="" (EODHD 미제공). 모킹 26테스트.
 
 ### TASK-E: S5 전체 유니버스 + S6 게이트 (EODHD 결제 $19.99 후 라이브)
 - 전체 미국 종목(폐지 포함) 벌크 적재 → 생존편향-correct. + 재무 EDGAR 결합(merge_asof PIT). S6 신뢰성 게이트 전항목 PASS → **M1 완료 선언** → M2 백테스트.
-- 선결: EDGAR 재무층 구현(edgartools, `financial` 스키마 fiscal_period≠disclosed_at) + alembic 마이그레이션(stock cik PK·ticker_history·daily_bar — db-architect).
+- ⛔ **라이브 전 BLOCKING(키 누출)**: EODHD 토큰이 URL 쿼리(`?api_token=`)라 **httpx 자체 INFO 로거가 완성 url(토큰 포함)을 로깅**. 우리 코드는 비노출이나 httpx 라이브러리 로거는 못 끔 → **진입점/로깅설정에서 `logging.getLogger("httpx").setLevel(WARNING)` 필수**(EODHD 라이브 실행 전).
+- 선결: ①EODHD expected 원천=종목마스터(TASK-B 후속) ②EDGAR 재무층 구현(edgartools, `financial` fiscal_period≠disclosed_at) + **cik 매핑**(EODHD가 CIK 미제공 → EDGAR ticker→CIK 보강, 조인 기준) ③alembic 마이그레이션(stock cik PK·ticker_history·daily_bar — db-architect).
 
 ## 미해결·주의
 - EDGAR 재무층 미구현(M2 직전) — edgartools ~15필드 정규화 정확도 표본검증 필요.

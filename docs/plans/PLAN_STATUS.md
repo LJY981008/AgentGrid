@@ -1,7 +1,7 @@
 # 기획 문서 현황
 
 > 🔄 **작업 재개(compact 생존)**: 진행상황·다음 작업·환경·함정은 **[작업재개-RESUME](작업재개-RESUME.md)** 하나로. compact된 세션은 이거부터 읽고 이어가라.
-> 최근(2026-06-16): Tiingo·**EODHD 명세 캐처 완료**(`docs/apis/`). 다음 = TASK-B(게이트 소실탐지 보강) → TASK-D(EodhdSource 어댑터).
+> 최근(2026-06-16): **TASK-A~D 완료** — EODHD 명세(`docs/apis/eodhd/` 62섹션)·게이트 소실탐지(734a52f)·adj_factor quantize·EodhdSource 어댑터(42df8d1, 모킹 77 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제 후 라이브**. ⛔라이브 전: httpx 토큰누출 가드(`httpx 로거 WARNING`).
 
 > 기획 문서 추가/수정 시 이 표를 같은 커밋에서 갱신한다 (harness-drift-check 가 감지).
 > 기획 문서는 버전 넘버링으로 추가 — 기존 파일 덮어쓰기 금지.
