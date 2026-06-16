@@ -17,10 +17,12 @@
 > ADR 형식. 템플릿: [[templates/adr-template]]
 
 - [[decisions/ADR-001-마이그레이션-도구-alembic|ADR-001 마이그레이션 도구 = alembic]] — 승인(2026-06-16). PG18 파티션/BRIN/ENUM 은 raw SQL 보강
+- [[decisions/ADR-002-미국-데이터소스-아키텍처|ADR-002 미국 데이터소스 아키텍처]] — 승인(2026-06-16). 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·RabbitMQ·LLM정규화 기각
 
 ## 🔬 리서치 (research/)
 
-- [[research/2026-06-16-한국주식-데이터소스|2026-06-16 한국주식 데이터소스]] — **현행** 벌크=FDR+pykrx / 일일=KRX OpenAPI / 저장=Parquet+PG, 생존편향·수정주가 caveat
+- [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **현행** 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 기준선
+- [[research/2026-06-16-한국주식-데이터소스|2026-06-16 한국주식 데이터소스]] — 보류(미장 전환) 벌크=FDR+pykrx / 일일=KRX OpenAPI, 나중 한국장 추가 시 재사용
 - ~~[[research/2026-06-12-스택-버전-리서치]]~~ — (구) Boot 4.1/Next 16, 도메인 전환으로 폐기
 
 ## 🛠️ 구현 히스토리 (work-history/)

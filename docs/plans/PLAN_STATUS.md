@@ -5,7 +5,11 @@
 
 ## ⚠️ 도메인 전환 (2026-06-16)
 
-이 레포는 **MCP 신뢰성 레지스트리 → 개인 투자용 한국 주식 주가 분석 프로그램**으로 전면 전환됐다 (사용자 확정). 레포 골격(하네스·git·볼트·work-history 규약)은 유지, 스택은 Java/Spring+Next → **Python 서버 + PWA 웹앱** 으로 교체. 현행 기준선 = `stock-1st_plan.md`.
+이 레포는 **MCP 신뢰성 레지스트리 → 개인 투자용 주식 주가 분석 프로그램**으로 전면 전환됐다 (사용자 확정). 레포 골격(하네스·git·볼트·work-history 규약)은 유지, 스택은 Java/Spring+Next → **Python 서버 + PWA 웹앱** 으로 교체. 현행 기준선 = `stock-1st_plan.md`.
+
+### ⚠️ 시장 전환 (2026-06-16, 같은 날 후속): 한국 → **미국 주력**
+
+분석 대상 시장을 **미국 주식(NYSE/NASDAQ/AMEX)**으로 전환(사용자 결정). 사유: 사용자 학습·관심이 미장 중심(SEC/FED). 데이터 아키텍처 = [ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md) + [미국 데이터소스 리서치](../research/2026-06-16-미국주식-데이터소스.md). 시장 무관 자산(BLOCKING 원칙·`types.py` Decimal·파이프라인 철학·M1 스키마 PIT 설계)은 그대로 유효 — financial `disclosed_at` 설계가 EDGAR `filed`와 1:1로 오히려 더 잘 맞음. 한국 데이터소스/KRX 키는 보류(나중 한국장 추가 시 재사용).
 
 | 문서 | 상태 | 요약 |
 |---|---|---|
@@ -26,7 +30,7 @@
 
 | # | 질문 | 우선순위 | 상태 |
 |---|---|---|---|
-| 1 | 데이터 소스 확정 (리서치 추천안 채택 여부) | M1 선결 | ✅ **해결** — 벌크=FDR+pykrx / 일일=KRX OpenAPI ([M1 스펙](M1-데이터파이프라인.md) §2) |
+| 1 | 데이터 소스 확정 (리서치 추천안 채택 여부) | M1 선결 | ✅ **해결(미국)** — 가격 Tiingo(파일럿)→Sharadar SEP(M2) / 재무 SEC EDGAR+edgartools ([ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md)) |
 | 2 | Top20 룰 팩터·가중치 (백테스트로 결정) | M2 | 이월 |
 | 3 | 백테스트 프레임워크 (vectorbt/backtrader/자체) | M2 | 이월 |
 | 4 | 시계열 DB 선택 (PG vs Parquet vs 혼용) — db-architect | M1 선결 | ✅ **해결** — Parquet(1차)+PG18(서빙), TimescaleDB 비채택 |
@@ -37,7 +41,8 @@
 
 **추가 확정 결정 (2026-06-16)**:
 - **마이그레이션 도구** = alembic ([ADR-001](../decisions/ADR-001-마이그레이션-도구-alembic.md))
-- **수정주가 통일** = FDR adjusted 기준 + 분할표본 교차검증
+- **미국 데이터 아키텍처** = [ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md): 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT)+edgartools / 결합 `merge_asof`. **SimFin 기각**(PIT 미충족) · **RabbitMQ·LLM 런타임 정규화 기각**(과설계·무결성). history 30년→유효구간(가격 1998~·재무 2009~) 재정의
+- **수정주가 통일** = Tiingo adjClose/Sharadar closeadj 기준, 원주가+adj_factor 분리, 분할표본 교차검증
 - **데이터 신뢰성 게이트** = M1은 넓게 수집 + 종목·기간별 품질 꼬리표 저장(단일 임계로 파기 안 함). 표준(1%)·엄격(0.5%) 임계는 **M2 백테스트 민감도 분석**(두 시나리오 gap = 강건성 진단, gap으로 임계 골라잡기=과적합 금지)
 
 **다음 단계**: M0 완료(2026-06-16) → M1 S0·S1 완료(결정·ADR·계약 Decimal 교정) → **M1 S2(종목마스터 적재)**. 단 alembic+런타임 의존성은 pip 실측 고정·devops 조율 후. M1 데이터 신뢰성 게이트 통과 없이 M2 백테스트 착수 금지.
