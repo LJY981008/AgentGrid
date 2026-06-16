@@ -15,8 +15,8 @@ jq -n --arg p "$PROJECT" '{
     watchPaths: [
       ($p + "/.claude/settings.json"),
       ($p + "/.claude/rules"),
-      ($p + "/backend/build.gradle"),
-      ($p + "/frontend/package.json"),
+      ($p + "/pyproject.toml"),
+      ($p + "/compose.yaml"),
       ($p + "/docs/plans")
     ]
   }

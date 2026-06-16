@@ -1,21 +1,20 @@
 {
-  "java.compile.nullAnalysis.mode": "automatic",
-  "java.configuration.updateBuildConfiguration": "automatic",
-  "java.import.gradle.enabled": true,
-  "eslint.workingDirectories": ["frontend"],
-  "typescript.tsdk": "frontend/node_modules/typescript/lib",
+  "python.analysis.typeCheckingMode": "strict",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true
+  },
   "files.watcherExclude": {
-    "**/build/**": true,
-    "**/.gradle/**": true,
-    "**/node_modules/**": true,
-    "**/.next/**": true
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/data/parquet/**": true
   },
   "search.exclude": {
-    "**/build": true,
-    "**/.gradle": true,
-    "**/node_modules": true,
-    "**/.next": true,
-    "frontend/package-lock.json": true
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/*.parquet": true
   },
   "yaml.schemas": {
     "https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json": ["compose.yaml", "compose*.yaml"]

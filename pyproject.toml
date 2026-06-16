@@ -1,0 +1,44 @@
+[project]
+name = "stockpick"
+version = "0.0.1"
+description = "개인 투자용 한국 주식(코스피/코스닥) 주가 분석 — 30년 데이터 기반 Top20 정량 생성 → 수동 Top5 → 분산투자 추적"
+requires-python = ">=3.12"
+# 런타임 의존성(pandas·FinanceDataReader·pykrx 등)은 M1 데이터 단계에서 추가 — 추측 고정 금지
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stockpick"]
+
+[tool.ruff]
+src = ["src", "tests"]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# 실패 명확 보고 원칙(stock-1st_plan §4.1) — 빈 except·광역 except 금지(BLE), 보안(S), 버그(B)
+select = ["E", "F", "I", "B", "BLE", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+# 테스트는 assert 가 정상 패턴(S101) — pytest 단언
+"tests/**/*.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# 라이브 데이터 의존 테스트는 CI 금지 — 픽스처/모킹 기반 (생존편향·차단 회피)
+addopts = "-q"

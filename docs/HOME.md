@@ -5,10 +5,11 @@
 
 ## 📋 기획 (plans/)
 
-- [[plans/1st_plan|1차 기획안]] — 비전·핵심 가치·기술 스택 (기준 문서)
-- [[plans/2nd_plan|2차 기획안]] — MVP 구체화: 신뢰성 지표 6축·기능 명세·마일스톤
-- [[plans/3rd_plan|3차 기획안]] — 미해결 질문 5건 확정: 캘리브레이션·LLM(sonnet-4-6)·격리 2단계·rate limit·풀 4화면 → DB 스키마 착수 선언
-- [[plans/PLAN_STATUS|기획 현황판]] — 문서 상태 + 미해결 질문 추적
+> ⚠️ **2026-06-16 도메인 전환**: MCP 신뢰성 레지스트리 → 개인 투자용 한국 주식 분석. 아래 1st/2nd/3rd 는 폐기(보존만).
+
+- [[plans/stock-1st_plan|한국주식 기준선]] — **현행** Top20 정량→수동 Top5→분산투자 추적·보정, Python+PWA, 미해결 8건
+- [[plans/PLAN_STATUS|기획 현황판]] — 전환 선언 + 데이터소스 리서치 + 미해결 질문 추적
+- ~~[[plans/1st_plan]] · [[plans/2nd_plan]] · [[plans/3rd_plan]]~~ — (구) MCP 레지스트리, 폐기
 
 ## 🏛️ 아키텍처 결정 (decisions/)
 
@@ -18,7 +19,8 @@
 
 ## 🔬 리서치 (research/)
 
-- [[research/2026-06-12-스택-버전-리서치|2026-06-12 스택 버전 리서치]] — Boot 4.1/Next 16/인프라/Claude Code 포맷 확정 근거
+- [[research/2026-06-16-한국주식-데이터소스|2026-06-16 한국주식 데이터소스]] — **현행** 벌크=FDR+pykrx / 일일=KRX OpenAPI / 저장=Parquet+PG, 생존편향·수정주가 caveat
+- ~~[[research/2026-06-12-스택-버전-리서치]]~~ — (구) Boot 4.1/Next 16, 도메인 전환으로 폐기
 
 ## 🛠️ 구현 히스토리 (work-history/)
 

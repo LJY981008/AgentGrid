@@ -3,10 +3,11 @@
     "allow": [
       "Bash(git:*)",
       "Bash(gh:*)",
-      "Bash(./gradlew:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(node:*)",
+      "Bash(python3:*)",
+      "Bash(uv:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(pytest:*)",
       "Bash(docker compose:*)",
       "Bash(docker ps:*)",
       "Bash(docker logs:*)",
@@ -105,8 +106,11 @@
     ]
   },
   "claudeMdExcludes": [
-    "**/build/**",
-    "**/.gradle/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/.mypy_cache/**",
+    "**/.ruff_cache/**",
+    "**/.pytest_cache/**",
     "**/node_modules/**",
     "**/.omc/**"
   ]

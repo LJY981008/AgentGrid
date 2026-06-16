@@ -1,31 +1,34 @@
 ---
-description: Logging rules for AgentGrid backend. SLF4J placeholder only, level thresholds (ERROR=operator action, WARN=auto-recovered anomaly, INFO=state transition/external call boundary), exception with stacktrace, no System.out/printStackTrace, no sensitive data. Loaded on every backend Java file edit. Trigger phrases - 로그 코드 작성·리뷰 시.
-paths: ["backend/src/**/*.java"]
+description: Python logging rules for stockpick. stdlib logging only (no print), module logger getLogger(__name__), level thresholds, no sensitive data (API keys), structured context for data-pipeline failures. Loaded on every Python edit. Trigger phrases - 로그 코드 작성·리뷰 시.
+paths: ["src/**/*.py", "tests/**/*.py"]
 ---
 
-# Logging Rules (도메인 무관 코어 — 도메인 규칙은 코드 누적 후 추가)
+# Logging Rules (Python — 초안)
 
-> tbbe-hub 가 사후 일괄 로그 리팩토링 비용을 치른 교훈 — 첫 Java 파일부터 적용해 비용 0 으로.
+> 도메인 전환 직후 초안. 코드 누적 시 실측 예시로 교체.
+
+## 기본
+
+- stdlib `logging` 만. 모듈 상단 `logger = logging.getLogger(__name__)`
+- `print()` 금지 — 단 CLI/스크립트 진입점의 사용자 출력은 예외
+- 포맷·핸들러 설정은 진입점에서 1회(라이브러리 코드는 핸들러 추가 금지)
 
 ## 레벨 기준
 
 | 레벨 | 기준 | 예 |
 |---|---|---|
-| ERROR | 운영자 개입 필요 / 데이터 정합성 위협 | 분석 파이프라인 처리 불가, Outbox 발행 연속 실패 |
-| WARN | 자동 복구된 이상 / 재시도 예정 | 외부 API 1회 실패 후 재시도, 타임아웃 후 폴백 |
-| INFO | 상태 전이·외부 호출 경계·작업 단위 완료 | 제출 접수, 분석 시작/완료, 등급 산출 |
-| DEBUG | 개발 진단 (운영 기본 비활성) | 중간 계산값, 페이로드 상세 |
+| ERROR | 운영자 개입 필요 / 데이터 정합성 위협 | 일일 수집 전종목 실패, 백테스트 입력 불일치 |
+| WARNING | 자동 복구된 이상 / 재시도 | 소스 차단 후 재시도, 일부 종목 결측 |
+| INFO | 작업 단위 경계 | 벌크 수집 시작/완료, Top20 산출 완료, 룰 버전 적용 |
+| DEBUG | 진단 (운영 비활성) | 팩터별 중간 점수, API 페이로드 |
 
 ## 필수
 
-- SLF4J placeholder 만: `log.info("도구 분석 완료: toolId={}, grade={}", toolId, grade)` — 문자열 `+` 연결 금지
-- 예외는 스택 포함: `log.error("분석 실패: toolId={}", toolId, e)` — 마지막 인자 예외 객체
-- 1 작업 단위 = 1 결과 라인 원칙 (루프 내부 INFO 남발 금지 — 집계해서 1줄)
-- Lombok `@Slf4j` 사용
+- f-string 보다 lazy 포맷 권장: `logger.info("수집 완료: market=%s, rows=%d", market, n)`
+- 예외는 `logger.exception(...)`(스택 포함) 또는 `logger.error(..., exc_info=True)`
+- 데이터 파이프라인 실패는 **분류 컨텍스트** 동반: 어느 소스·어느 종목·어느 날짜 (추적 가능)
 
 ## 금지
 
-- `System.out.println` / `e.printStackTrace()` — 절대 금지
-- 예외 삼키기 (catch 후 무로그 무전파)
-- 민감정보 로깅: 토큰·API 키·자격증명 (제출된 repo URL 은 공개 정보라 허용)
-- 같은 예외를 여러 레벨에서 중복 로깅 (잡은 곳에서 한 번만)
+- 빈 except 후 무로그 / 같은 예외 중복 로깅 / 민감정보(KRX·KIS API 키, 계좌) 로깅
+- 루프 내 INFO 남발 — 집계해서 1줄 (전종목 루프는 진행률 DEBUG, 결과 INFO 1건)

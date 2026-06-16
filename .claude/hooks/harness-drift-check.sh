@@ -34,18 +34,12 @@ declare -a RULES=(
   '\.claude/rules/[a-z-]+\.md@@CLAUDE.md'
   '\.claude/settings\.json@@CLAUDE.md'
   '\.claude/hooks/[a-z-]+\.sh@@CLAUDE.md'
-  'backend/build\.gradle@@backend/CLAUDE.md'
-  'backend/settings\.gradle@@backend/CLAUDE.md'
-  'backend/Dockerfile@@backend/CLAUDE.md'
-  'backend/src/test/java/com/agentgrid/TestcontainersConfiguration\.java@@backend/CLAUDE.md'
-  'frontend/package\.json@@frontend/CLAUDE.md'
-  'frontend/Dockerfile@@frontend/CLAUDE.md'
+  'pyproject\.toml@@CLAUDE.md'
   '(docker-)?compose.*\.ya?ml@@CLAUDE.md'
-  'infra/monitoring/.*@@CLAUDE.md:backend/CLAUDE.md'
   'docs/plans/.*\.md@@docs/plans/PLAN_STATUS.md'
   'docs/(decisions|research)/.*\.md@@docs/HOME.md'
   # work-history 규약: src 구현 변경은 구현 히스토리 엔트리 동반 (대상이 /로 끝나면 prefix 매칭)
-  'backend/src/.*@@docs/work-history/'
+  '(src|webapp/src)/.*@@docs/work-history/'
   'frontend/src/.*@@docs/work-history/'
 )
 

@@ -1,32 +1,15 @@
 version: 2
 updates:
-  - package-ecosystem: gradle
-    directory: /backend
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: Asia/Seoul
-    open-pull-requests-limit: 5
-
-  - package-ecosystem: npm
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:00"
-      timezone: Asia/Seoul
-    open-pull-requests-limit: 5
-    groups:
-      next-react:
-        patterns: ["next", "react", "react-dom", "eslint-config-next"]
-
-  - package-ecosystem: github-actions
+  - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Seoul
+    open-pull-requests-limit: 5
 
-  - package-ecosystem: docker
-    directories: ["/backend", "/frontend"]
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
       interval: weekly

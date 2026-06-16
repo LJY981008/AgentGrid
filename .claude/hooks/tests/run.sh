@@ -25,7 +25,7 @@ t "guard: \$RM ~ (홈)"            2 "$(g "$RM ~")"
 t "guard: \$RM /tmp/x && ls"      0 "$(g "$RM /tmp/x && ls")"
 t "guard: echo hello"             0 "$(g "echo hello")"
 t "guard: git push force (오픈)"  0 "$(g "git push --force origin main")"
-DT='DROP TABLE tools'
+DT='DROP TABLE stocks'
 t "guard: psql DROP TABLE"        2 "$(g "psql -c '$DT'")" "DDL"
 t "guard: docker volume prune"    2 "$(g "docker volume prune -f")"
 t "guard: malformed json (open)"  0 "$(printf 'not-json' | .claude/hooks/pre-bash-guard.sh >/dev/null 2>&1; echo $?)"
@@ -70,7 +70,9 @@ echo "backend/CLAUDE.md" | grep -qxF "CLAUDE.md"; t "drift 대상: 정확 매칭
 # ---- work-history 체계 (post-plan-approve + drift prefix) ----
 echo '{}' | .claude/hooks/post-plan-approve.sh | jq -e '.hookSpecificOutput.additionalContext | length > 0' >/dev/null; t "post-plan-approve JSON 유효" 0 "$?"
 echo "docs/work-history/2026-06-12-x.md" | grep -q "^docs/work-history/"; t "drift prefix: work-history 디렉토리 충족" 0 "$?"
-echo "backend/src/main/java/com/agentgrid/X.java" | grep -qE 'backend/src/.*'; t "drift 패턴: backend src 매칭" 0 "$?"
+echo "src/stockpick/data/loader.py" | grep -qE '(src|webapp/src)/.*'; t "drift 패턴: python src 매칭" 0 "$?"
+echo "pyproject.toml" | grep -qE 'pyproject\.toml'; t "drift 패턴: pyproject 매칭" 0 "$?"
+echo "src/stockpick/x.py" | grep -qE '^(src|tests)/.*\.py$'; t "post-work 패턴: python 파일" 0 "$?"
 
 # ---- session-start / log-loaded-instructions ----
 echo '{}' | .claude/hooks/session-start.sh | jq -e '.hookSpecificOutput.reloadSkills == true' >/dev/null; t "session-start JSON 유효" 0 "$?"

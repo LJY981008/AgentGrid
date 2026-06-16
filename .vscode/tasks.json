@@ -2,67 +2,43 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "infra: up (PG/Redis/MQ)",
+      "label": "infra: up (PostgreSQL)",
       "type": "shell",
       "command": "docker compose up -d",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {
-      "label": "infra: up + monitoring (Prometheus/Grafana)",
-      "type": "shell",
-      "command": "docker compose --profile monitoring up -d",
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": []
-    },
-    {
       "label": "infra: down",
       "type": "shell",
-      "command": "docker compose --profile monitoring --profile app down",
+      "command": "docker compose down",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {
-      "label": "backend: bootRun",
+      "label": "lint (ruff)",
       "type": "shell",
-      "command": "./gradlew bootRun",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "isBackground": true,
+      "command": "ruff check src tests",
+      "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {
-      "label": "backend: bootTestRun (compose 불필요 — Testcontainers)",
+      "label": "typecheck (mypy)",
       "type": "shell",
-      "command": "./gradlew bootTestRun",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "isBackground": true,
+      "command": "mypy",
+      "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },
     {
-      "label": "backend: test",
+      "label": "test (pytest)",
       "type": "shell",
-      "command": "./gradlew test --no-daemon",
-      "options": { "cwd": "${workspaceFolder}/backend" },
+      "command": "PYTHONPATH=src pytest -q",
+      "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
     },
     {
-      "label": "frontend: dev",
-      "type": "shell",
-      "command": "npm run dev",
-      "options": { "cwd": "${workspaceFolder}/frontend" },
-      "isBackground": true,
-      "problemMatcher": []
-    },
-    {
-      "label": "frontend: typecheck",
-      "type": "shell",
-      "command": "npm run typecheck",
-      "options": { "cwd": "${workspaceFolder}/frontend" },
-      "problemMatcher": ["$tsc"]
-    },
-    {
-      "label": "hooks: 회귀 테스트 (19케이스)",
+      "label": "hooks: 회귀 테스트",
       "type": "shell",
       "command": ".claude/hooks/tests/run.sh",
       "options": { "cwd": "${workspaceFolder}" },

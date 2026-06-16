@@ -11,13 +11,14 @@ color: red
 
 ## 감사 절차 (전수)
 
-1. **CLAUDE.md 3종 정합성**: 루트/`backend/`/`frontend/` CLAUDE.md 의 모든 서술(버전, 명령어, 구조, 인덱스)을 실제 파일/설정과 대조
+1. **CLAUDE.md 정합성**: 루트 CLAUDE.md 의 모든 서술(버전, 명령어, 구조, 인덱스)을 실제 파일/설정과 대조
 2. **rules 정합성**: `.claude/rules/*.md` 의 규칙이 실제 코드 컨벤션과 일치하는지 샘플 코드 대조. paths glob 이 실제 디렉토리 구조와 매칭되는지 확인
 3. **skills 인덱스**: `.claude/skills/*/SKILL.md` frontmatter 유효성 (name/description), CLAUDE.md 인덱스와 1:1 대응 여부
 4. **agents 유효성**: `.claude/agents/*.md` frontmatter (name 파일명 일치, name 중복 금지 — 중복 시 경고 없이 폐기됨), description 트리거의 현실성
 5. **hooks 동작**: `.claude/hooks/*.sh` 실행권한 + 스모크 테스트 (각 스크립트에 샘플 JSON 주입), `harness-drift-check.sh` 매핑 표가 현재 코드 구조 대비 누락 없는지
 6. **settings.json**: 등록 훅 경로 실존, permissions 패턴 유효성
-7. **버전 신선도**: 문서에 박힌 버전(Spring Boot, Next.js, Docker 이미지 등)이 build.gradle/package.json/compose.yaml 실제 값과 일치하는지
+7. **버전 신선도**: 문서에 박힌 버전(Python·라이브러리·Docker 이미지 등)이 pyproject.toml/compose.yaml 실제 값과 일치하는지
+8. **도메인 잔재 0 (2026-06-16 전환 후)**: MCP·신뢰성·등급·Spring·Next 등 구 도메인/스택 잔재가 하네스·문서에 남았는지 grep 전수
 
 ## 출력 포맷
 

@@ -2,22 +2,22 @@
 
 Codex/Gemini 등 코딩 에이전트용 진입 문서.
 
-> ⚠️ **얇은 포인터 정책**: 이 파일에 규칙 본문을 복제하지 않는다 (tbbe-hub 의 AGENTS.md 드리프트 실패 사례 반면교사).
-> 모든 규칙의 원본은 아래 파일들 — 충돌 시 원본이 우선.
+> ⚠️ **얇은 포인터 정책**: 규칙 본문 복제 금지. 원본 우선.
+> ⚠️ 2026-06-16 도메인 전환: **stockpick(개인 투자용 한국 주식 분석, Python)**. 구 MCP 레지스트리 컨텍스트 폐기.
 
-## 필수 참조 (작업 전 읽기)
+## 필수 참조
 
 | 내용 | 원본 |
 |---|---|
-| 역할·작업 원칙·작업 완료 절차·구조 | [CLAUDE.md](CLAUDE.md) |
-| 백엔드 컨벤션 (Java 21/Boot 4.1) | [.claude/rules/backend-conventions.md](.claude/rules/backend-conventions.md) |
-| 로깅 규칙 | [.claude/rules/logging-rules.md](.claude/rules/logging-rules.md) |
-| 프론트 컨벤션 (Next 16) + Next 동봉 규칙 | [.claude/rules/frontend-conventions.md](.claude/rules/frontend-conventions.md), [frontend/AGENTS.md](frontend/AGENTS.md) |
+| 역할·원칙·절차·구조 | [CLAUDE.md](CLAUDE.md) |
+| Python 컨벤션 | [.claude/rules/python-conventions.md](.claude/rules/python-conventions.md) |
+| 로깅 | [.claude/rules/logging-rules.md](.claude/rules/logging-rules.md) |
+| 웹앱(PWA, M4) | [.claude/rules/webapp-conventions.md](.claude/rules/webapp-conventions.md) |
 | 기획 현황 | [docs/plans/PLAN_STATUS.md](docs/plans/PLAN_STATUS.md) |
 
-## 최소 불변 규칙 (훅이 없는 에이전트도 준수)
+## 최소 불변 규칙 (훅 없는 에이전트도 준수)
 
-- 소통·문서·커밋 메시지는 한국어. 커밋 첫 줄 태그: `feat|fix|refactor|docs|test|chore|perf`
-- 스키마 변경은 Flyway 마이그레이션 파일로만 (직접 DDL 금지)
-- 추측 금지 — 코드/로그/문서 실측 후 진행. push 는 사용자 요청 시에만
-- 검증: backend `cd backend && ./gradlew test --no-daemon` / frontend `cd frontend && npm run typecheck`
+- 한국어 소통·커밋. 커밋 태그: `feat|fix|refactor|docs|test|chore|perf`
+- **금융 BLOCKING**: 생존편향(폐지종목 포함)·룩어헤드(≤t 데이터)·수정주가 통일·백테스트 검증 전 룰 신뢰 금지
+- 모듈 경계: data/rules/backtest — 하위는 상위 import 금지. 실패 명확 보고(조용한 결측 금지)
+- 검증: `ruff check src tests && mypy && PYTHONPATH=src pytest -q`. push 는 사용자 요청 시(기본 브랜치 main)

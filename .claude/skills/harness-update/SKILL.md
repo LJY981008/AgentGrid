@@ -13,11 +13,11 @@ argument-hint: "[변경-요약?]"
 
 | 변경 종류 | 갱신 위치 | 비고 |
 |---|---|---|
-| 코딩 규칙·컨벤션 (경로 스코프) | `.claude/rules/{backend,frontend}-conventions.md` | `paths:` glob 자동 로드. 짧은 규칙은 전부 여기 |
+| 코딩 규칙·컨벤션 (경로 스코프) | `.claude/rules/{python,webapp}-conventions.md`, `logging-rules.md` | `paths:` glob 자동 로드. 짧은 규칙은 전부 여기 |
 | 절차·진단 매크로·다중 파일 지식 | `.claude/skills/<name>/SKILL.md` | 슬래시 커맨드 필요하거나 지원 파일 동반 시 |
 | 역할 분리가 필요한 반복 분석 | `.claude/agents/<name>.md` | 같은 분석 2회 반복 후에만 생성. name 중복 금지(조용히 폐기됨) |
 | 물리 강제 필요한 규칙 | `.claude/hooks/*.sh` + `settings.json` 등록 | "성공 조용, 실패 시끄럽게". 차단은 PreToolUse + exit 2 만 신뢰 |
-| 정책·구조·인덱스 | `CLAUDE.md` (루트/backend/frontend) | 루트 200줄 이내 유지 — 길어지면 rules/skills 로 분리 |
+| 정책·구조·인덱스 | `CLAUDE.md` (루트 단일) | 200줄 이내 유지 — 길어지면 rules/skills 로 분리 |
 | 아키텍처 결정 기록 | `docs/decisions/ADR-{n}-{제목}.md` | 왜 그렇게 했는지 |
 | 구현 의도·플랜 백업·전후 비교 | `docs/work-history/{날짜}-{작업명}.md` + INDEX 행 | 플랜 승인 직후 전문 백업. src 변경 커밋에 엔트리 동반 (drift 강제) |
 

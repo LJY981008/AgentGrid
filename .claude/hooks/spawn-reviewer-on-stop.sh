@@ -22,8 +22,8 @@ cd "$PROJECT" || exit 0
 
 # 노이즈 경로 제외 — 세션상태/문서/락파일/생성물은 코드 리뷰 대상 아님
 EXCLUDES=(':(exclude).omc' ':(exclude)docs' ':(exclude)*.csv' ':(exclude)*.log'
-  ':(exclude).claude/hooks/.state' ':(exclude)frontend/package-lock.json'
-  ':(exclude)backend/gradle/wrapper' ':(exclude)*.svg')
+  ':(exclude).claude/hooks/.state' ':(exclude)__pycache__' ':(exclude)*.parquet'
+  ':(exclude)*.svg')
 
 STATS="$(git -C "$PROJECT" diff --stat HEAD -- "${EXCLUDES[@]}" 2>/dev/null | tail -1 || true)"
 INS="$(echo "$STATS" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+' | head -1 || echo 0)"
