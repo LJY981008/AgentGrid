@@ -1,7 +1,7 @@
 # 🔄 작업 재개 플랜 (compact 생존용 — 이 문서 하나로 바로 이어가기)
 
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-16.
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 + Tiingo·EODHD 명세 + **TASK-A~D 완료**(EODHD 명세·게이트 소실탐지·adj_factor quantize·EodhdSource 어댑터, 전부 모킹 검증 77 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제 후 라이브** (라이브 전 httpx 토큰누출 가드 필수, 아래 TASK-E). 무료 개발분은 사실상 소진 — 남은 건 결제 + EDGAR 재무층 + db-architect 마이그레이션.
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 + Tiingo·EODHD 명세 + **TASK-A~D 완료** + **전체 점검 완료**(도커컴포즈 라이브 파일럿 end-to-end 통과 + 다차원 코드리뷰 BLOCKING 0·M2 진행가능 + 리뷰 반영: 양수성 게이트·httpx 토큰가드 `configure_logging()` 코드화·테스트 89 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제($19.99) 후 라이브.** 무료 개발분 소진 — 남은 건 결제 + EDGAR 재무층 + db-architect 마이그레이션 + write read-merge-write(증분).
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
 - **시장**: 미국(NYSE/NASDAQ/AMEX). 한국 보류(나중 재사용 가능).
@@ -51,7 +51,8 @@
 ### TASK-E: S5 전체 유니버스 + S6 게이트 (EODHD 결제 $19.99 후 라이브)
 - 전체 미국 종목(폐지 포함) 벌크 적재 → 생존편향-correct. + 재무 EDGAR 결합(merge_asof PIT). S6 신뢰성 게이트 전항목 PASS → **M1 완료 선언** → M2 백테스트.
 - ⛔ **라이브 전 BLOCKING(키 누출)**: EODHD 토큰이 URL 쿼리(`?api_token=`)라 **httpx 자체 INFO 로거가 완성 url(토큰 포함)을 로깅**. 우리 코드는 비노출이나 httpx 라이브러리 로거는 못 끔 → **진입점/로깅설정에서 `logging.getLogger("httpx").setLevel(WARNING)` 필수**(EODHD 라이브 실행 전).
-- 선결: ①EODHD expected 원천=종목마스터(TASK-B 후속) ②EDGAR 재무층 구현(edgartools, `financial` fiscal_period≠disclosed_at) + **cik 매핑**(EODHD가 CIK 미제공 → EDGAR ticker→CIK 보강, 조인 기준) ③alembic 마이그레이션(stock cik PK·ticker_history·daily_bar — db-architect).
+- 선결: ①EODHD expected 원천=종목마스터(TASK-B 후속) ②EDGAR 재무층 구현(edgartools, `financial` fiscal_period≠disclosed_at) + **cik 매핑**(EODHD가 CIK 미제공 → EDGAR ticker→CIK 보강, 조인 기준) ③alembic 마이그레이션(stock cik PK·ticker_history·daily_bar — db-architect) ④**write read-merge-write 전환**(현 `(ticker,year)` 통파일 덮어쓰기는 같은연도 증분 부분호출 시 소실 — 일일증분 전 필수, docstring 경고만 박힘) ⑤EODHD 라이브 진입점은 `configure_logging()` 호출 확인(httpx 토큰가드 — 코드화됨, pilot.main 적용).
+- ✅ 리뷰 반영(커밋 7f3b286): 양수성 게이트(음수/0 가격·adjusted 차단) · httpx 가드 코드화 · _adjust 단위테스트 · nits. 미반영(선택): iter_universe 부분실패·교차거래소 중복 테스트.
 
 ## 미해결·주의
 - EDGAR 재무층 미구현(M2 직전) — edgartools ~15필드 정규화 정확도 표본검증 필요.
