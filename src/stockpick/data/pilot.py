@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Final
 
 from ..types import DailyBar, Exchange
+from . import configure_logging
 from .source import DataSource
 from .storage import (
     TickerExpectation,
@@ -232,6 +233,9 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    # ⚠️ 토큰 누출 가드(logging-rules BLOCKING): httpx INFO 가 토큰 실린 URL 을 로깅하므로 진입점에서
+    # basicConfig 직후 1회 차단(EODHD 쿼리 인증 대비 — Tiingo 는 헤더지만 가드는 소스 불문 적용).
+    configure_logging()
     source = TiingoSource()
     try:
         results = run_pilot(source=source)

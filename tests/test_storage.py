@@ -164,6 +164,42 @@ def test_verify_fails_ohlc_violation(tmp_path: Path) -> None:
         verify_parquet(tmp_path)
 
 
+def test_verify_fails_negative_price_passing_ohlc_relation(tmp_path: Path) -> None:
+    """⭐ 양수성 게이트(A): OHLC 가 전부 음수여도 *상대* 관계(high>=low 등)는 만족할 수 있다.
+
+    open=-100,high=-90,low=-110,close=-105 → high>=low·high>=open/close·low<=open/close 모두 성립
+    → 기존 OHLC 게이트는 통과한다. 절대 음수/0 가격을 차단하는 별도 게이트가 잡아야 FAIL 한다.
+    """
+    bars = [
+        _bar("BAD", date(2022, 6, 1), open_="-100.0", high="-90.0", low="-110.0", close="-105.0")
+    ]
+    write_daily_bars(bars, exchange=Exchange.NYSE, base_dir=tmp_path, source="tiingo")
+    with pytest.raises(VerificationError, match="가격<=0") as exc:
+        verify_parquet(tmp_path)
+    assert "가격<=0=1" in str(exc.value)
+
+
+def test_verify_fails_zero_price(tmp_path: Path) -> None:
+    """0 가격(close=0)도 미국 EOD 에 정당하지 않으므로 양수성 게이트가 차단한다."""
+    bars = [_bar("BAD", date(2022, 6, 1), low="0.0", close="0.0")]
+    write_daily_bars(bars, exchange=Exchange.NYSE, base_dir=tmp_path, source="tiingo")
+    with pytest.raises(VerificationError, match="가격<=0"):
+        verify_parquet(tmp_path)
+
+
+def test_verify_reports_nonpositive_price_count_zero_on_clean(tmp_path: Path) -> None:
+    """정상 데이터는 nonpositive_price_count=0(게이트 위양성 없음)."""
+    write_daily_bars(
+        [_bar("AAPL", date(2022, 6, 1))],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="tiingo",
+    )
+    report = verify_parquet(tmp_path)
+    assert report.nonpositive_price_count == 0
+    assert report.passed
+
+
 def test_precision_error_on_scale_overflow(tmp_path: Path) -> None:
     """가격 scale(10) 초과 Decimal → PrecisionError(조용한 반올림 금지)."""
     # 소수 12자리 — _PRICE_SCALE=10 초과

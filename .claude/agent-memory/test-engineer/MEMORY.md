@@ -1,0 +1,1 @@
+- [M1 데이터 테스트 현황](project-m1-data-test-suite.md) — 컨테이너 exec 실행법, 77 통과, 커버리지 공백 4건(adj_factor 직접테스트·음수가격게이트·iter_universe 부분실패·교차거래소 중복)

@@ -66,12 +66,19 @@ _SQL_ROW_COUNT: Final = f"SELECT count(*) {_FROM}"  # noqa: S608
 _SQL_TICKER_COUNT: Final = f"SELECT count(DISTINCT ticker) {_FROM}"  # noqa: S608
 _SQL_MIN_DATE: Final = f"SELECT min(trade_date) {_FROM}"  # noqa: S608
 _SQL_MAX_DATE: Final = f"SELECT max(trade_date) {_FROM}"  # noqa: S608
+# 중복은 파일이 (ticker, year)로 분리돼 한 파일 안에선 드물고, glob 으로 모든 파일을 가로질러
+# union 스캔할 때만(예: 같은 ticker·연도가 두 파일로 쪼개진 비정상 적재) 의미가 있다.
 _SQL_DUPLICATES: Final = (
     f"SELECT coalesce(sum(c - 1), 0) FROM ("  # noqa: S608
     f"  SELECT count(*) AS c {_FROM} GROUP BY ticker, trade_date HAVING count(*) > 1"
     f")"
 )
 _SQL_NONPOSITIVE_ADJ: Final = f"SELECT count(*) {_FROM} WHERE adj_factor <= 0"  # noqa: S608
+# 양수성 게이트(금융 BLOCKING): 미국 EOD 에 정당한 음수/0 OHLC 는 없다. 기존 _SQL_OHLC_VIOLATION 은
+# high>=low 등 *상대* 관계만 봐 OHLC 가 전부 음수여도 통과했다 — 절대 음수/0 가격을 별도로 차단한다.
+_SQL_NONPOSITIVE_PRICE: Final = (  # noqa: S608
+    f"SELECT count(*) {_FROM} WHERE open <= 0 OR high <= 0 OR low <= 0 OR close <= 0"
+)
 _SQL_OHLC_VIOLATION: Final = (  # noqa: S608
     f"SELECT count(*) {_FROM} WHERE "
     f"high < low OR high < open OR high < close OR low > open OR low > close"
@@ -89,7 +96,10 @@ class PrecisionError(StorageError):
 
 
 class VerificationError(StorageError):
-    """DuckDB 검증 게이트 위반(중복·adj_factor<=0·OHLC 부정합·기대 종목 소실). 적재 신뢰 차단."""
+    """DuckDB 검증 게이트 위반(중복·adj_factor<=0·음수/0 가격·OHLC 부정합·기대 종목 소실).
+
+    적재 신뢰 차단 — 게이트가 하나라도 위반되면 적재 데이터를 신뢰할 수 없다.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +145,7 @@ class VerificationReport:
     max_date: str | None
     duplicate_count: int
     nonpositive_adj_factor_count: int
+    nonpositive_price_count: int
     ohlc_violation_count: int
     expected_checked: bool = False
     missing_tickers: tuple[str, ...] = ()
@@ -147,6 +158,7 @@ class VerificationReport:
         return (
             self.duplicate_count == 0
             and self.nonpositive_adj_factor_count == 0
+            and self.nonpositive_price_count == 0
             and self.ohlc_violation_count == 0
             and not self.missing_tickers
             and not self.shortfall_tickers
@@ -244,6 +256,14 @@ def write_daily_bars(
     한다(라이브 파일럿 실측 회귀: 단일 파티션 파일 방식이면 같은 거래소·연도를 공유하는 이전 ticker
     가 조용히 소실됐고 게이트도 못 잡았다). 빈 입력은 no-op(파일 미생성).
 
+    ⚠️ 호출 계약 BLOCKING (증분 적재 시 데이터 소실 위험): 이 write 는 **(ticker, year) 파일을
+    통째로 재작성**한다(read-merge 가 아니라 받은 행으로 그 파일을 덮어씀). 따라서 증분 적재 시에는
+    **그 ticker·그 연도의 전체 행을 한 write 호출에 모아 넘겨야 한다.** 같은 ticker·같은 연도의
+    비중복 날짜를 별도 write 호출로 나눠 넘기면(예: 1월분 호출 → 이후 2월분만 호출) 두 번째 호출이
+    같은 `{ticker}.parquet` 파일을 1월분 없이 통째로 덮어써 **이전 행이 조용히 소실된다**(검증
+    게이트의 expected 대조에는 같은 배치 입력만 흘리면 잡히지 않는다 — 다른 배치의 과거 행이므로).
+    근본 해소(read-merge-write)는 M2 일일증분 티켓으로 이월한다 — 그 전까지는 이 호출 계약을 지킨다.
+
     ⚠️ ingested_at=None 이면 호출 시각(UTC)을 1회 고정해 모든 행에 동일 적용(같은 배치 = 같은 시각).
     """
     dataset_root = base_dir / _DATASET_NAME
@@ -294,7 +314,9 @@ def verify_parquet(
     검증 항목:
       (a) 중복 (ticker, trade_date) = 0       — 멱등 위반·이중 적재 탐지
       (b) adj_factor > 0                       — 수정계수 0/음수는 수익률 계산 붕괴
-      (c) OHLC 정합: high>=low, high>=open/close, low<=open/close — 가격 무결성
+      (c) 가격 양수성: open/high/low/close > 0 — 미국 EOD 에 정당한 음수/0 가격 없음(c'의 상대
+          관계 게이트는 전부 음수여도 통과 → 절대 음수/0 를 별도 차단)
+      (c') OHLC 정합: high>=low, high>=open/close, low<=open/close — 가격 상대 무결성
       (d) ⭐ expected 대조(생존편향 BLOCKING): expected 를 주면 ticker별 기대 행수 vs 실제 행수를
           대조해 **누락(missing)·행수 미달(shortfall)** 을 시끄럽게 실패시킨다. orphan(기대에
           없는데 존재)은 경고만. expected=None 이면 이 대조를 건너뛴다(옛 약점 — 호출부가 expected
@@ -330,6 +352,7 @@ def verify_parquet(
             max_date=None,
             duplicate_count=0,
             nonpositive_adj_factor_count=0,
+            nonpositive_price_count=0,
             ohlc_violation_count=0,
             expected_checked=expected is not None,
             missing_tickers=missing,
@@ -353,6 +376,7 @@ def verify_parquet(
         max_date = _scalar_str(con, _SQL_MAX_DATE, params)
         duplicate_count = _scalar_int(con, _SQL_DUPLICATES, params)
         nonpositive_adj = _scalar_int(con, _SQL_NONPOSITIVE_ADJ, params)
+        nonpositive_price = _scalar_int(con, _SQL_NONPOSITIVE_PRICE, params)
         ohlc_violation = _scalar_int(con, _SQL_OHLC_VIOLATION, params)
         actual_counts = _ticker_row_counts(con, _SQL_TICKER_ROW_COUNTS, params)
     finally:
@@ -367,6 +391,7 @@ def verify_parquet(
         max_date=max_date,
         duplicate_count=duplicate_count,
         nonpositive_adj_factor_count=nonpositive_adj,
+        nonpositive_price_count=nonpositive_price,
         ohlc_violation_count=ohlc_violation,
         expected_checked=expected is not None,
         missing_tickers=missing,
@@ -374,7 +399,7 @@ def verify_parquet(
         orphan_tickers=orphan,
     )
     logger.info(
-        "Parquet 검증: rows=%d, tickers=%d, period=%s~%s, dup=%d, adj<=0=%d, ohlc=%d, "
+        "Parquet 검증: rows=%d, tickers=%d, period=%s~%s, dup=%d, adj<=0=%d, price<=0=%d, ohlc=%d, "
         "expected_checked=%s, missing=%d, shortfall=%d, orphan=%d, passed=%s",
         report.row_count,
         report.ticker_count,
@@ -382,6 +407,7 @@ def verify_parquet(
         report.max_date,
         report.duplicate_count,
         report.nonpositive_adj_factor_count,
+        report.nonpositive_price_count,
         report.ohlc_violation_count,
         report.expected_checked,
         len(report.missing_tickers),
@@ -437,7 +463,7 @@ def _raise_verification_error(report: VerificationReport) -> None:
     raise VerificationError(
         "Parquet 무결성 게이트 실패(금융 BLOCKING): "
         f"중복={report.duplicate_count}, adj_factor<=0={report.nonpositive_adj_factor_count}, "
-        f"OHLC위반={report.ohlc_violation_count}, "
+        f"가격<=0={report.nonpositive_price_count}, OHLC위반={report.ohlc_violation_count}, "
         f"누락(소실)={missing}, 행수미달={shortfall}. "
         "기대 종목이 조용히 누락되면 생존편향 누수이므로 적재 데이터를 신뢰할 수 없습니다."
     )

@@ -26,8 +26,11 @@ scale 을 과도하게(37) 잡아야 했다. 여기서 **의도된 정밀도(소
 - 12자리 고정 → 저장층 decimal128 컬럼 scale 을 37 → 12 로 축소할 수 있다(정수부 26자리 여유 —
   역분할로 factor 가 한·두 자릿수여도 수용).
 
-경계(BLOCKING — 조용한 왜곡 방지): adjusted 결측 또는 raw<=0 이면 수정 불가 → 무수정(Decimal("1"))로
-두고 WARNING. 정상 케이스에서 adjusted==raw 면 factor==1(무분할·무배당 구간).
+경계(BLOCKING — 조용한 왜곡 방지): adjusted 결측 또는 raw<=0 또는 **adjusted<=0** 이면 수정 불가
+→ 무수정(Decimal("1"))로 두고 WARNING. 정상 케이스에서 adjusted==raw 면 factor==1(무분할·무배당
+구간). ⚠️ 미국 EOD 에 정당한 음수/0 종가는 없다 — adjusted<=0(또는 raw<=0)이면 분자/분모로
+음수·0 계수가 산출돼(예: adjusted=-50, raw=100 → factor=-0.5) 이후 수정주가가 부호 반전·붕괴하므로
+계수를 만들지 않고 보수적으로 1(무수정) + WARNING 으로 차단한다(저장층 양수성 게이트의 1차 방어선).
 """
 
 from __future__ import annotations
@@ -65,6 +68,7 @@ def compute_adj_factor(
     경계 방어(조용한 왜곡 금지):
       - adjusted 결측(None) → 수정 불가, 1 적용 + WARNING
       - raw<=0(0 나눗셈·음수가 불가) → 1 적용 + WARNING
+      - adjusted<=0(미국 EOD 에 정당한 음수/0 종가 없음 — 음수·0 계수 방지) → 1 적용 + WARNING
 
     source 는 로그 분류용(어느 소스의 어느 종목·날짜인지 추적). 키 등 민감정보는 인자에 없음.
     """
@@ -83,6 +87,17 @@ def compute_adj_factor(
             ticker,
             trade_date,
             raw,
+        )
+        return _NO_ADJUST
+    if adjusted <= 0:
+        # 미국 EOD 에 정당한 음수/0 수정종가는 없다 — 음수·0 계수(부호 반전·수정주가 붕괴) 방지.
+        logger.warning(
+            "%s adjusted(수정종가)<=0 — 음수/0 계수 방지, adj_factor=1 적용: "
+            "ticker=%s, date=%s, adjusted=%s",
+            source,
+            ticker,
+            trade_date,
+            adjusted,
         )
         return _NO_ADJUST
     return (adjusted / raw).quantize(_QUANTUM, rounding=ROUND_HALF_EVEN)

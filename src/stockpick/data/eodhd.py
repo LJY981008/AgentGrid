@@ -193,11 +193,23 @@ class EodhdSource:
         if include_delisted:
             delisted = self._fetch_symbol_list(delisted=True)
             stocks.extend(delisted)
+            # 활성·폐지 목록 간 ticker 겹침 고지(조용한 중복 금지). 병합은 양쪽을 보존하므로
+            # (생존편향 회피 — 같은 ticker 가 양 출처에 있으면 둘 다 남김) 중복 행이 생길 수 있고,
+            # 후속 ticker_history/EDGAR 매핑 단계가 CIK 로 정규화한다. 여기선 정량 고지만.
+            overlap = {s.ticker for s in active} & {s.ticker for s in delisted}
+            if overlap:
+                logger.warning(
+                    "EODHD 유니버스: 활성·폐지 ticker 겹침 %d개(병합 시 중복 행 — CIK 정규화 "
+                    "후속): 예시 %s",
+                    len(overlap),
+                    ", ".join(sorted(overlap)[:10]),
+                )
             logger.info(
-                "EODHD 유니버스: 활성=%d + 폐지=%d = %d (cik 미제공 — EDGAR 매핑 후속)",
+                "EODHD 유니버스: 활성=%d + 폐지=%d = %d (겹침=%d, cik 미제공 — EDGAR 매핑 후속)",
                 len(active),
                 len(delisted),
                 len(stocks),
+                len(overlap),
             )
         else:
             logger.warning(
@@ -379,8 +391,11 @@ def _to_symbol(ticker: str) -> str:
 
     명세: 심볼은 거래소 코드 필수(`AAPL.US`). 정책 명확화 — ticker 에 점(.)이 이미 있으면 호출부가
     거래소를 명시한 것으로 보고 그대로 사용(예: `MCD.MX`), 없으면 미국(`.US`)을 붙인다. 빈 ticker 는
-    그대로 두어 상위 호출이 빈 심볼로 명확히 실패하게 한다(추측 보정 금지).
+    그대로 반환해 상위 호출이 빈 심볼로 명확히 실패하게 한다(추측 보정 금지 — `.US` 부착 시 `.US`
+    라는 가짜 심볼로 요청돼 실패가 흐려진다).
     """
+    if not ticker:
+        return ticker
     if "." in ticker:
         return ticker
     return f"{ticker}.{_DEFAULT_EXCHANGE_SUFFIX}"
@@ -409,7 +424,8 @@ def _map_exchange(value: object) -> Exchange:
     후속(개별 fundamentals 의 Exchange 또는 별도 매핑)으로 보강. None/미상도 OTC.
     """
     if isinstance(value, str):
-        mapped = _EXCHANGE_MAP.get(value.upper()) or _EXCHANGE_MAP.get(value)
+        # _EXCHANGE_MAP 키는 전부 대문자 → upper() 조회로 충분(원본 조회는 dead code).
+        mapped = _EXCHANGE_MAP.get(value.upper())
         if mapped is not None:
             return mapped
     return Exchange.OTC

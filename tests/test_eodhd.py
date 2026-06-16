@@ -21,6 +21,7 @@ from stockpick.data.eodhd import (
     EodhdRateLimitError,
     EodhdResponseError,
     EodhdSource,
+    _to_symbol,
 )
 from stockpick.data.source import DataSource
 from stockpick.types import Exchange
@@ -163,6 +164,13 @@ def test_symbol_format_defaults_to_us_suffix() -> None:
     assert params["to"] == "2024-06-30"
     assert params["period"] == "d"
     assert params["fmt"] == "json"
+
+
+def test_to_symbol_empty_ticker_returned_as_is() -> None:
+    """빈 ticker 는 그대로 반환 — '.US' 부착 금지(가짜 심볼 '.US' 로 실패가 흐려지는 것 방지)."""
+    assert _to_symbol("") == ""  # docstring 계약: 빈 입력은 그대로(상위에서 명확 실패 유도)
+    assert _to_symbol("AAPL") == "AAPL.US"  # 거동 핀: 정상 ticker 는 .US 부착
+    assert _to_symbol("MCD.MX") == "MCD.MX"  # 명시 거래소 보존
 
 
 def test_symbol_format_keeps_explicit_exchange() -> None:

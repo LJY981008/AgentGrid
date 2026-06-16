@@ -6,16 +6,20 @@ run_pilot 은 DataSource 를 주입받으므로 라이브 호출 없이 합성 �
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from stockpick.data.pilot import PilotSymbol, _compute_split_check, run_pilot
 from stockpick.data.storage import VerificationError
 from stockpick.data.tiingo import TiingoRateLimitError
-from stockpick.types import DailyBar, Exchange
+from stockpick.types import DailyBar, Exchange, Stock
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 def _bar(ticker: str, d: date, adj_factor: str = "1") -> DailyBar:
@@ -42,7 +46,7 @@ class _FakeSource:
     def name(self) -> str:
         return "fake"
 
-    def iter_universe(self, *, include_delisted: bool = True) -> list:  # type: ignore[type-arg]
+    def iter_universe(self, *, include_delisted: bool = True) -> list[Stock]:
         raise NotImplementedError
 
     def fetch_daily_bars(
@@ -134,7 +138,14 @@ def test_run_pilot_detects_silent_loss_via_cumulative_expected(
 
     state: dict[str, str] = {}
 
-    def _lossy_write(bars, *, exchange, base_dir, source, ingested_at=None):  # type: ignore[no-untyped-def]
+    def _lossy_write(
+        bars: Sequence[DailyBar],
+        *,
+        exchange: Exchange,
+        base_dir: Path,
+        source: str,
+        ingested_at: datetime | None = None,
+    ) -> Path:
         # 버그 재현: 매 적재마다 dataset 트리를 비우고 이번 ticker 만 남긴다(이전 ticker 소실).
         root = base_dir / "daily_bar"
         if root.exists():
