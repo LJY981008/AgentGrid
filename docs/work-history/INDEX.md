@@ -12,3 +12,4 @@
 | 2026-06-16 | M1 S0-S1 — 결정 확정·계약 정밀도 교정(float→Decimal) | 일반 구현 | [[2026-06-16-M1-S0S1-결정·계약교정]] |
 | 2026-06-16 | B-env — Docker 기반 uv 개발/실행 환경(Dockerfile·app 서비스·uv.lock) | 하네스/인프라 | [[2026-06-16-B-env-docker-uv]] |
 | 2026-06-16 | B-contract — 미국 도메인 계약 재설계(CIK+ticker·Exchange·DataSource Protocol) | 일반 구현 | [[2026-06-16-B-contract-미국계약]] |
+| 2026-06-16 | B-pipeline — Tiingo EOD 가격 어댑터(httpx·adj_factor·모킹 테스트, 라이브 0) | 일반 구현 | [[2026-06-16-B-pipeline-tiingo-어댑터]] |

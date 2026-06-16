@@ -4,7 +4,9 @@ version = "0.0.1"
 description = "개인 투자용 미국 주식 주가 분석 — 30년 데이터 기반 Top20 정량 생성 → 수동 Top5 → 분산투자 추적"
 requires-python = ">=3.12"
 # 런타임 의존성(pandas·pyarrow·duckdb·tiingo 등)은 B-pipeline 단계에서 `uv add` 로 실측 고정 — 추측 고정 금지
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+]
 
 # 개발 도구는 PEP 735 dependency-group(uv 네이티브) — `uv sync` 가 기본 설치.
 #   optional-dependencies(extra) 와 달리 published 패키지에 안 섞이고 `--extra` 없이 설치됨.

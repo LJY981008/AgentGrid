@@ -87,7 +87,11 @@ docker compose exec app pytest -q                   # 테스트
 # 또는 일회성: docker compose run --rm app ruff check src tests
 
 # 개발 도구는 [dependency-groups].dev (PEP 735) — `uv sync` 가 기본 설치(extra 아님)
-# 런타임 의존성 추가 시: docker compose exec app uv add <pkg> → uv.lock 갱신 → 재빌드
+# 런타임 의존성 추가 시(실측 2026-06-16): compose 에 uv.lock 바인드 마운트가 없어 `exec ... uv add`
+#   는 권한 거부됨(pyproject=호스트 1000 소유 vs uv.lock=이미지내 app 999 소유). 동작 절차:
+#   docker compose run --rm --no-deps --user 1000:1000 -e UV_CACHE_DIR=/tmp/uvcache \
+#     -v "$PWD/uv.lock:/app/uv.lock" app uv add --no-sync <pkg>   # 호스트 pyproject+uv.lock 갱신
+#   docker compose build app && docker compose up -d --no-deps app  # .venv 반영(재생성)
 .claude/hooks/tests/run.sh                         # 훅 회귀 테스트 (38케이스)
 ```
 
