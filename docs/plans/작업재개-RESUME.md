@@ -3,7 +3,8 @@
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-16.
 > 💡 **EODHD 무료티어 실측(2026-06-17)**: 가격 history=**최신 1년(251 거래일)만**, 과거 범위 요청은 무시. **유니버스는 무료 전체**(활성 51,705 + 폐지 57,825 = 109,530, 폐지 리스트 포함). 파이프라인 end-to-end(EodhdSource→Parquet→검증 게이트)가 무료 실데이터로 PASS. → **M2(룰·백테스트) 개발은 무료 1년치로 가능**, 전체 다년 history만 유료($19.99) 전환. 결제를 M2 끝까지 미룰 수 있음.
 
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0 전환 + M1 파일럿(Tiingo) 검증 + Tiingo·EODHD 명세 + **TASK-A~D 완료** + **전체 점검 완료**(도커컴포즈 라이브 파일럿 end-to-end 통과 + 다차원 코드리뷰 BLOCKING 0·M2 진행가능 + 리뷰 반영: 양수성 게이트·httpx 토큰가드 `configure_logging()` 코드화·테스트 89 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제($19.99) 후 라이브.** 무료 개발분 소진 — 남은 건 결제 + EDGAR 재무층 + db-architect 마이그레이션 + write read-merge-write(증분).
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **다음 = M2 백테스트**(rolling as_of·CAGR/샤프/MDD·생존편향·거래비용) + EODHD 결제(다년 history) + cik 매핑(EDGAR).
+> ⚠️ **데이터셋은 컨테이너 내부 `data/parquet`만**(호스트 미마운트·gitignore) — 컨테이너 재생성 시 소실, `python -m stockpick.data.ingest` 재실행으로 복원. 룰 데모/백테스트는 `docker compose exec` 로.
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
 - **시장**: 미국(NYSE/NASDAQ/AMEX). 한국 보류(나중 재사용 가능).
