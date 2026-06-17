@@ -5,7 +5,7 @@ paths: ["webapp/**"]
 
 # Web App (PWA) Conventions — M3 활성 (실측 2026-06-17)
 
-> 웹앱은 M3 부터 구현됨. 스택 확정·구조는 아래 실측 반영. 백테스트 화면(`BacktestPage`)만 placeholder(다음 마일스톤).
+> 웹앱은 M3 부터 구현됨. 스택 확정·구조는 아래 실측 반영. 5화면 전부 구현 — `BacktestPage`는 `/api/backtest` 소비·Recharts 자산곡선(골격·미검증경고 상시).
 
 ## 방향 (stock-1st_plan §7)
 
@@ -17,14 +17,14 @@ paths: ["webapp/**"]
 
 - **Vite 8 + React 19 + TypeScript(strict)** — `webapp/`, `npm` (uv 아님). Node 22.
 - 라우팅 `react-router 7`(Data Mode, `src/router.tsx`) · 마크다운 `react-markdown 10` + `remark-gfm` + `rehype-slug` · PWA `vite-plugin-pwa`(generateSW)
-- 차트는 **순수 CSS 막대(div width%)** — 의존성 0. 백테스트 곡선 착수 시에만 Recharts 도입(아직 미설치)
+- 차트: 이산값(랭킹 등)은 **순수 CSS 막대(div width%)**. **시계열 곡선(백테스트 자산곡선)은 Recharts ^3.8.1**(React19 호환·도입됨). 신규 곡선은 Recharts, 단순 막대는 CSS 유지(의존성 절제)
 
 ## 구조 (실측)
 
 | 경로 | 역할 |
 |---|---|
 | `src/api/{client,endpoints,types,useApi}.ts` | API 클라이언트. `types.ts` = `src/stockpick/api/models.py` **1:1 미러**(단일 출처는 서버) |
-| `src/pages/` | `Dashboard`(랭킹·홈) · `Data`(수집 트리거) · `Universe`(종목 목록) · `Learning`(docs/learning 렌더) · `Backtest`(placeholder) · `NotFound` |
+| `src/pages/` | `Dashboard`(랭킹·홈) · `Data`(수집 트리거) · `Universe`(종목 목록) · `Learning`(docs/learning 렌더) · `Backtest`(자산곡선 Recharts·지표·벤치·미검증경고) · `NotFound` |
 | `src/components/` | `Layout` · `common/{Badge,StateViews,UnvalidatedWarning}` · `ranking/RankingTable` · `learning/{TopicTree,MarkdownView}` |
 | `vite.config.ts` | dev proxy `/api`·`/learning-assets` → `VITE_DEV_API_TARGET`(컨테이너 app:8000) + vite-plugin-pwa |
 

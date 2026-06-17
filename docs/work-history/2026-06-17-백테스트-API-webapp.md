@@ -2,7 +2,7 @@
 
 - **유형**: 일반 구현 (플랜모드 승인)
 - **관련 기획/이슈**: M2 백테스트 엔진 후속 — 엔진을 HTTP·UI로 노출. 결제·신규키 0(무료 골격)
-- **시작 시점 커밋**: `c106981` → **완료 커밋**: 이 작업 마지막 커밋(완료 시 기입)
+- **시작 시점 커밋**: `c106981` → **완료 커밋**: 이 커밋(문서 동기화). 구현 `83c163e`(PriceDerivedUniverse)·`89017df`(/api/backtest)·`f8ccb6c`(webapp BacktestPage).
 
 ## 의도 (Why)
 
@@ -35,17 +35,17 @@ benchmark_returns·meta(validated=false+warning+data_caveats). 빈데이터→20
 - webapp 차트 = CSS 막대만(recharts 미설치).
 - 테스트: 173 passed.
 
-## After — 수행 후 실측 (완료 시 기입)
+## After — 수행 후 실측
 
-> **진행중** — 6단계 완료 시 채움.
+- **검증**: `ruff check`·`ruff format --check`·`mypy`(strict 63 src) OK · `pytest` **178 passed**(173→178, +5: PriceDerivedUniverse 1 + backtest api 4[synthetic·empty·score_weight·422]). 훅 회귀 38 PASS. webapp `npm run build`(tsc strict + vite + PWA generateSW) OK.
+- **라이브 스모크**(`GET /api/backtest?top_n=5`, 실데이터 9종목): validated=false·곡선 14점·총수익 0.2888·Sharpe 2.645·MDD −0.0276·벤치(등가중) 0.33 → **룰 초과수익 −0.0413(언더퍼폼)**·caveats 노출.
+- **화면 검증**(playwright, http://localhost:5174/backtest): 미검증 경고 배너·전략/리밸 토글·Recharts 자산곡선(전략 vs 등가중 벤치 오버레이)·지표 그리드·미검증 한계 리스트 정상 렌더. **0 콘솔 에러.** 전략 곡선이 벤치 아래 = §4.1 정직 입증.
+- **변경 규모**: 14 files, +1014/−42. recharts ^3.8.1 도입(React19 호환·peer ok).
+- **완료 커밋**: `83c163e`(PriceDerivedUniverse·demo smell 제거) → `89017df`(/api/backtest) → `f8ccb6c`(webapp BacktestPage·Recharts) → 이 커밋(webapp-conventions 동기화·work-history).
 
-- 검증: (ruff·mypy·pytest + webapp build + /api/backtest 스모크)
-- 변경 규모: (diff stat)
-- 커밋: (SHA)
+## 비교/회고
 
-## 비교/회고 (완료 시 기입)
-
-> **진행중**
-
-- 의도 대비 달성도:
-- 후속: [ ] walk-forward UI · [ ] 파라미터 전체폼 · [ ] EDGAR cik(#2) · [ ] validated=true(결제+S6)
+- **의도 대비 달성도**: 100% — 엔진을 HTTP·UI로 노출, BacktestPage placeholder 교체 완료. 결제·신규키 0(무료 골격). meta.validated=false+경고 상시·data_caveats 노출로 §4.1 정직성 유지(화면이 룰의 벤치 언더퍼폼을 그대로 보여줌).
+- **계획과 달라진 것**: ①`PriceDerivedUniverse`를 adapters에 신설해 demo의 `FakeUniversePort` smell 제거(리뷰 지적 반영 — 가격기반 유니버스는 정직한 골격 차선, 테스트용 FakeUniversePort와 분리). ②Recharts Tooltip formatter 타입(ValueType) — param을 unknown으로(contravariance) tsc strict 통과. ③recharts 버전 추측 금지 — npm view로 3.8.1·React19 peer 확인 후 핀.
+- **남은 함정/한계**: 골격 유니버스=가격기반(survivorship 미보정)·cik 미해소·recharts 청크>500KB(코드스플릿 후속 여지). 전부 data_caveats·conventions에 기록.
+- **후속**: [ ] walk-forward·decay UI · [ ] 파라미터 전체폼 · [ ] EDGAR cik(#2) · [ ] benchmark/engine 루프 공유 헬퍼(#5) · [ ] S6 게이트 후 validated=true(결제) · [ ] recharts 청크 코드스플릿
