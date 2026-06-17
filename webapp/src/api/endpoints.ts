@@ -7,6 +7,8 @@
 
 import { apiRequest } from "./client";
 import type {
+  BacktestQuery,
+  BacktestResponse,
   DatasetSummary,
   HealthResponse,
   IngestRequest,
@@ -46,6 +48,24 @@ export function postIngest(req: IngestRequest = {}, signal?: AbortSignal): Promi
   return apiRequest<IngestResult>("/api/ingest", {
     method: "POST",
     body: { tickers: req.tickers ?? null },
+    signal,
+  });
+}
+
+/**
+ * 룰 백테스트(골격) — 자산곡선·지표·벤치. ⚠️ meta.validated=false 상시(미검증 — 알파 아님).
+ * 쿼리는 strategy·top_n·rebalance_freq 만(나머지 서버 고정 — 과적합 노브 최소화).
+ */
+export function getBacktest(
+  q: BacktestQuery = {},
+  signal?: AbortSignal,
+): Promise<BacktestResponse> {
+  return apiRequest<BacktestResponse>("/api/backtest", {
+    query: {
+      strategy: q.strategy,
+      top_n: q.top_n,
+      rebalance_freq: q.rebalance_freq,
+    },
     signal,
   });
 }

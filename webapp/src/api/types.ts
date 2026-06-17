@@ -137,6 +137,56 @@ export interface RankingQuery {
   group?: "exchange" | "all";
 }
 
+// --- backtest (§4.1 미검증 경고 필수, 골격 데이터) ---
+export interface EquityPoint {
+  date: IsoDate;
+  value: number; // 누적 자산(시작 1.0 기준)
+}
+
+export interface BacktestParams {
+  strategy: string; // "equal_weight" | "score_weight"
+  top_n: number;
+  rebalance_freq: string; // "monthly" | "quarterly"
+  lookback_days: number;
+  skip_recent_days: number;
+  cost_bps: number;
+  delisting_recovery_rate: number;
+}
+
+export interface BacktestMetrics {
+  total_return: number;
+  cagr: number;
+  sharpe: number;
+  sortino: number;
+  max_drawdown: number;
+  turnover: number;
+  total_cost: number;
+  n_rebalances: number;
+  n_delisted_liquidations: number;
+}
+
+export interface BacktestMeta {
+  validated: boolean; // 항상 false — 골격·미검증
+  warning: string;
+  params: BacktestParams;
+  data_caveats: string[];
+}
+
+export interface BacktestResponse {
+  equity_curve: EquityPoint[]; // 전략 자산곡선
+  benchmark_curve: EquityPoint[]; // 등가중 유니버스 벤치(오버레이)
+  metrics: BacktestMetrics;
+  benchmark_returns: Record<string, number>;
+  meta: BacktestMeta;
+}
+
+// 백테스트 쿼리(GET /api/backtest). 서버 고정 파라미터(cost·lookback 등)는 노출 안 함.
+export interface BacktestQuery {
+  strategy?: "equal_weight" | "score_weight";
+  top_n?: number;
+  rebalance_freq?: "monthly" | "quarterly";
+}
+
 // --- learning ---
 export interface LearningNode {
   name: string;
