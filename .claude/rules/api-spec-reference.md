@@ -23,6 +23,13 @@ paths: ["src/stockpick/data/**/*.py"]
 - **생존편향 핵심 섹션**: `delisted-stock-companies-data`(폐지 ~2000년부터)·`sp-dow-jones-historical-constituents`(지수 historical constituents)·`us-stock-symbol-rename-history`(티커 연속성). 유니버스는 폐지 포함 적재.
 - **rate limit**: 한도·소비 모델은 `docs/apis/eodhd/api-limits.json` 이 진실 원천(유료 기본 100,000 calls/day·심볼요청 1콜·Bulk 100콜 등, 분당 1000 requests). ⚠️ 무료티어 일일 한도는 해당 페이지 미기재(별도 실측 필요) — 숫자 단정 금지.
 
+## SEC EDGAR (ticker→cik 식별·재무 — `docs/apis/sec-edgar/`)
+
+- **인증**: **API 키 없음**. 단 `User-Agent` 헤더에 신원(이름+이메일) 필수 — 없으면 **403**(실측). 값 = `.env` 의 `EDGAR_IDENTITY`(비밀 아님·연락처, 토큰 아님). rate limit ~10 req/s.
+- **현재 ticker→cik**: `GET https://www.sec.gov/files/company_tickers.json` — 응답 `{idx:{cik_str:int, ticker, title}}`. ⚠️ 인덱스 키 비안정 → `.values()` 순회. cik 는 **10자리 zero-pad**. 어댑터 = `data/edgar.py`(fetch→`base_dir/edgar/ticker_cik.json` 저장→`EdgarSnapshotResolver` 읽기). 커버리지=SEC 신고사만(ETF·외국주 미수록 → 미해소 cik="").
+- **재무(후속·XBRL)**: `data.sec.gov/submissions/CIK##########.json`·`/api/xbrl/companyfacts/CIK##########.json` — `filed`=PIT. edgartools 도입 시(현재 미설치).
+- ⚠️ '현재' 매핑만 — 폐지·과거 ticker 미수록(생존편향 소스 아님). 시점별 ticker_history 는 후속.
+
 ## Tiingo (M1 파일럿 가격 소스 — `docs/apis/tiingo/`)
 
 - **인증**: `Authorization: Token <KEY>` 헤더 **또는** `?token=<KEY>` 쿼리. ⚠️ **Bearer 아님** — `"Token "` 접두사. 키 = `.env` 의 `TIINGO_API_KEY`(코드에 하드코딩·로깅 금지 — logging-rules).

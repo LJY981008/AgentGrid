@@ -64,7 +64,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack** (2026-06-16 전환):
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
-- 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY). (구 한국 FDR/pykrx/KRX 보류)
+- 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 식별=SEC EDGAR `company_tickers.json`(ticker→cik, 키없음·User-Agent=EDGAR_IDENTITY / `data/edgar.py`·`EdgarSnapshotResolver`). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY·EDGAR_IDENTITY[키 아님·신원]). (구 한국 FDR/pykrx/KRX 보류)
 - 저장: **Parquet**(`pyarrow`)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙) — `compose.yaml`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
 - API(M3): **FastAPI**+**uvicorn[standard]**(`src/stockpick/api/`) — 수집·랭킹·학습을 HTTP 노출. pydantic 응답계약 = 프론트 단일 출처. CORS=localhost:5173(컨테이너 내부 web). ⚠️ ranking `meta.validated=false`·키 비노출 — **validated=false 사유 = 백테스트 엔진은 구현(M2 골격)됐으나 무료 1년치·S6 데이터 신뢰성 게이트 미통과라 룰 미입증, 결제 후 다년 검증 전까지 false 고정**(§4.1 미검증 경고 상시)
 - 웹앱(M3 — 구현 완료): PWA (`webapp/`) — **Vite8/React19/react-router7/TS**, 5 nav 화면(랭킹=Dashboard·데이터·유니버스·학습·백테스트 placeholder)+404
