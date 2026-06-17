@@ -350,3 +350,51 @@ def test_learning_content_missing_404(client: TestClient) -> None:
     _seed_learning(client.learning_dir)
     r = client.get("/api/learning/content", params={"path": "nope.md"})
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# backtest — §4.1 미검증 경고 단언 + 골격 shape
+# ---------------------------------------------------------------------------
+
+
+def test_backtest_synthetic_validated_false_and_warning(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)
+    r = client.get("/api/backtest", params={"top_n": 2})
+    assert r.status_code == 200
+    body = r.json()
+    # §4.1 BLOCKING: 골격은 항상 미검증.
+    assert body["meta"]["validated"] is False
+    assert body["meta"]["warning"]
+    assert body["meta"]["data_caveats"]  # 골격 한계 고지 비어있지 않음
+    assert len(body["equity_curve"]) >= 1  # 자산곡선 산출
+    assert len(body["benchmark_curve"]) >= 1  # 등가중 벤치 곡선
+    assert "EQUAL_WEIGHT_UNIVERSE" in body["benchmark_returns"]
+    assert body["metrics"]["n_rebalances"] >= 1
+    # 자산곡선 첫 점 = 초기자본 1.0 앵커.
+    assert body["equity_curve"][0]["value"] == 1.0
+
+
+def test_backtest_empty_tree_keeps_warning(client: TestClient) -> None:
+    # 데이터 없음 → 200·빈 곡선·warning 유지(에러 아님, ranking 선례).
+    r = client.get("/api/backtest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["meta"]["validated"] is False
+    assert body["meta"]["warning"]
+    assert body["equity_curve"] == []
+    assert body["metrics"]["total_return"] == 0.0
+
+
+def test_backtest_score_weight_strategy(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)
+    r = client.get(
+        "/api/backtest", params={"strategy": "score_weight", "rebalance_freq": "monthly"}
+    )
+    assert r.status_code == 200
+    assert r.json()["meta"]["params"]["strategy"] == "score_weight"
+
+
+def test_backtest_invalid_params_422(client: TestClient) -> None:
+    assert client.get("/api/backtest", params={"top_n": 0}).status_code == 422  # ge=1 위반
+    assert client.get("/api/backtest", params={"strategy": "bogus"}).status_code == 422  # Literal
+    assert client.get("/api/backtest", params={"rebalance_freq": "weekly"}).status_code == 422

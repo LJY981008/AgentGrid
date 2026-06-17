@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..data import configure_logging
 from .deps import get_cors_origins, get_learning_dir
-from .routes import dataset, health, ingest, learning, ranking
+from .routes import backtest, dataset, health, ingest, learning, ranking
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,14 @@ def create_app() -> FastAPI:
         allow_credentials=False,  # 개인용·쿠키 인증 없음
     )
 
-    api_routers = (health.router, dataset.router, ingest.router, ranking.router, learning.router)
+    api_routers = (
+        health.router,
+        dataset.router,
+        ingest.router,
+        ranking.router,
+        backtest.router,
+        learning.router,
+    )
     for router in api_routers:
         app.include_router(router, prefix="/api")
 

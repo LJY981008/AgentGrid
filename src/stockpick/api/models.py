@@ -168,6 +168,63 @@ class RankingResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# backtest (백테스트 — §4.1 미검증 경고 필수, 골격 데이터)
+# ---------------------------------------------------------------------------
+
+
+class EquityPoint(BaseModel):
+    """자산곡선 한 점. value=누적 자산(시작 1.0 기준). Decimal→float 직렬화 경계."""
+
+    date: date
+    value: float
+
+
+class BacktestParams(BaseModel):
+    """백테스트 산출에 사용된 파라미터(재현성·프론트 표시). cost/lookback 등은 서버 고정값 노출."""
+
+    strategy: str  # "equal_weight" | "score_weight"
+    top_n: int
+    rebalance_freq: str  # "monthly" | "quarterly"
+    lookback_days: int
+    skip_recent_days: int
+    cost_bps: float
+    delisting_recovery_rate: float
+
+
+class BacktestMetrics(BaseModel):
+    """백테스트 지표. 돈/수익은 내부 Decimal → 직렬화 경계에서 float(통계는 본래 float)."""
+
+    total_return: float
+    cagr: float
+    sharpe: float
+    sortino: float
+    max_drawdown: float
+    turnover: float
+    total_cost: float
+    n_rebalances: int
+    n_delisted_liquidations: int  # 폐지 청산 건수(생존편향 가드 발동 증거)
+
+
+class BacktestMeta(BaseModel):
+    """백테스트 메타 — ⚠️ validated=false + warning 항상(§4.1). data_caveats 로 골격 한계 고지."""
+
+    validated: bool  # 항상 False — 골격·미검증(결제+S6 게이트 전)
+    warning: str
+    params: BacktestParams
+    data_caveats: list[str]  # survivorship(가격기반 유니버스)·cik 미해소·구간 짧음 등
+
+
+class BacktestResponse(BaseModel):
+    """GET /api/backtest 응답. 빈 데이터면 곡선=[], 지표 0, warning 유지(200, 에러 아님)."""
+
+    equity_curve: list[EquityPoint]  # 전략 자산곡선
+    benchmark_curve: list[EquityPoint]  # 등가중 유니버스 벤치(차트 오버레이)
+    metrics: BacktestMetrics
+    benchmark_returns: dict[str, float]  # {"EQUAL_WEIGHT_UNIVERSE": 총수익}
+    meta: BacktestMeta
+
+
+# ---------------------------------------------------------------------------
 # learning (docs/learning 학습노트)
 # ---------------------------------------------------------------------------
 
