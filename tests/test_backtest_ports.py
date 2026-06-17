@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
+from stockpick.backtest.adapters import PriceDerivedUniverse
 from stockpick.backtest.fakes import (
     FakePriceSeriesPort,
     FakeUniversePort,
@@ -8,6 +9,23 @@ from stockpick.backtest.fakes import (
 )
 from stockpick.backtest.ports import IdentityResolver, PriceSeriesPort, UniversePort
 from stockpick.rules._scan import PricePoint
+
+
+def test_price_derived_universe_constituents_from_first_trade_date() -> None:
+    # 가격기반 유니버스 — listed=첫 거래일, 폐지 없음(골격 차선). UniversePort Protocol 충족.
+    series = {
+        "A": [
+            PricePoint(date(2024, 1, 2), Decimal("10")),
+            PricePoint(date(2024, 3, 1), Decimal("11")),
+        ],
+        "B": [PricePoint(date(2024, 2, 1), Decimal("20"))],  # B 는 2024-02 첫 등장
+    }
+    uni = PriceDerivedUniverse(FakePriceSeriesPort(series))
+    assert isinstance(uni, UniversePort)
+    assert uni.constituents(as_of=date(2024, 1, 15)) == {"A"}  # B 아직 첫거래일 전
+    assert uni.constituents(as_of=date(2024, 2, 15)) == {"A", "B"}
+    assert uni.delisting_event("A") is None  # 가격기반엔 폐지 정보 없음
+    assert uni.ticker_count() == 2
 
 
 def test_fakes_satisfy_protocols() -> None:

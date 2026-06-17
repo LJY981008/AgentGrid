@@ -23,4 +23,5 @@
 | 2026-06-17 | M3 A층 — FastAPI API(health·dataset·ingest·ranking·learning, pydantic 계약·CORS·키비노출·path-traversal 가드). 테스트 20(134 passed)·기동 스모크 wire-shape 캡처 | 일반 구현 | [[2026-06-17-API-층-FastAPI]] |
 | 2026-06-17 | M3 B층 — webapp PWA 프론트 전체(Vite8/React19/router7 5화면·미검증 경고 상시·urlTransform·SW). node:22 build·tsc strict 통과(296 모듈) | 일반 구현 | [[2026-06-17-webapp-프론트]] |
 | 2026-06-17 | 하네스·docs 전수 감사 + 최신화 — 9차원 병렬 감사(26에이전트)·적대적 검증. 도메인 잔재(한국→미국)·마일스톤 stale·MOC 누락·죽은 drift 매핑·SHA 백필 28파일 교정(134 passed·훅 38) | 하네스/인프라 | [[2026-06-17-하네스docs-전수감사-최신화]] |
-| 2026-06-17 | M2 백테스트 엔진 — ADR-004(프레임워크 자체구현) 확정 + backtest/__init__.py docstring + work-history 착수. Task 1~14 진행중 | 플랜모드 승인 | [[2026-06-17-M2-백테스트엔진]] |
+| 2026-06-17 | M2 백테스트 엔진 골격 — 자체구현(ADR-004) backtest/ 14모듈: 리밸·forward-return·폐지청산·CAGR/Sharpe/MDD·IS/OOS·decay·등가중벤치. 적대적 금융리뷰 2회 반영. 173 passed·데모 9종목 동작 | 플랜모드 승인 | [[2026-06-17-M2-백테스트엔진]] |
+| 2026-06-17 | 백테스트 API 노출 + webapp BacktestPage 교체(#4) — GET /api/backtest + 프론트 자산곡선(Recharts)·지표·벤치·미검증경고. PriceDerivedUniverse 신설(demo smell 제거) | 플랜모드 승인 | [[2026-06-17-백테스트-API-webapp]] |

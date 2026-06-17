@@ -18,27 +18,18 @@ from typing import TYPE_CHECKING
 
 from ..data import configure_logging
 from . import engine
-from .adapters import ParquetPriceSeriesPort
+from .adapters import ParquetPriceSeriesPort, PriceDerivedUniverse
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
-from .fakes import FakeUniversePort, StubIdentityResolver
+from .fakes import StubIdentityResolver
 from .strategy import EqualWeightTopN
 
 if TYPE_CHECKING:
-    from datetime import date
     from pathlib import Path
 
     from .metrics import BacktestResult
-    from .ports import UniversePort
 
 logger = logging.getLogger(__name__)
-
-
-def _derive_universe(price_port: ParquetPriceSeriesPort) -> tuple[UniversePort, dict[str, date]]:
-    """가격 존재로 유니버스 도출 — listed=첫 거래일, 폐지 없음(⚠️ 골격 한계·생존편향 미보정)."""
-    listed = {ticker: pts[0].trade_date for ticker, pts in price_port.full_series().items() if pts}
-    delisted: dict[str, date | None] = {}
-    return FakeUniversePort(listed, delisted), listed
 
 
 def run_demo(base_dir: Path) -> int:
@@ -51,11 +42,11 @@ def run_demo(base_dir: Path) -> int:
         print("  → 먼저 `python -m stockpick.data.ingest` 로 적재하세요.")  # noqa: T201
         return 0
 
-    universe, listed = _derive_universe(price_port)
+    universe = PriceDerivedUniverse(price_port)  # ⚠️ 가격기반·survivorship 한계(data_caveats 고지)
     identity = StubIdentityResolver({})  # cik 미해소 → ticker 앵커(caveat)
     config = BacktestConfig(
         strategy_name="equal_weight_top_n",
-        top_n=min(5, len(listed)),
+        top_n=min(5, universe.ticker_count()),
         lookback_days=126,
         skip_recent_days=21,
         rebalance_freq="monthly",
@@ -74,7 +65,7 @@ def run_demo(base_dir: Path) -> int:
     )
     bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
     result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
-    _print_report(result, n_tickers=len(listed))
+    _print_report(result, n_tickers=universe.ticker_count())
     return 0
 
 
