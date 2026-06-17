@@ -25,3 +25,4 @@
 | 2026-06-17 | 하네스·docs 전수 감사 + 최신화 — 9차원 병렬 감사(26에이전트)·적대적 검증. 도메인 잔재(한국→미국)·마일스톤 stale·MOC 누락·죽은 drift 매핑·SHA 백필 28파일 교정(134 passed·훅 38) | 하네스/인프라 | [[2026-06-17-하네스docs-전수감사-최신화]] |
 | 2026-06-17 | M2 백테스트 엔진 골격 — 자체구현(ADR-004) backtest/ 14모듈: 리밸·forward-return·폐지청산·CAGR/Sharpe/MDD·IS/OOS·decay·등가중벤치. 적대적 금융리뷰 2회 반영. 173 passed·데모 9종목 동작 | 플랜모드 승인 | [[2026-06-17-M2-백테스트엔진]] |
 | 2026-06-17 | 백테스트 API 노출 + webapp BacktestPage 교체(#4) — GET /api/backtest + 프론트 자산곡선(Recharts)·지표·벤치·미검증경고. PriceDerivedUniverse 신설(demo smell 제거) | 플랜모드 승인 | [[2026-06-17-백테스트-API-webapp]] |
+| 2026-06-17 | EDGAR cik resolver(#2) — SEC company_tickers.json(무료·키없음·User-Agent) 적재→저장→읽기. EdgarSnapshotResolver(IdentityResolver 실전)·Stub 교체·ranking/backtest cik enrich. 현재 스냅샷(ticker_history 후속) | 플랜모드 승인 | [[2026-06-17-EDGAR-cik-resolver]] |

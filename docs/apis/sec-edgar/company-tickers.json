@@ -1,0 +1,73 @@
+{
+  "section": "company-tickers",
+  "category": "identifiers",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-17",
+  "capture_method": "정적 JSON 직접 WebFetch 는 SEC 가 User-Agent 없는 요청을 HTTP 403 으로 차단 → r.jina.ai 렌더 프록시로 실제 응답 구조 확보(NVDA/GOOGL/AAPL 3개 엔트리 실측). User-Agent/rate limit/CIK 포맷은 SEC 공식 문서(os/accessing-edgar-data, search-filings/edgar-application-programming-interfaces, os/webmaster-faq, about/developer-resources)를 r.jina.ai 경유 교차확인(2개 이상 소스). 2026-06-17.",
+  "source_url": "https://www.sec.gov/files/company_tickers.json",
+  "fetch_status": "ok (응답 구조·필드명·값타입은 r.jina.ai 프록시로 실측. User-Agent 정확 예시 문자열·rate limit·CIK 10자리 zero-pad 는 SEC 공식 문서 교차확인. 직접 WebFetch 는 User-Agent 미설정으로 403 — caveat 참조)",
+  "auth": "API 키 없음(무료·무인증). 단, SEC 공정접근(fair access) 정책상 모든 요청의 HTTP 헤더에 신원을 밝히는 User-Agent 필수. 누락/부적절 시 HTTP 403 Forbidden(본 캡처 중 WebFetch 직접 호출이 실제로 403 반환됨). 형식: `User-Agent: Sample Company Name AdminContact@<sample company domain>.com` (SEC 공식 예시 — 이름/식별자 + 연락 이메일). 권장 추가 헤더 `Accept-Encoding: gzip, deflate`.",
+  "base_url": "https://www.sec.gov",
+  "notes": "SEC EDGAR 의 현재(present-day) ticker→CIK 매핑 마스터 파일. 정적 JSON 한 개 파일 전체를 반환(엔드포인트 파라미터 없음). 최상위는 0-based 정수 문자열 키('0','1','2'…)의 객체 맵이며 각 값이 {cik_str, ticker, title} 레코드. ⚠️ 인덱스 키는 단순 행 번호로 안정적 식별자가 아님 — CIK 가 영구 식별자. ⚠️ cik_str 은 zero-pad 안 된 정수(예: 320193). data.sec.gov 의 submissions/companyfacts 엔드포인트는 CIK 를 10자리 zero-pad 문자열(`0000320193`)로 요구하므로 사용처에서 `str(cik_str).zfill(10)` 변환 필요. ticker 는 대문자 문자열(NVDA/GOOGL/AAPL). title 은 회사 공식명 문자열(대소문자 혼재 — 'NVIDIA CORP', 'Apple Inc.'). 동일 회사가 복수 클래스 주식을 가지면 같은 cik_str 에 서로 다른 ticker 로 복수 엔트리 존재 가능(예: GOOGL/GOOG). SEC 가 주기적으로 갱신하나 명시적 갱신 SLA 는 문서에 없음(약 매일~수일 단위로 관측). stockpick #2 EDGAR cik resolver(data/edgar.py)의 진실 원천.",
+  "endpoints": [
+    {
+      "name": "Company Tickers (ticker→CIK 매핑 전체)",
+      "method": "GET",
+      "url_pattern": "https://www.sec.gov/files/company_tickers.json",
+      "description": "SEC 신고사의 현재 ticker→CIK→회사명 매핑 전체를 단일 정적 JSON 으로 반환. 쿼리 파라미터 없음. 전체를 받아 메모리에서 ticker 로 역인덱싱하는 용도(개별 티커 조회 엔드포인트 아님).",
+      "example": "curl -H 'User-Agent: stockpick coclcoclde@gmail.com' https://www.sec.gov/files/company_tickers.json",
+      "path_params": [],
+      "query_params": [],
+      "request_headers": [
+        {
+          "name": "User-Agent",
+          "type": "string",
+          "required": true,
+          "description": "신원 식별자 + 연락 이메일. SEC 공식 예시: 'Sample Company Name AdminContact@<sample company domain>.com'. 누락/부적절 시 403."
+        },
+        {
+          "name": "Accept-Encoding",
+          "type": "string",
+          "required": false,
+          "description": "SEC 권장 헤더 'gzip, deflate'. 대역폭 절감."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "(top-level)",
+          "type": "object",
+          "description": "정수 문자열 키('0','1',…)를 가진 객체 맵. 키는 0-based 행 번호이며 안정적 식별자 아님. 각 값은 아래 레코드."
+        },
+        {
+          "name": "<index>.cik_str",
+          "type": "integer",
+          "description": "Central Index Key. zero-pad 안 된 정수(예: 1045810=NVDA, 320193=AAPL). data.sec.gov 사용 시 10자리 zero-pad('0000320193') 필요."
+        },
+        {
+          "name": "<index>.ticker",
+          "type": "string",
+          "description": "거래 티커. 대문자(예: 'NVDA','GOOGL','AAPL'). 거래소 접미사 없음(EODHD 의 AAPL.US 와 달리 순수 심볼)."
+        },
+        {
+          "name": "<index>.title",
+          "type": "string",
+          "description": "회사 공식명. 대소문자 혼재(예: 'NVIDIA CORP','Alphabet Inc.','Apple Inc.')."
+        }
+      ],
+      "response_format": "JSON 객체 맵. 실측 샘플(2026-06-17, r.jina.ai 경유): {\"0\":{\"cik_str\":1045810,\"ticker\":\"NVDA\",\"title\":\"NVIDIA CORP\"},\"1\":{\"cik_str\":1652044,\"ticker\":\"GOOGL\",\"title\":\"Alphabet Inc.\"},\"2\":{\"cik_str\":320193,\"ticker\":\"AAPL\",\"title\":\"Apple Inc.\"}}"
+    }
+  ],
+  "rate_limits": "SEC 공식: 'our current maximum access rate is 10 requests per second' — 사용하는 머신 수와 무관하게 사용자/IP 당 총 10 req/s. 초과 시 SEC 가 IP 차단 권리 보유('we reserve the right to block IP addresses that submit excessive requests'). 공정접근 정책상 '필요한 만큼만 받고 요청을 절제'할 것 권고. company_tickers.json 은 전체를 1회 받아 캐시하면 충분(반복 조회는 메모리 인덱스로) — rate limit 무관하게 호출 최소화 권장.",
+  "pricing_notes": "무료. API 키·구독·등록 불필요. 비용 발생 요소 없음.",
+  "caveats": [
+    "⚠️ 커버리지 한계: company_tickers.json 은 SEC 에 신고하는 US operating companies 위주. ETF·외국주(ADR 아닌 순수 외국 상장)·뮤추얼펀드·비신고 사모/비상장사는 누락 가능. 본 파일에서 ticker 미해소 시 코드는 cik='' (빈 문자열) 폴백하도록 설계 필요 — 누락이 정상 케이스임을 가정. (뮤추얼펀드/ETF 별도 매핑은 https://www.sec.gov/files/company_tickers_mf.json 존재 — 본 캡처 범위 밖)",
+    "⚠️ cik_str 은 zero-pad 안 된 정수. data.sec.gov(submissions/companyfacts) 호출 시 반드시 10자리 zero-pad('0000320193') 변환 — 미변환 시 404. str(cik_str).zfill(10) 사용.",
+    "⚠️ 최상위 인덱스 키('0','1',…)는 행 번호로 갱신 때마다 재배열될 수 있는 비안정 식별자 — 영구 키는 cik_str. 코드는 인덱스 키 무시하고 .values() 순회 후 ticker 로 역인덱싱할 것.",
+    "⚠️ 동일 cik_str 에 복수 ticker(클래스 주식 GOOGL/GOOG 등) 가능 — ticker→cik 는 N:1. cik→ticker 역방향은 1:N 이므로 단순 역맵 구성 시 충돌 주의.",
+    "⚠️ '현재' 매핑만 — 폐지/변경된 과거 티커는 미수록(생존편향 소스 아님). 폐지종목 CIK 매핑은 EODHD delisted 또는 SEC full-text/submissions 별도 경로 필요.",
+    "⚠️ 직접 WebFetch(https://www.sec.gov/files/company_tickers.json)는 User-Agent 미설정으로 본 캡처 중 실제 403 반환됨 — 응답 구조는 r.jina.ai 프록시로 확보. 코드는 반드시 User-Agent 헤더를 설정해야 동작.",
+    "⚠️ User-Agent 정확 예시 문자열('Sample Company Name AdminContact@<sample company domain>.com')은 SEC os/webmaster-faq 에서 확인. 'Bearer'/'Token' 같은 인증 토큰 아님 — 단순 신원 식별 문자열(이름+이메일)이면 충분.",
+    "갱신 주기 SLA 미확인: SEC 가 주기적 갱신하나 공식 갱신 빈도 명문 규정은 문서에서 확인 못함 — '현재 시점 스냅샷'으로 취급하고 정기 재적재 권장.",
+    "파일 크기: 전체 ~1만+ 엔트리(수 MB). 전량 1회 GET 후 캐시 — 매 조회마다 재요청 금지(rate limit·공정접근)."
+  ]
+}

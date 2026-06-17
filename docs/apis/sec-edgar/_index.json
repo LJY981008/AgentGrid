@@ -1,0 +1,46 @@
+{
+  "source": "SEC EDGAR — U.S. Securities and Exchange Commission EDGAR system (official, no API key)",
+  "captured_at": "2026-06-17",
+  "capture_method": "응답 구조는 r.jina.ai 렌더 프록시로 실측(직접 WebFetch 는 User-Agent 미설정으로 HTTP 403). User-Agent 규칙·rate limit·CIK 10자리 zero-pad·data.sec.gov 엔드포인트는 SEC 공식 문서(os/accessing-edgar-data, search-filings/edgar-application-programming-interfaces, os/webmaster-faq, about/developer-resources) 교차확인(2개 이상). 2026-06-17.",
+  "base_url": "https://www.sec.gov (정적 파일: files/) + https://data.sec.gov (RESTful submissions·XBRL API)",
+  "auth": "API 키 없음(무료·무인증). 모든 요청에 신원 User-Agent 헤더 필수 — 형식 'Sample Company Name AdminContact@<sample company domain>.com'(SEC 공식 예시). 누락/부적절 시 HTTP 403(본 캡처 중 실측). 권장 'Accept-Encoding: gzip, deflate'. 키=.env 불요(무인증이므로 EODHD/Tiingo 와 달리 비밀값 없음).",
+  "rate_limit": "최대 10 requests/second(사용자·IP 당, 머신 수 무관). 초과 시 SEC 가 IP 차단 권리 보유. 공정접근(fair access) 정책 — 필요한 만큼만 다운로드.",
+  "total_sections": 1,
+  "captured_sections": 1,
+  "ok": 1,
+  "partial": 0,
+  "note": "stockpick #2 EDGAR cik resolver(data/edgar.py) 용 명세. 이번 캡처 핵심=company_tickers.json(현재 ticker→CIK 매핑). EODHD 가 CIK 미제공이라 SEC EDGAR 로 ticker→CIK 적재. 재무층(submissions/companyfacts) 엔드포인트는 후속 캡처 대상으로 아래 forward_pointers 에 1줄 포인터만 — 이번엔 상세 캡처 안 함.",
+  "sections": [
+    {
+      "section": "company-tickers",
+      "category": "identifiers",
+      "relevant_to_stockpick": true,
+      "status": "ok",
+      "endpoints": 1,
+      "file": "company-tickers.json"
+    }
+  ],
+  "forward_pointers": [
+    {
+      "name": "submissions (제출 이력)",
+      "url_pattern": "https://data.sec.gov/submissions/CIK##########.json",
+      "note": "엔티티의 현재 신고 이력(##########=CIK 10자리 zero-pad, 선행 0 포함). 후속(재무층) 캡처 대상 — 이번 미캡처."
+    },
+    {
+      "name": "companyfacts (XBRL 재무)",
+      "url_pattern": "https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json",
+      "note": "회사의 모든 XBRL concept(재무 항목)를 단일 호출로 반환. filed 일자=PIT(룩어헤드 방지) 활용처. 후속(재무층) 캡처 대상 — 이번 미캡처."
+    },
+    {
+      "name": "company_tickers_mf (뮤추얼펀드/ETF 매핑)",
+      "url_pattern": "https://www.sec.gov/files/company_tickers_mf.json",
+      "note": "ETF·뮤추얼펀드 series/class 별 ticker 매핑. company_tickers.json 미수록분 보완 — 필요 시 후속 캡처."
+    }
+  ],
+  "caveats": [
+    "company_tickers.json 은 SEC 신고 US operating companies 위주 — ETF·외국주·비신고사 누락 가능. 미해소 ticker 는 cik='' 폴백 가정.",
+    "cik_str(정수)→data.sec.gov 사용 시 10자리 zero-pad 필수.",
+    "'현재' 매핑만 — 폐지/과거 티커 미수록(생존편향 소스 아님).",
+    "재무층(submissions/companyfacts) 상세 스키마는 본 인덱스 미포함 — 후속 캡처 시 별도 JSON 추가 + 본 _index sections 갱신."
+  ]
+}
