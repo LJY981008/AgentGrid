@@ -78,7 +78,7 @@ def compute_metrics(
     rets = [float(r) for r in period_returns]
     sharpe = _annualized_sharpe(rets, periods_per_year)
     sortino = _annualized_sortino(rets, periods_per_year)
-    cagr = _cagr(rets, periods_per_year)
+    cagr = _cagr(rets, _years_span(equity_curve))
     mdd = _max_drawdown([float(v) for _, v in equity_curve])
 
     return BacktestResult(
@@ -108,6 +108,7 @@ def _annualized_sharpe(rets: list[float], ppy: int) -> float:
 
 
 def _annualized_sortino(rets: list[float], ppy: int) -> float:
+    # 하방편차 분모 = 전체 기간 수(MAR=0 full Sortino). len(downside) 변형 아님(convention 명시).
     if len(rets) < 2:
         return 0.0
     downside = [r for r in rets if r < 0]
@@ -119,16 +120,24 @@ def _annualized_sortino(rets: list[float], ppy: int) -> float:
     return (statistics.mean(rets) / dd) * math.sqrt(ppy)
 
 
-def _cagr(rets: list[float], ppy: int) -> float:
-    if not rets:
+def _years_span(equity_curve: list[tuple[date, Decimal]]) -> float:
+    """곡선 첫·끝 날짜의 실제 캘린더 연수(기간수 환산 아님 — 스텁 마지막기간 왜곡 방지)."""
+    if len(equity_curve) < 2:
+        return 0.0
+    days = (equity_curve[-1][0] - equity_curve[0][0]).days
+    return days / 365.25 if days > 0 else 0.0
+
+
+def _cagr(rets: list[float], years: float) -> float:
+    """연환산 복리수익 — years 는 실제 캘린더 연수(_years_span). years<=0 이면 0(산출 불가)."""
+    if not rets or years <= 0:
         return 0.0
     growth = 1.0
     for r in rets:
         growth *= 1.0 + r
     if growth <= 0:
         return -1.0
-    years = len(rets) / ppy
-    return growth ** (1.0 / years) - 1.0 if years > 0 else 0.0
+    return float(growth ** (1.0 / years)) - 1.0
 
 
 def _max_drawdown(values: list[float]) -> float:

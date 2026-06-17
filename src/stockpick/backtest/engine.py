@@ -61,7 +61,12 @@ def run(
     turnover_total = Decimal(0)
     cost_total = Decimal(0)
     n_delisted = 0
+    n_skipped = 0
     prev_weights: dict[str, Decimal] = {}
+
+    # 초기 자본 앵커 — MDD 가 첫 기간 낙폭을 포착하고 total_return 기준점이 1.0 이 되도록.
+    if reb and last_day is not None:
+        curve.append((in_range[0], equity))
 
     for i, t in enumerate(reb):
         entry_day = _next_day(all_days, t)
@@ -88,7 +93,7 @@ def run(
         cost_total += cost_amount
 
         # 보유수익(forward-return [entry_day, exit_day]) — 폐지 청산 포함
-        pret, delisted = _holding_period_return(
+        pret, delisted, skipped = _holding_period_return(
             weights,
             key_to_ticker,
             full,
@@ -98,16 +103,26 @@ def run(
             config.delisting_recovery_rate,
         )
         n_delisted += delisted
+        n_skipped += skipped
         equity *= Decimal(1) + pret
         period_returns.append(pret)
         curve.append((exit_day, equity))
         prev_weights = weights
 
+    caveats = [_CAVEAT_GOLGYEOK]
+    if n_skipped:
+        # 조용한 결측 금지 — 진입가 결측 skip(암묵 현금화)을 명시 보고(데이터 공백 신호).
+        logger.warning("진입가 결측으로 %d건 비중 skip(암묵 현금화) — 데이터 공백 확인", n_skipped)
+        caveats.append(f"진입가 결측 {n_skipped}건 skip(암묵 현금화) — 데이터 공백 확인")
+
+    # n_rebalances: 앵커 시드(1점)는 리밸 횟수에서 제외 — 실제 보유 기간 수.
+    n_periods = len(period_returns)
     logger.info(
-        "백테스트 완료: 리밸=%d, period수익=%d, 폐지청산=%d, 총회전=%s, 최종equity=%s",
+        "백테스트 완료: 리밸=%d, 보유기간=%d, 폐지청산=%d, skip=%d, 총회전=%s, 최종equity=%s",
         len(reb),
-        len(period_returns),
+        n_periods,
         n_delisted,
+        n_skipped,
         turnover_total,
         equity,
     )
@@ -117,10 +132,10 @@ def run(
         periods_per_year=_PERIODS_PER_YEAR[config.rebalance_freq],
         turnover_total=turnover_total,
         cost_total=cost_total,
-        n_rebalances=len(curve),
+        n_rebalances=n_periods,
         n_delisted=n_delisted,
         benchmark_returns={},
-        caveats=(_CAVEAT_GOLGYEOK,),
+        caveats=tuple(caveats),
         config_fingerprint=config.fingerprint(),
     )
 
@@ -176,16 +191,22 @@ def _holding_period_return(
     exit_day: date,
     universe_port: UniversePort,
     recovery_rate: Decimal,
-) -> tuple[Decimal, int]:
-    """가중 보유수익 + 폐지청산 건수. 폐지(entry<de<=exit)면 recovery_rate 청산."""
+) -> tuple[Decimal, int, int]:
+    """가중 보유수익 + (폐지청산 건수, 진입가 결측 skip 건수).
+
+    폐지(entry<de<=exit)면 recovery_rate 청산.
+    """
     total = Decimal(0)
     delisted = 0
+    skipped = 0
     for key, w in weights.items():
         ticker = key_to_ticker.get(key, key)
         pts = full.get(ticker, [])
         entry_p = _price_on_or_after(pts, entry_day)
         if entry_p is None or entry_p <= 0:
-            continue  # 진입가 없음/비정상 — 조용한 추측 금지(해당 비중 수익 0 기여)
+            # 진입가 없음/비정상 — 조용한 추측 금지. 해당 비중 0기여(암묵 현금화) + skip 집계 보고.
+            skipped += 1
+            continue
         de = universe_port.delisting_event(ticker)
         if de is not None and entry_day < de <= exit_day:
             last_p = _price_before(pts, de) or entry_p
@@ -195,7 +216,7 @@ def _holding_period_return(
             exit_p = _price_on_or_before(pts, exit_day) or entry_p
             ret = exit_p / entry_p - Decimal(1)
         total += w * ret
-    return total, delisted
+    return total, delisted, skipped
 
 
 def _price_on_or_after(pts: list[PricePoint], day: date) -> Decimal | None:

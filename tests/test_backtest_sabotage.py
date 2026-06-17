@@ -109,7 +109,34 @@ def test_survivorship_excluding_delisted_changes_metrics() -> None:
         identity=ident,
         strategy=EqualWeightTopN(),
     )
-    # 폐지 A 손실이 포함된 결과와 제외 결과는 달라야 한다(가드가 결과를 바꾼다).
-    assert r_incl.total_return != r_excl.total_return
+    # 금액 봉인(차이만이 아니라 정확값): 폐지 A(recovery 0) 포함 → 전액 손실 -1.
+    # 제외(B 평탄만) → 무손익 0. 발동 여부가 아니라 발동 금액을 봉인.
+    assert r_incl.total_return == Decimal("-1")
     assert r_incl.n_delisted_liquidations >= 1
+    assert r_excl.total_return == Decimal("0")
     assert r_excl.n_delisted_liquidations == 0
+
+
+def test_rank_at_ignores_future_data() -> None:
+    # 직접 룩어헤드 봉인: 동일 데이터 + as_of(t) **이후** B 가격 폭등 → as_of=t 랭킹 불변.
+    # load(as_of=t)를 full_series()로 바꾸는 누설 회귀가 들어오면 이 단언이 깨진다.
+    from stockpick.backtest.engine import _rank_at
+
+    days = _weekdays(date(2024, 1, 1), 40)
+    t = days[20]
+    # ≤t 구간: A 가 B 보다 가파른 상승 → as_of=t 모멘텀 A > B (정상 랭킹 [A, B]).
+    a = [PricePoint(d, Decimal(100 + 2 * i)) for i, d in enumerate(days)]
+    b = [PricePoint(d, Decimal(100 + i)) for i, d in enumerate(days)]
+    uni = FakeUniversePort(listed={"A": date(2023, 1, 1), "B": date(2023, 1, 1)}, delisted={})
+    ident = StubIdentityResolver({"A": "CIK_A", "B": "CIK_B"})
+    cfg = _cfg(days[0], days[-1], top_n=2)
+
+    base = FakePriceSeriesPort({"A": a, "B": b})
+    # sabotage: t 이후 B 를 폭등(누설되면 B 모멘텀이 A 를 추월해 랭킹이 [B, A]로 뒤집힘).
+    b_spiked = [p if p.trade_date <= t else PricePoint(p.trade_date, Decimal("999999")) for p in b]
+    spiked = FakePriceSeriesPort({"A": a, "B": b_spiked})
+
+    r_base = _rank_at(cfg, base, uni, ident, base.ticker_exchanges(), t)
+    r_spiked = _rank_at(cfg, spiked, uni, ident, spiked.ticker_exchanges(), t)
+    assert [e.ticker for e in r_base] == [e.ticker for e in r_spiked]
+    assert [e.ticker for e in r_base] == ["A", "B"]  # 정상: A 가 #1(미래 무관)

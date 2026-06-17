@@ -80,6 +80,9 @@ def test_delisting_during_holding_realizes_total_loss() -> None:
         strategy=EqualWeightTopN(),
     )
     assert res.n_delisted_liquidations >= 1
+    # 금액 봉인: recovery_rate=0 → A(상승추세라 매 리밸 선택) 보유 중 폐지 = 그 기간 -100%
+    # → 전액 손실. 이후 B(평탄)도 0 수익이라 최종 equity 0, total_return 정확히 -1.
+    assert res.total_return == Decimal("-1")
 
 
 def test_empty_universe_flat_equity() -> None:
