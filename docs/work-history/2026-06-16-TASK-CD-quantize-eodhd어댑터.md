@@ -2,7 +2,7 @@
 
 - **유형**: 일반 구현
 - **관련 기획/이슈**: M1 §5(정밀도 BLOCKING)·생존편향 / [[2026-06-16-B-pipeline-storage-pilot]](scale 37 밴드에이드 후속) / [[2026-06-16-B-pipeline-tiingo-어댑터]](공유 헬퍼로 리팩터) / api-spec-reference 규칙(docs/apis/eodhd)
-- **시작 시점 커밋**: `734a52f` → **완료 커밋**: `<커밋 시 기입>`
+- **시작 시점 커밋**: `734a52f` → **완료 커밋**: `42df8d1`
 
 ## 의도/목적 — 왜 이 작업을 하나
 
@@ -58,7 +58,7 @@
     (동시 반환 파라미터 명세에 없음). 응답 Code/Name/Exchange 사용. cik 미제공 → "".
 - **변경 규모**: 신규 `_adjust.py`(88)·`eodhd.py`(469)·`test_eodhd.py`(354). 수정 `tiingo.py`
   (-39 라인 로컬함수 제거·헬퍼 사용)·`storage.py`(scale 37→12·주석)·`test_tiingo.py`·`test_storage.py`.
-- **커밋**: `<SHA>` (커밋은 사용자 요청 시 — 메인 보고 후)
+- **커밋**: `42df8d1` (feat: TASK-C adj_factor quantize + TASK-D EodhdSource 어댑터)
 
 ## 비교/회고
 

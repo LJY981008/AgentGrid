@@ -10,8 +10,8 @@
 #   - UV_PYTHON_DOWNLOADS=0: 베이스 이미지의 시스템 파이썬 사용(uv 가 별도 파이썬 안 받음)
 #
 # ⚠️ 이 이미지는 dev 환경(ruff/mypy/pytest 포함) — UV_NO_DEV 안 씀.
-#    런타임 의존성은 아직 없음(dependencies=[]). dev 도구만으로 골격+lock 확립.
-#    멀티스테이지는 의존성/소스 레이어 분리 목적(현재 단일 최종 스테이지로 충분 — prod 분리는 B-pipeline 이후).
+#    런타임 의존성 = duckdb·fastapi·httpx·pyarrow·uvicorn[standard] (pyproject.toml [project].dependencies).
+#    2단계 uv sync 로 의존성/소스 레이어 분리(단일 FROM 스테이지 — prod 분리는 운영 배포 시점에).
 
 FROM python:3.12-slim-trixie
 
@@ -51,5 +51,6 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
 USER app
 
 # 기본 command: 상주(개발 컨테이너로 띄워두고 `docker compose exec app ...` 로 검증 실행).
-#   uv 권장은 장기 실행 서비스엔 진입점 프로세스지만, 아직 서버가 없으므로 sleep infinity 로 상주.
+#   API 서버 진입점 존재(`python -m stockpick.api`) — compose 가 command 로 오버라이드해 uvicorn:8000 상주.
+#   기본 CMD 는 개발 상주용 sleep infinity 유지(exec 검증 편의).
 CMD ["sleep", "infinity"]

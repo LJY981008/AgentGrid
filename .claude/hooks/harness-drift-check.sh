@@ -40,7 +40,6 @@ declare -a RULES=(
   'docs/(decisions|research)/.*\.md@@docs/HOME.md'
   # work-history 규약: src 구현 변경은 구현 히스토리 엔트리 동반 (대상이 /로 끝나면 prefix 매칭)
   '(src|webapp/src)/.*@@docs/work-history/'
-  'frontend/src/.*@@docs/work-history/'
 )
 
 MISSING=""

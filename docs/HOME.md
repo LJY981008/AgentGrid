@@ -10,6 +10,7 @@
 - [[plans/stock-1st_plan|한국주식 기준선]] — **현행** Top20 정량→수동 Top5→분산투자 추적·보정, Python+PWA, 미해결 8건
 - [[plans/M1-데이터파이프라인|M1 착수 스펙]] — **현행** 소스·PG18 7테이블 스키마·파일럿 S0~S6·BLOCKING 가드 (실측 스코핑 종합)
 - [[plans/PLAN_STATUS|기획 현황판]] — 전환 선언 + 데이터소스 리서치 + 미해결 질문 추적(#1·#4·#8 해결)
+- [[plans/작업재개-RESUME|작업 재개 가이드]] — 세션 재개(compact 생존)용 현재 상태·다음 작업·환경·함정 단일 포인터
 - ~~[[plans/1st_plan]] · [[plans/2nd_plan]] · [[plans/3rd_plan]]~~ — (구) MCP 레지스트리, 폐기
 
 ## 🏛️ 아키텍처 결정 (decisions/)
@@ -31,7 +32,7 @@
 ## 🔬 리서치 (research/)
 
 - [[research/2026-06-17-webapp-stack-버전|2026-06-17 webapp 스택 버전]] — Vite8/React19/TS6/router7/react-markdown10 + FastAPI0.137, API 표면 함정(urlTransform·runtimeCaching·CORS/Vite proxy·Starlette1.0 핀)
-- [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **현행** 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 기준선
+- [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **리서치 기준선**(가격 본격 소스는 [[decisions/ADR-003-M2-가격소스-EODHD|ADR-003]]에서 Sharadar SEP→**EODHD**로 개정) 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 시점 비교 노트
 - [[research/2026-06-16-한국주식-데이터소스|2026-06-16 한국주식 데이터소스]] — 보류(미장 전환) 벌크=FDR+pykrx / 일일=KRX OpenAPI, 나중 한국장 추가 시 재사용
 - ~~[[research/2026-06-12-스택-버전-리서치]]~~ — (구) Boot 4.1/Next 16, 도메인 전환으로 폐기
 
@@ -45,6 +46,18 @@
 > 템플릿: [[templates/devlog-template]] — 막힌 것·결정·다음 할 일 기록
 
 - [[dev-log/2026-06-12|2026-06-12]] — 프로젝트 세팅 (하네스·스캐폴딩·깃·검증·기획 v2)
+- [[dev-log/2026-06-16|2026-06-16]] — M0 도메인·스택 전환(MCP→stockpick 한국주식, Java/Next→Python/PWA)·데이터소스 리서치·stock-1st_plan 확정
+
+## 📚 투자 학습 노트 (learning/)
+
+> ⚠️ 교육용 휴리스틱 — 검증된 알파 소스 아님(금융 BLOCKING). 매크로·연준·SEC 공시·재무제표 독해 기초.
+
+- [[learning/README|학습 노트 인덱스]] — 추천 학습 순서·셀프체크
+- [[learning/00.caveats|00 주의사항]] — 학습 자료를 알파로 오인하지 않기
+- [[learning/01.macro-business-cycle/README|01 매크로 경기순환]] — 금리 사이클·섹터 로테이션
+- [[learning/02.fed-and-treasury/README|02 연준·국채]] — 수익률 곡선(10y-2y) 스프레드
+- [[learning/03.sec-filing-framework/README|03 SEC 공시 프레임워크]] — 공시 유형·항목
+- [[learning/04.financial-statements/README|04 재무제표 읽는 법]] — 재무상태표·손익·현금흐름·연차보고서
 
 ## 템플릿
 

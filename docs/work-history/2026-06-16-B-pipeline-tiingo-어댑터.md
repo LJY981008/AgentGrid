@@ -2,7 +2,7 @@
 
 - **유형**: 일반 구현
 - **관련 기획/이슈**: B-pipeline 1~3단계 / [[2026-06-16-B-contract-미국계약]] (DataSource Protocol 구현) / api-spec-reference 규칙
-- **시작 시점 커밋**: `982574d` → **완료 커밋**: `<커밋 시 기입>`
+- **시작 시점 커밋**: `982574d` → **완료 커밋**: `61b55c0`
 
 ## 의도/목적 — 왜 이 작업을 하나
 
@@ -38,7 +38,7 @@ Tiingo EOD 로 구체화해서, 이후 Parquet 저장·라이브 파일럿·랭�
   - `pytest -q` → 26 passed (test_tiingo.py 21 + test_contract.py 5), 0.07s
 - **변경 규모**: `tiingo.py`(신규), `test_tiingo.py`(신규), `pyproject.toml`(+httpx>=0.28.1),
   `uv.lock`(+72줄). (compose 의 uv.lock 마운트는 **미적용** — devops-engineer 협의 후속, 아래 회고 참조.)
-- **커밋**: `<SHA>` (커밋은 사용자 요청 시)
+- **커밋**: `61b55c0` (feat: B-pipeline Tiingo EOD 가격 어댑터)
 
 ## 비교/회고
 

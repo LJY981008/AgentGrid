@@ -1,11 +1,11 @@
 ---
-description: External data API usage for stockpick — consult captured JSON specs under docs/apis/ as source of truth, never hallucinate endpoints/params/response fields. Loaded on data-source/adapter edits. Trigger phrases - 외부 API·어댑터·Tiingo·데이터소스 코드 작성 시.
+description: External data API usage for stockpick — consult captured JSON specs under docs/apis/ as source of truth, never hallucinate endpoints/params/response fields. Loaded on data-source/adapter edits. Trigger phrases - 외부 API·어댑터·Tiingo·EODHD·데이터소스 코드 작성 시.
 paths: ["src/stockpick/data/**/*.py"]
 ---
 
 # 외부 데이터 API 참조 규칙 — 환각 방지 (BLOCKING)
 
-> 외부 API(Tiingo 등) 호출 코드를 쓸 때 엔드포인트·파라미터·응답 필드를 **기억·추측으로 지어내지 마라.**
+> 외부 API(Tiingo·EODHD 등) 호출 코드를 쓸 때 엔드포인트·파라미터·응답 필드를 **기억·추측으로 지어내지 마라.**
 > 캡처된 명세 `docs/apis/{provider}/{section}.json` 이 **유일한 진실 원천**이다.
 
 ## 사용 절차
@@ -13,9 +13,17 @@ paths: ["src/stockpick/data/**/*.py"]
 1. 코드 전 해당 명세 JSON 을 읽는다. 인덱스: `docs/apis/{provider}/_index.json`.
 2. `endpoints[].{url_pattern, method, query_params, response_fields}` 그대로 사용 — JSON 에 없는 필드/파라미터를 추가하지 마라.
 3. `fetch_status` 가 `ok` 아닌 섹션(`partial`/`failed`)은 신뢰 전 재확인. `caveats` 필독.
-4. 명세가 없거나 오래됨(`captured_at` 6개월+)이면 **tech-researcher 재캡처** — 워크플로우 `tiingo-spec-capture` 패턴(⚠️ `tiingo.com/documentation/*` 는 JS 렌더 SPA → `https://r.jina.ai/{url}` 렌더 프록시 경유 필수, 직접 WebFetch 는 `<title>` 만 옴).
+4. 명세가 없거나 오래됨(`captured_at` 6개월+)이면 **tech-researcher 재캡처** — 워크플로우 `eodhd-spec-capture`(현행 주력)·`tiingo-spec-capture` 패턴(⚠️ `tiingo.com/documentation/*`·`eodhd.com` 은 JS 렌더 SPA → `https://r.jina.ai/{url}` 렌더 프록시 경유 필수, 직접 WebFetch 는 `<title>` 만 옴).
 
-## Tiingo (현행 가격 소스 — `docs/apis/tiingo/`)
+## EODHD (M2 현행 가격 소스 — `docs/apis/eodhd/`, 62섹션/189EP)
+
+- **인증**: `?api_token=<KEY>` **쿼리 파라미터**(⚠️ Tiingo 의 `Authorization: Token` 헤더와 다름). 키 = `.env` 의 `EODHD_API_KEY`(하드코딩·로깅 금지). DEMO 키로 일부 테스트 가능.
+- **base**: `https://eodhd.com/api`.
+- **가격(EOD)**: `GET /api/eod/{SYMBOL}` — raw OHLC + `adjusted_close`(split+dividend) → 우리 **원주가 + adj_factor** 모델로 적재(원본 불변). 어댑터 = `data/eodhd.py`(`EodhdSource`).
+- **생존편향 핵심 섹션**: `delisted-stock-companies-data`(폐지 ~2000년부터)·`sp-dow-jones-historical-constituents`(지수 historical constituents)·`us-stock-symbol-rename-history`(티커 연속성). 유니버스는 폐지 포함 적재.
+- **rate limit**: 한도·소비 모델은 `docs/apis/eodhd/api-limits.json` 이 진실 원천(유료 기본 100,000 calls/day·심볼요청 1콜·Bulk 100콜 등, 분당 1000 requests). ⚠️ 무료티어 일일 한도는 해당 페이지 미기재(별도 실측 필요) — 숫자 단정 금지.
+
+## Tiingo (M1 파일럿 가격 소스 — `docs/apis/tiingo/`)
 
 - **인증**: `Authorization: Token <KEY>` 헤더 **또는** `?token=<KEY>` 쿼리. ⚠️ **Bearer 아님** — `"Token "` 접두사. 키 = `.env` 의 `TIINGO_API_KEY`(코드에 하드코딩·로깅 금지 — logging-rules).
 - **base**: `https://api.tiingo.com`. 포맷 `format=json|csv`(CSV 4~5배 빠름).

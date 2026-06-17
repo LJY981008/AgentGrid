@@ -30,5 +30,5 @@ paths: ["src/**/*.py", "tests/**/*.py"]
 
 ## 금지
 
-- 빈 except 후 무로그 / 같은 예외 중복 로깅 / 민감정보(KRX·KIS API 키, 계좌) 로깅
+- 빈 except 후 무로그 / 같은 예외 중복 로깅 / 민감정보(TIINGO_API_KEY·EODHD_API_KEY 등 API 키) 로깅
 - 루프 내 INFO 남발 — 집계해서 1줄 (전종목 루프는 진행률 DEBUG, 결과 INFO 1건)

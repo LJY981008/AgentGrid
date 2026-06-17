@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> ⚠️ 이 레포는 2026-06-16 **MCP 신뢰성 레지스트리 → 개인 투자용 한국 주식 분석(stockpick)** 으로 전환됐다. (디렉토리 경로/리모트 이름은 AgentGrid 유지 — 사용자 결정.)
+> ⚠️ 이 레포는 2026-06-16 **MCP 신뢰성 레지스트리 → 개인 투자용 미국 주식 분석(stockpick)** 으로 전환됐다(같은 날 한국→미국 2차 전환 [ADR-002] 포함). (디렉토리 경로/리모트 이름은 AgentGrid 유지 — 사용자 결정.)
 
 ---
 
@@ -49,8 +49,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 작업 트리거 | 자동 로드 경로 | 핵심 내용 |
 |---|---|---|
 | Python 코드 작성·수정 (모든 경우) | [.claude/rules/python-conventions.md](.claude/rules/python-conventions.md) + [logging-rules.md](.claude/rules/logging-rules.md) | strict 타입·모듈경계·실패 명확 보고·**금융 BLOCKING(편향·누설)** |
-| 웹앱(PWA) 작성·수정 (M4) | [.claude/rules/webapp-conventions.md](.claude/rules/webapp-conventions.md) | PWA·읽기 위주·투자 로직 프론트 중복 금지 |
-| **외부 데이터 API 코드** (Tiingo 등) | [.claude/rules/api-spec-reference.md](.claude/rules/api-spec-reference.md) + [docs/apis/](docs/apis/) | 캡처된 JSON 명세가 진실원천(엔드포인트·필드 환각 금지). 없으면 tech-researcher 재캡처(tiingo-spec-capture). claude-api 스킬은 LLM 호출 시 |
+| 웹앱(PWA) 작성·수정 (M3 — 구현 완료) | [.claude/rules/webapp-conventions.md](.claude/rules/webapp-conventions.md) | PWA·읽기 위주·투자 로직 프론트 중복 금지 |
+| **외부 데이터 API 코드** (Tiingo·EODHD 등) | [.claude/rules/api-spec-reference.md](.claude/rules/api-spec-reference.md) + [docs/apis/](docs/apis/) | 캡처된 JSON 명세가 진실원천(엔드포인트·필드 환각 금지). 없으면 tech-researcher 재캡처(eodhd-spec-capture/tiingo-spec-capture). claude-api 스킬은 LLM 호출 시 |
 | 버그·테스트/수집/백테스트 실패 | [debugging-discipline](.claude/skills/debugging-discipline/SKILL.md) | 추측 금지 + **이상결과 3분류**(버그/룩어헤드/생존편향) |
 | 하네스 변경 | [harness-update](.claude/skills/harness-update/SKILL.md) | 분류→배치→drift 매핑 |
 | 기획 작업 | `docs/plans/` (현황: [PLAN_STATUS.md](docs/plans/PLAN_STATUS.md)) | product-planner. 기준선 = stock-1st_plan |
@@ -66,9 +66,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
 - 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY). (구 한국 FDR/pykrx/KRX 보류)
 - 저장: **Parquet**(`pyarrow`)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙) — `compose.yaml`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
-- API(M3): **FastAPI**+**uvicorn[standard]**(`src/stockpick/api/`) — 수집·랭킹·학습을 HTTP 노출. pydantic 응답계약 = 프론트 단일 출처. CORS=localhost:5173. ⚠️ ranking `meta.validated=false`(§4.1 미검증 경고 상시)·키 비노출
-- 웹앱(M4): PWA/반응형 웹 (`webapp/`, 프레임워크 미정)
-- 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증) → `api`/`webapp`(상위 — 하위 조합) — 하위는 상위 import 금지
+- API(M3): **FastAPI**+**uvicorn[standard]**(`src/stockpick/api/`) — 수집·랭킹·학습을 HTTP 노출. pydantic 응답계약 = 프론트 단일 출처. CORS=localhost:5173(컨테이너 내부 web). ⚠️ ranking `meta.validated=false`·키 비노출 — **validated=false 근본 사유 = backtest 검증 모듈 미구현(빈 패키지)이라 룰 검증 자체 불가, M2 백테스트 완료 전까지 false 고정**(§4.1 미검증 경고 상시)
+- 웹앱(M3 — 구현 완료): PWA (`webapp/`) — **Vite8/React19/react-router7/TS**, 5 nav 화면(랭킹=Dashboard·데이터·유니버스·학습·백테스트 placeholder)+404
+- 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증 — ⚠️미구현 빈 패키지, M2 예정) → `api`/`webapp`(상위 — 하위 조합) — 하위는 상위 import 금지
 
 ---
 
@@ -112,10 +112,10 @@ docker compose exec app pytest -q                   # 테스트
 
 | 경로 | 역할 |
 |---|---|
-| `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(멀티스테이지·non-root·BuildKit 캐시) |
+| `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(단일 FROM·2단계 uv sync로 의존성/소스 레이어 분리·non-root·BuildKit 캐시) |
 | `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume) + `web`(node:22 Vite dev:5174→5173) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
-| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/`·`backtest/` 모듈 |
+| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/` 모듈 + `backtest/`(⚠️ 스텁 — `__init__.py`만, M2 예정) |
 | `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M3 활성) — Vite8/React19/router7/TS, `src/{api,components,pages}`. 5화면(랭킹·데이터·유니버스·학습·백테스트 placeholder). 읽기위주·투자로직 프론트 중복 금지([webapp-conventions](.claude/rules/webapp-conventions.md)) |
@@ -129,7 +129,7 @@ docker compose exec app pytest -q                   # 테스트
 > 역할 분리: 기획↔구현↔스키마↔검증↔감사는 해당 에이전트로 위임. 결과만 메인으로.
 > **⚠️ 서브에이전트 보고 규칙**: 부모에는 마지막 메시지만 전달 — 재호출(종료 촉구) 시 단답 금지, 최종 보고 전문 재출력. (OMC 4.14.6 에서 재호출 루프는 수정됨, 보험으로 유지)
 
-**설계·구현**: `product-planner`(기획·마일스톤) · `python-expert`(데이터·랭킹·백테스트·API) · `db-architect`(PG·Parquet·시계열) · `devops-engineer`(compose·CI·uv) · `frontend-expert`(PWA 대시보드, M4)
+**설계·구현**: `product-planner`(기획·마일스톤) · `python-expert`(데이터·랭킹·백테스트·API) · `db-architect`(PG·Parquet·시계열) · `devops-engineer`(compose·CI·uv) · `frontend-expert`(PWA 대시보드)
 **검증·품질**: `test-engineer`(pytest·백테스트 가드) · `convention-reviewer`(rules 위반) · `security-reviewer`(API 키·의존성, 개인용이라 경량) · `qa-tester`(실동작) · `harness-auditor`(하네스 감사)
 **리서치**: `tech-researcher`(데이터 API·퀀트 라이브러리·버전 — 학습데이터 불신)
 

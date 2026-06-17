@@ -2,7 +2,7 @@
 
 - **유형**: 일반 구현
 - **관련 기획/이슈**: M1 §3(Parquet 레이아웃)·§5(BLOCKING)·S3~S4 / [[2026-06-16-B-pipeline-tiingo-어댑터]] (어댑터 `list[DailyBar]` 소비) / [[2026-06-16-B-contract-미국계약]] (DailyBar·Exchange 계약) / api-spec-reference 규칙
-- **시작 시점 커밋**: `096e7f3` → **완료 커밋**: `<커밋 시 기입>`
+- **시작 시점 커밋**: `096e7f3` → **완료 커밋**: `0f69a53`
 
 ## 의도/목적 — 왜 이 작업을 하나
 
@@ -53,7 +53,7 @@ S3~S4 에 해당하며, PASS 전 M2(백테스트) 착수 금지.
   - Decimal 보존 실측(DuckDB): NVDA close=`1209.9800000000`(Decimal), adj_factor scale=37(Decimal) — float 다운캐스트 없음.
 - **변경 규모**: 신규 `storage.py`(332) · `pilot.py`(229) · `test_storage.py`(193) · `test_pilot.py`(118).
   `pyproject.toml`(+pyarrow,+duckdb) · `uv.lock`(+80줄). data/parquet 산출물은 gitignore(미커밋).
-- **커밋**: `<SHA>` (커밋은 사용자 요청 시 — 라이브 결과 BLOCKING 검토 후 메인이 커밋)
+- **커밋**: `0f69a53` (feat: B-storage + 라이브 파일럿)
 
 ## 비교/회고
 

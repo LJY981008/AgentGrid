@@ -2,7 +2,7 @@
 
 - **유형**: 일반 구현 (상위 플랜모드 작업 [[2026-06-17-webapp-API-대시보드]] 의 A층)
 - **관련 기획/이슈**: webapp+API 통합 플랜(`snappy-greeting-canyon.md`) §A · API 상세 플랜(`snappy-greeting-canyon-agent-aad54bf0f6f8ff393.md`)
-- **시작 시점 커밋**: `333fb3e` → **완료 커밋**: (커밋 시 기입)
+- **시작 시점 커밋**: `333fb3e` → **완료 커밋**: `2c9ab10`
 
 ## 의도/목적 — 왜
 데이터 파이프라인(EODHD 수집→Parquet→검증)·룰엔진(모멘텀→Top 랭킹)이 **CLI로만** 동작. 프론트(Vite+React PWA, 후속)가 소비할 **HTTP API 층**을 만든다. 계산은 전부 서버(단일 진실), 프론트는 읽기 위주. ⭐ 핵심 산출물 = **명확한 응답 계약(pydantic)** = 프론트 TypeScript 타입의 단일 출처. 직전 시도가 서버 rate limit으로 코드 0(api/ 미생성) 중단 → 재개.
@@ -26,7 +26,7 @@
   - `GET /api/ranking?top_n=3` → 거래소별 랭킹(NVDA rank1 NASDAQ / XOM rank1 NYSE)·score float·cik="" · **meta.validated=false + warning("§4.1")** 확인
   - `GET /api/learning/tree`·`content`(dir 필드)·**traversal `../../etc/passwd` → 404 차단**·`/learning-assets/*.png` 200·**CORS preflight(localhost:5173) → allow-origin 정상**
 - **변경 규모**: 신규 api 11파일 + tests/test_api.py(합계 ~1202줄). pyproject(+7: fastapi·uvicorn·bugbear immutable-calls)·uv.lock(37 packages resolved).
-- **커밋**: (커밋 시 기입)
+- **커밋**: `2c9ab10` (feat: M3 A층 — FastAPI API)
 
 ## ⭐ API 계약 (프론트 단일 출처 — wire-shape 실측)
 - 모든 필드 snake_case, 날짜 ISO `YYYY-MM-DD` 문자열, score = JSON number(float), cik = "" (미국 어댑터 미제공 — 표시 키는 ticker).

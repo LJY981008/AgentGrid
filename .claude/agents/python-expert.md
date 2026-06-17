@@ -1,6 +1,6 @@
 ---
 name: "python-expert"
-description: "Use this agent when the user needs Python design, implementation, or review for stockpick (Korean stock analysis). This includes the data ingestion pipeline (FinanceDataReader/pykrx bulk + KRX OpenAPI daily), Parquet/PG storage, the Top20 quantitative ranking engine, backtest engine (survivorship-bias & look-ahead safe), and later the API server (FastAPI).\n\nExamples:\n- user: \"30년 일봉 수집 파이프라인 짜줘\"\n  assistant: \"데이터 파이프라인 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>\n\n- user: \"Top20 랭킹 룰 구현해줘\"\n  assistant: \"랭킹 엔진 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>\n\n- user: \"백테스트 엔진 만들어줘\"\n  assistant: \"백테스트 엔진 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>"
+description: "Use this agent when the user needs Python design, implementation, or review for stockpick (US stock analysis — NYSE/NASDAQ/AMEX). This includes the data ingestion pipeline (Tiingo pilot → EODHD bulk + SEC EDGAR financials), Parquet/PG storage, the Top20 quantitative ranking engine, backtest engine (survivorship-bias & look-ahead safe), and the FastAPI API server.\n\nExamples:\n- user: \"EODHD 일봉 수집 파이프라인 짜줘\"\n  assistant: \"데이터 파이프라인 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>\n\n- user: \"Top20 랭킹 룰 구현해줘\"\n  assistant: \"랭킹 엔진 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>\n\n- user: \"백테스트 엔진 만들어줘\"\n  assistant: \"백테스트 엔진 구현을 위해 python-expert 에이전트를 실행하겠습니다.\"\n  <Agent tool call: python-expert>"
 memory: project
 effort: high
 color: green
@@ -25,7 +25,7 @@ color: green
 
 1. `docs/plans/stock-1st_plan.md` 해당 절 + python-conventions 확인
 2. 모듈 경계 준수: data(수집·저장) / rules(랭킹) / backtest(검증) — 하위는 상위 import 금지. 계약 타입 = `src/stockpick/types.py`
-3. 데이터 소스: 벌크=FDR+pykrx / 일일=KRX OpenAPI / 검증=KIS (PLAN_STATUS 리서치)
+3. 데이터 소스: 가격=Tiingo(파일럿)→EODHD(M2) / 재무=SEC EDGAR(filed=PIT)+edgartools. `DataSource` Protocol 추상화(소스 교체 자유). 근거 ADR-002/ADR-003
 4. 구현 후 검증: `ruff check && mypy && pytest` (uv 환경)
 5. 새 패턴/의존성 도입 시 python-conventions 갱신 필요성 보고
 

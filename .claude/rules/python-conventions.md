@@ -1,5 +1,5 @@
 ---
-description: Python coding conventions for stockpick (Korean stock analysis). Python 3.12+ strict typing, no any, explicit failure reporting (no bare/broad except), evidence-based fix discipline, survivorship-bias & look-ahead avoidance in data/backtest code. Loaded on every Python edit. Trigger phrases - 코드 작성·수정·리뷰 시.
+description: Python coding conventions for stockpick (US stock analysis — NYSE/NASDAQ/AMEX). Python 3.12+ strict typing, no any, explicit failure reporting (no bare/broad except), evidence-based fix discipline, survivorship-bias & look-ahead avoidance in data/backtest code. Loaded on every Python edit. Trigger phrases - 코드 작성·수정·리뷰 시.
 paths: ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
 ---
 
@@ -11,12 +11,12 @@ paths: ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
 
 - Python ≥3.12 / **uv** 패키지·환경 관리 / src 레이아웃(`src/stockpick/`)
 - 검증: `ruff check` + `ruff format --check` + `mypy`(strict) + `pytest` — Stop 훅 자동(도구 설치 시)
-- 런타임 의존성은 단계별로 추가(pandas·FinanceDataReader·pykrx 등 M1) — 추측 고정 금지
+- 런타임 의존성은 `uv.lock` 실측 고정(현재: duckdb·httpx·pyarrow·fastapi·uvicorn[standard]) — 추측 고정 금지
 
 ## 모듈 경계 (위반 금지 — AI 자동화 미래 확장 보존)
 
 ```
-data    수집·저장·정규화   (FDR/pykrx 벌크 + KRX OpenAPI 일일, Parquet+PG)
+data    수집·저장·정규화   (Tiingo 파일럿→EODHD 벌크 + SEC EDGAR 재무(PIT), Parquet+PG)
 rules   Top20 정량 랭킹    (data 의존, backtest 검증 통과한 것만)
 backtest 룰 검증           (data 의존)
 api/cli/webapp            상위 — data/rules/backtest 조합 (M3+)
