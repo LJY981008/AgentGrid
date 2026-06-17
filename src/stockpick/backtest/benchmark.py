@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 
 _PERIODS_PER_YEAR = {"monthly": 12, "quarterly": 4}
 _BENCH_CAVEAT = (
-    "벤치=등가중 전체 유니버스(폐지 포함). S&P500 historical constituents 는 후속(결제 후)."
+    "벤치=등가중 전체 유니버스(폐지 포함·무비용=이론 상한). ⚠️ 멤버=거래가능 전체"
+    "(룰은 모멘텀 산출가능 top_n — 워밍업 구간 풀 상이) · 키=ticker(cik 앵커 아님, "
+    "ticker_history 도입 후 정규화). S&P500 historical constituents 는 후속(결제 후)."
 )
 
 

@@ -23,7 +23,7 @@ class BacktestConfig:
     group_by_exchange: bool
     start: date
     end: date
-    trading_days_per_year: int = 252  # 연환산 상수(명시)
+    trading_days_per_year: int = 252  # 연환산 상수(현재 metrics 미사용·예약 — 일별 sharpe 도입 시)
 
     def fingerprint(self) -> str:
         """canonical 직렬화 → sha256. Decimal normalize·sort_keys 로 의미동일=해시동일."""

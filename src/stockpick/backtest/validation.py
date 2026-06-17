@@ -1,6 +1,6 @@
 """과적합 가드 — IS/OOS 분할·워크포워드·purge gap·성과방어율(decay).
 
-decay = OOS_sharpe/IS_sharpe. IS<=0 → 룰 기각(is_failed), |IS|<ε → 신호미약(None, 분모 폭발 방지).
+decay = OOS_sharpe/IS_sharpe. IS<=0 → 룰 기각(is_failed), 0<IS<ε → 신호미약(None, 분모 폭발 방지).
 워크포워드: IS 창에서 선택·동결 → OOS 검증. 창 경계에 **purge gap**(기본 lookback+skip 거래일)을
 두어 OOS 룩백이 IS 를 침범하는 누수를 차단(de Prado purging). 민감도는 후속(인터페이스만).
 
@@ -10,11 +10,14 @@ decay = OOS_sharpe/IS_sharpe. IS<=0 → 룰 기각(is_failed), |IS|<ε → 신�
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .engine import run
 from .metrics import GuardReport
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from datetime import date
@@ -47,7 +50,7 @@ def decay_ratio(
     warn_below: float = 0.5,
     purge_gap_days: int = 0,
 ) -> GuardReport:
-    """성과방어율 OOS/IS. IS<=0 → 기각(분모 무의미), |IS|<ε → 신호미약(None), 그 외 비율 산출."""
+    """성과방어율 OOS/IS. IS<=0 → 기각(분모 무의미), 0<IS<ε → 신호미약(None), 그 외 비율 산출."""
     if is_sharpe <= 0:
         return GuardReport(
             is_sharpe,
@@ -66,7 +69,7 @@ def decay_ratio(
             is_failed=False,
             decay_warning=False,
             purge_gap_days=purge_gap_days,
-            notes=("IS 신호 미약(|IS|<ε) — 비율 무의미",),
+            notes=("IS 신호 미약(0<IS<ε) — 비율 무의미",),
         )
     ratio = oos_sharpe / is_sharpe
     return GuardReport(
@@ -102,6 +105,14 @@ def walk_forward(
         if purge_gap_days is not None
         else config.lookback_days + config.skip_recent_days
     )
+    min_purge = config.lookback_days + config.skip_recent_days
+    if purge < min_purge:
+        # 조용한 누수 금지 — purge 가 룩백+skip 보다 작으면 OOS 모멘텀이 IS 를 침범할 수 있음.
+        logger.warning(
+            "purge_gap_days=%d < lookback+skip=%d — OOS 룩백이 IS 침범 가능(누수 위험)",
+            purge,
+            min_purge,
+        )
     days = [d for d in price_port.trading_days() if config.start <= d <= config.end]
     total = len(days)
     seg = total // (n_folds + 1)
