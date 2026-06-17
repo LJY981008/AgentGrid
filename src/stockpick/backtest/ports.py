@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from datetime import date
 
     from ..rules._scan import PricePoint
+    from ..types import Exchange
 
 
 @runtime_checkable
@@ -27,6 +28,10 @@ class PriceSeriesPort(Protocol):
 
     def trading_days(self) -> list[date]:
         """데이터에 존재하는 정렬된 거래일 합집합(calendar 입력)."""
+        ...
+
+    def ticker_exchanges(self) -> dict[str, Exchange]:
+        """ticker → Exchange(랭킹 그룹핑·TopEntry.exchange 채움). 가격 저장소 파티션 키에서 도출."""
         ...
 
 

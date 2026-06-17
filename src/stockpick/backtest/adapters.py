@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from ..rules._scan import PricePoint
+    from ..types import Exchange
 
 
 class ParquetPriceSeriesPort:
@@ -36,3 +37,6 @@ class ParquetPriceSeriesPort:
 
     def trading_days(self) -> list[date]:
         return sorted({p.trade_date for pts in self.full_series().values() for p in pts})
+
+    def ticker_exchanges(self) -> dict[str, Exchange]:
+        return _scan.load_ticker_exchanges(self._base_dir)

@@ -1,0 +1,225 @@
+"""백테스트 엔진 — 단일 config 러너. rolling as_of 리밸런싱·forward-return·폐지청산·비용.
+
+룩어헤드 BLOCKING: 랭킹은 ports.load(as_of=t)(<=t), 진입은 t **다음** 거래일(동시성 누설 차단).
+생존편향 BLOCKING: 후보는 UniversePort.constituents(as_of=t) 교집합(가격파일 존재 아님). 보유 중
+폐지(delisting_event)면 delisting_recovery_rate 로 청산(gap≠폐지 — 명시 이벤트로만).
+식별자: IdentityResolver 로 ticker→cik 앵커 enrich(가능 시).
+키 = cik or ticker(strategy._key 와 동일 규칙).
+"""
+
+from __future__ import annotations
+
+import bisect
+import logging
+from dataclasses import replace
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from ..rules.factors import momentum_universe
+from ..rules.ranking import rank_by_momentum
+from . import calendar, costs
+from .metrics import compute_metrics
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from datetime import date
+
+    from ..rules._scan import PricePoint
+    from ..types import Exchange, TopEntry
+    from .config import BacktestConfig
+    from .metrics import BacktestResult
+    from .ports import IdentityResolver, PriceSeriesPort, UniversePort
+    from .strategy import Strategy
+
+logger = logging.getLogger(__name__)
+
+_PERIODS_PER_YEAR = {"monthly": 12, "quarterly": 4}
+_CAVEAT_GOLGYEOK = (
+    "골격: cik 미해소 가능·합성/제한 폐지·데이터 구간 짧음 — 결과 미검증(S6 게이트 전 알파 아님)"
+)
+
+
+def run(
+    config: BacktestConfig,
+    *,
+    price_port: PriceSeriesPort,
+    universe_port: UniversePort,
+    identity: IdentityResolver,
+    strategy: Strategy,
+) -> BacktestResult:
+    """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터)."""
+    full = price_port.full_series()
+    exchanges = price_port.ticker_exchanges()
+    all_days = price_port.trading_days()
+    in_range = [d for d in all_days if config.start <= d <= config.end]
+    reb = calendar.rebalance_dates(in_range, freq=config.rebalance_freq)
+    last_day = in_range[-1] if in_range else None
+
+    equity = Decimal(1)
+    curve: list[tuple[date, Decimal]] = []
+    period_returns: list[Decimal] = []
+    turnover_total = Decimal(0)
+    cost_total = Decimal(0)
+    n_delisted = 0
+    prev_weights: dict[str, Decimal] = {}
+
+    for i, t in enumerate(reb):
+        entry_day = _next_day(all_days, t)
+        if entry_day is None or last_day is None:
+            break
+        next_reb = reb[i + 1] if i + 1 < len(reb) else None
+        exit_day = _next_day(all_days, next_reb) if next_reb is not None else last_day
+        if exit_day is None:
+            exit_day = last_day
+        if entry_day > exit_day:
+            # 진입일이 청산일을 넘으면 보유 구간 없음(마지막 리밸 직후 데이터 끝) — 건너뜀.
+            continue
+
+        ranked = _rank_at(config, price_port, universe_port, identity, exchanges, t)
+        weights = strategy.weights(ranked, as_of=t)
+        key_to_ticker = {(e.cik or e.ticker): e.ticker for e in ranked}
+
+        # 비용: 회전(turnover)분에만. 진입 전 차감(equity_before 기준).
+        turnover = _turnover(prev_weights, weights)
+        cost_frac = costs.apply_cost_fraction(turnover, config.cost_bps)
+        cost_amount = equity * cost_frac
+        equity -= cost_amount
+        turnover_total += turnover
+        cost_total += cost_amount
+
+        # 보유수익(forward-return [entry_day, exit_day]) — 폐지 청산 포함
+        pret, delisted = _holding_period_return(
+            weights,
+            key_to_ticker,
+            full,
+            entry_day,
+            exit_day,
+            universe_port,
+            config.delisting_recovery_rate,
+        )
+        n_delisted += delisted
+        equity *= Decimal(1) + pret
+        period_returns.append(pret)
+        curve.append((exit_day, equity))
+        prev_weights = weights
+
+    logger.info(
+        "백테스트 완료: 리밸=%d, period수익=%d, 폐지청산=%d, 총회전=%s, 최종equity=%s",
+        len(reb),
+        len(period_returns),
+        n_delisted,
+        turnover_total,
+        equity,
+    )
+    return compute_metrics(
+        curve,
+        period_returns,
+        periods_per_year=_PERIODS_PER_YEAR[config.rebalance_freq],
+        turnover_total=turnover_total,
+        cost_total=cost_total,
+        n_rebalances=len(curve),
+        n_delisted=n_delisted,
+        benchmark_returns={},
+        caveats=(_CAVEAT_GOLGYEOK,),
+        config_fingerprint=config.fingerprint(),
+    )
+
+
+def _rank_at(
+    config: BacktestConfig,
+    price_port: PriceSeriesPort,
+    universe_port: UniversePort,
+    identity: IdentityResolver,
+    exchanges: Mapping[str, Exchange],
+    t: date,
+) -> list[TopEntry]:
+    """as_of=t 랭킹. survivorship: constituents(as_of=t) 교집합(가격파일 존재 아님). cik enrich."""
+    series = price_port.load(as_of=t)
+    tradable = universe_port.constituents(as_of=t)
+    series = {k: v for k, v in series.items() if k in tradable}
+    scores = momentum_universe(
+        series,
+        as_of=t,
+        lookback_days=config.lookback_days,
+        skip_recent_days=config.skip_recent_days,
+    )
+    # rank_by_momentum 은 점수난 ticker 전부 exchange 매핑을 요구 → series 의 거래소만 추림.
+    ticker_to_exchange = {k: ex for k, ex in exchanges.items() if k in series}
+    ranked = rank_by_momentum(
+        scores,
+        ticker_to_exchange,
+        lookback_days=config.lookback_days,
+        top_n=config.top_n,
+        group_by_exchange=config.group_by_exchange,
+    )
+    # cik 앵커 enrich(가능 시) — 생존편향 ticker 재사용 오조인 방지. 미해소면 "" 유지(caveat).
+    return [replace(e, cik=identity.cik_for(e.ticker, on=t) or e.cik) for e in ranked]
+
+
+def _next_day(days: list[date], after: date) -> date | None:
+    """days 에서 after **초과** 첫 거래일(진입 t+1·청산 t'+1 규칙). 없으면 None."""
+    idx = bisect.bisect_right(days, after)
+    return days[idx] if idx < len(days) else None
+
+
+def _turnover(old: dict[str, Decimal], new: dict[str, Decimal]) -> Decimal:
+    """편출+편입 절대비중 합(단방향 회전율). 전량 교체 시 ~2(매도1+매수1)."""
+    keys = set(old) | set(new)
+    return sum((abs(new.get(k, Decimal(0)) - old.get(k, Decimal(0))) for k in keys), Decimal(0))
+
+
+def _holding_period_return(
+    weights: dict[str, Decimal],
+    key_to_ticker: dict[str, str],
+    full: dict[str, list[PricePoint]],
+    entry_day: date,
+    exit_day: date,
+    universe_port: UniversePort,
+    recovery_rate: Decimal,
+) -> tuple[Decimal, int]:
+    """가중 보유수익 + 폐지청산 건수. 폐지(entry<de<=exit)면 recovery_rate 청산."""
+    total = Decimal(0)
+    delisted = 0
+    for key, w in weights.items():
+        ticker = key_to_ticker.get(key, key)
+        pts = full.get(ticker, [])
+        entry_p = _price_on_or_after(pts, entry_day)
+        if entry_p is None or entry_p <= 0:
+            continue  # 진입가 없음/비정상 — 조용한 추측 금지(해당 비중 수익 0 기여)
+        de = universe_port.delisting_event(ticker)
+        if de is not None and entry_day < de <= exit_day:
+            last_p = _price_before(pts, de) or entry_p
+            ret = (last_p / entry_p) * recovery_rate - Decimal(1)
+            delisted += 1
+        else:
+            exit_p = _price_on_or_before(pts, exit_day) or entry_p
+            ret = exit_p / entry_p - Decimal(1)
+        total += w * ret
+    return total, delisted
+
+
+def _price_on_or_after(pts: list[PricePoint], day: date) -> Decimal | None:
+    for p in pts:
+        if p.trade_date >= day:
+            return p.adjusted
+    return None
+
+
+def _price_on_or_before(pts: list[PricePoint], day: date) -> Decimal | None:
+    out: Decimal | None = None
+    for p in pts:
+        if p.trade_date <= day:
+            out = p.adjusted
+        else:
+            break
+    return out
+
+
+def _price_before(pts: list[PricePoint], day: date) -> Decimal | None:
+    out: Decimal | None = None
+    for p in pts:
+        if p.trade_date < day:
+            out = p.adjusted
+        else:
+            break
+    return out

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..types import Exchange
+
 if TYPE_CHECKING:
     from datetime import date
 
@@ -15,8 +17,13 @@ if TYPE_CHECKING:
 
 
 class FakePriceSeriesPort:
-    def __init__(self, series: dict[str, list[PricePoint]]) -> None:
+    def __init__(
+        self,
+        series: dict[str, list[PricePoint]],
+        exchanges: dict[str, Exchange] | None = None,
+    ) -> None:
         self._series = series
+        self._exchanges = exchanges or {}
 
     def load(self, *, as_of: date) -> dict[str, list[PricePoint]]:
         return {t: [p for p in pts if p.trade_date <= as_of] for t, pts in self._series.items()}
@@ -26,6 +33,10 @@ class FakePriceSeriesPort:
 
     def trading_days(self) -> list[date]:
         return sorted({p.trade_date for pts in self._series.values() for p in pts})
+
+    def ticker_exchanges(self) -> dict[str, Exchange]:
+        # 미지정 ticker 는 NASDAQ 기본(테스트 단순화 — 실전은 adapters 가 파티션 키에서 도출)
+        return {t: self._exchanges.get(t, Exchange.NASDAQ) for t in self._series}
 
 
 class FakeUniversePort:
