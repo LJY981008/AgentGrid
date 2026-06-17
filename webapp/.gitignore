@@ -1,0 +1,17 @@
+# build/deps — 커밋 금지
+node_modules
+dist
+dist-ssr
+*.local
+*.tsbuildinfo
+
+# PWA 생성물(vite-plugin-pwa generateSW)
+dev-dist
+sw.js
+workbox-*.js
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

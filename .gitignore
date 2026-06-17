@@ -1,5 +1,8 @@
 # Playwright MCP 세션 덤프
 .playwright-mcp/
+# E2E 스크린샷(루트 산출 — 스크래치, 커밋 금지)
+/dashboard-*.png
+/learning-page.png
 
 # Claude Code (로컬 전용)
 .claude/settings.local.json

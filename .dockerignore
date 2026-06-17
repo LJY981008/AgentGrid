@@ -24,6 +24,10 @@ build/
 data/
 *.parquet
 
+# 프론트엔드 (web 서비스는 node:22 이미지 + ./webapp 바인드로 동작 — app 이미지엔 불필요)
+webapp/node_modules/
+webapp/dist/
+
 # 문서 / 옵시디언 볼트 (런타임 불필요)
 docs/
 *.md

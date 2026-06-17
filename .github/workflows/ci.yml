@@ -27,6 +27,25 @@ jobs:
       - name: Test (pytest)
         run: PYTHONPATH=src uv run pytest -q
 
+  webapp:
+    name: Webapp (tsc + vite build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - name: Install deps (npm ci)
+        run: npm ci
+      - name: Build (tsc -b + vite build = 타입체크 포함)
+        run: npm run build
+
   harness:
     name: Harness (훅 회귀 테스트)
     runs-on: ubuntu-latest

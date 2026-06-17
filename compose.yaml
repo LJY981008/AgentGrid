@@ -1,13 +1,17 @@
-# stockpick 로컬 오케스트레이션
-#   docker compose up -d   → PostgreSQL (운영 서빙용)
+# stockpick 로컬 오케스트레이션 — 풀스택 로컬 실행(M3 C층)
+#   docker compose up -d   → postgres(운영 서빙) + app(FastAPI:8000) + web(Vite dev:5173)
+#   브라우저: http://localhost:5174 (web)  ·  API 직접: http://localhost:8000
 # 벌크 백테스트 데이터는 Parquet 파일(DB 아님). PG 는 일일 갱신·운영 조회용.
 # Redis/RabbitMQ/모니터링은 도메인 전환으로 제거 — 필요해지면 그때 추가.
+#
+# ⚠️ 외부망 노출 차단: app·web·postgres 모두 127.0.0.1 바인딩 — 개인 1인 로컬·인증 없음.
+# ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측 2026-06-17):
+#     postgres 5432→5433, web 5173→5174. 컨테이너 내부 포트는 불변(앱·proxy 영향 없음).
 name: stockpick
 
 services:
-  # 개발/실행 컨테이너 — uv 기반 재현 환경(어디서 돌려도 동일: uv.lock + 이미지 고정).
-  #   상주(sleep infinity)로 띄우고 검증은 `docker compose exec app ...` 또는
-  #   `docker compose run --rm app ...` 로 실행.
+  # API 서버 + 개발/검증 컨테이너 — uv 기반 재현 환경(uv.lock + 이미지 고정).
+  #   uvicorn 상주(0.0.0.0:8000)로 떠 있어도 `docker compose exec app ...` 로 ruff/mypy/pytest·uv add 그대로 가능.
   app:
     build:
       context: .
@@ -17,7 +21,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      # 컨테이너 내부에서 PG 접속 — 호스트가 아니라 서비스명 postgres:5432
+      # 컨테이너 내부에서 PG 접속 — 호스트가 아니라 서비스명 postgres:5432 (호스트 리맵 5433과 무관).
       DATABASE_URL: postgresql://stockpick:stockpick-local@postgres:5432/stockpick
       PYTHONPATH: src
       # 데이터 소스 API 키 — 호스트 .env(gitignore·이미지 미포함)에서 interpolation 주입.
@@ -25,15 +29,47 @@ services:
       #   docker compose up -d --no-deps app
       TIINGO_API_KEY: "${TIINGO_API_KEY:-}"  # M1 파일럿 가격(현재상장)
       EODHD_API_KEY: "${EODHD_API_KEY:-}"  # M2 본격 가격(폐지 포함, ADR-003)
+    ports:
+      # ⚠️ 호스트 localhost 만 — 외부망 노출 차단(인증 없음·1인 로컬).
+      - "127.0.0.1:8000:8000"
     volumes:
       # 개발용 바인드 마운트 — 소스 수정 즉시 컨테이너 반영(재빌드 불필요).
       #   editable 설치된 .pth(=/app/src) 위로 호스트 ./src 가 덮여 경로 동일.
       - ./src:/app/src
       - ./tests:/app/tests
       - ./pyproject.toml:/app/pyproject.toml
+      # ⭐ 데이터 영속 — named volume(Docker 관리·app 소유·재생성에도 유지). ⚠️ 호스트 바인드는
+      #   uid 불일치(호스트 1000 vs 컨테이너 app 999)로 Parquet 쓰기 거부 → named volume 으로 회피
+      #   (Dockerfile 이 /app/data 를 app 소유로 생성 → 볼륨이 그 소유권 상속, 쓰기 가능·포터블).
+      - parquet-data:/app/data
+      # ⭐ 학습 노트 — /api/learning/* · /learning-assets 서빙 루트.
+      #   .dockerignore 가 docs 를 이미지에서 제외하나, 이 런타임 바인드가 덮어 노출(의도대로).
+      - ./docs:/app/docs
       # ⚠️ .venv 는 마운트하지 않음 — 호스트엔 .venv 없고, 이미지의 .venv(컨테이너 플랫폼 빌드)를 써야 함.
-    # 코드가 아직 서버/CLI 진입점 없음 — 상주만(Dockerfile CMD 와 동일, 명시).
-    command: ["sleep", "infinity"]
+    # FastAPI(uvicorn 0.0.0.0:8000) 상주 — `python -m stockpick.api`(__main__.py 진입점).
+    command: ["python", "-m", "stockpick.api"]
+
+  # 프론트(Vite dev) — PWA 대시보드. 소스 바인드 + node_modules 익명볼륨(호스트가 컨테이너 것을 안 덮음).
+  #   vite proxy(/api·/learning-assets)는 컨테이너 내부에서 app:8000 이 아니라 호스트 기준이므로,
+  #   브라우저가 same-origin(5174→컨테이너 5173)으로 호출하면 vite 가 VITE_DEV_API_TARGET 로 프록시.
+  web:
+    image: node:22
+    container_name: stockpick-web
+    working_dir: /app
+    depends_on:
+      - app
+    environment:
+      # vite proxy 대상 — 컨테이너 내부 네트워크에서 app 서비스(8000)로. (vite.config.ts VITE_DEV_API_TARGET)
+      VITE_DEV_API_TARGET: "http://app:8000"
+    ports:
+      # ⚠️ 호스트 5173 은 타 프로젝트(AiCrawl vite) 점유 → 5174 로 리맵. 컨테이너 내부는 5173 불변.
+      - "127.0.0.1:5174:5173"
+    volumes:
+      - ./webapp:/app
+      # node_modules 는 익명볼륨 — 컨테이너 내부 설치본 유지(호스트 빈 디렉토리가 덮지 않게).
+      - /app/node_modules
+    # 첫 기동 install(node_modules 익명볼륨이라 호스트 안 덮음) 후 dev 서버. --host 로 컨테이너 외부 바인드.
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
 
   postgres:
     image: postgres:18-alpine
@@ -43,7 +79,8 @@ services:
       POSTGRES_USER: stockpick
       POSTGRES_PASSWORD: stockpick-local
     ports:
-      - "5432:5432"
+      # ⚠️ 호스트 5432 는 타 프로젝트(aicrawl-postgres) 점유 → 5433 으로 리맵. 컨테이너 내부 5432 불변.
+      - "127.0.0.1:5433:5432"
     volumes:
       # PG18: 마운트는 상위 /var/lib/postgresql (AiCrawl 실측 — /data 마운트 시 기동 거부)
       - postgres-data:/var/lib/postgresql
@@ -55,3 +92,4 @@ services:
 
 volumes:
   postgres-data:
+  parquet-data:  # 수집 Parquet 영속(app 소유·호스트 uid 무관)

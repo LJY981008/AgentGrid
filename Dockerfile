@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # non-root 실행 — /app(.venv 포함) 소유권 이전 후 전환.
 #   바인드 마운트된 호스트 소스는 호스트 소유라 읽기는 되지만, .venv 쓰기·캐시 생성은 컨테이너 유저로.
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
+    && mkdir -p /app/data \
     && chown -R app:app /app
 USER app
 

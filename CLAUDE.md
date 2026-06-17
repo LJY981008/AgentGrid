@@ -78,17 +78,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 베이스: `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.11.21` 바이너리 주입, 2단계 sync(의존성/소스 레이어 분리), non-root. 상세 주석: `Dockerfile`.
 
 ```bash
-docker compose up -d                               # PostgreSQL(운영) + app(개발 컨테이너, sleep 상주)
+docker compose up -d                               # 풀스택: postgres + app(FastAPI uvicorn:8000) + web(Vite dev)
+#   브라우저 http://localhost:5174 (web 대시보드) · API 직접 http://localhost:8000 · postgres localhost:5433
+#   ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측): postgres 5432→5433·web 5173→5174 (컨테이너 내부 불변)
 docker compose build app                           # 이미지 빌드(베이스 pull 네트워크 필요)
 
 # 검증은 app 컨테이너 안에서 — 소스는 ./src·./tests 바인드 마운트(수정 즉시 반영, editable 설치)
+#   app 은 uvicorn(0.0.0.0:8000) 상주여도 exec 로 ruff/mypy/pytest·uv add 그대로 가능
 docker compose exec app ruff check src tests       # 린트
 docker compose exec app mypy                        # 타입(strict)
 docker compose exec app pytest -q                   # 테스트
 # 또는 일회성: docker compose run --rm app ruff check src tests
 
-# API 서버 기동(M3, 컨테이너 내부 0.0.0.0:8000 — 호스트 노출·포트매핑은 compose 후속 devops)
-docker compose exec -d app python -m stockpick.api  # uvicorn(STOCKPICK_API_PORT 로 포트 조정)
+# 수집 Parquet 는 named volume(parquet-data) 영속 — app(uid 999) 소유, 컨테이너 재생성에도 유지
+#   (호스트 바인드는 uid 불일치[호스트 1000 vs app 999]로 Parquet 쓰기 거부 → named volume 으로 회피)
 
 # 개발 도구는 [dependency-groups].dev (PEP 735) — `uv sync` 가 기본 설치(extra 아님)
 # 런타임 의존성 추가 시(실측 2026-06-16): compose 에 uv.lock 바인드 마운트가 없어 `exec ... uv add`
@@ -110,12 +113,12 @@ docker compose exec -d app python -m stockpick.api  # uvicorn(STOCKPICK_API_PORT
 | 경로 | 역할 |
 |---|---|
 | `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(멀티스테이지·non-root·BuildKit 캐시) |
-| `compose.yaml` | `postgres`(PG18 운영) + `app`(개발 컨테이너, 소스 바인드 마운트) |
+| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume) + `web`(node:22 Vite dev:5174→5173) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/`·`backtest/` 모듈 |
 | `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
-| `webapp/` | PWA 대시보드 (M4, 경로 예약) |
+| `webapp/` | PWA 대시보드 (M3 활성) — Vite8/React19/router7/TS, `src/{api,components,pages}`. 5화면(랭킹·데이터·유니버스·학습·백테스트 placeholder). 읽기위주·투자로직 프론트 중복 금지([webapp-conventions](.claude/rules/webapp-conventions.md)) |
 | `docs/` | **옵시디언 볼트** — plans·decisions·research·dev-log·work-history. MOC: [docs/HOME.md](docs/HOME.md) |
 | `.github/` | CI (ruff/mypy/pytest + 훅 회귀) · 기본 브랜치 main |
 
