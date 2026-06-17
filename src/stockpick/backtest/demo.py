@@ -21,7 +21,7 @@ from . import engine
 from .adapters import ParquetPriceSeriesPort, PriceDerivedUniverse
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
-from .fakes import StubIdentityResolver
+from .identity import EdgarSnapshotResolver
 from .strategy import EqualWeightTopN
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ def run_demo(base_dir: Path) -> int:
         return 0
 
     universe = PriceDerivedUniverse(price_port)  # ⚠️ 가격기반·survivorship 한계(data_caveats 고지)
-    identity = StubIdentityResolver({})  # cik 미해소 → ticker 앵커(caveat)
+    identity = EdgarSnapshotResolver(base_dir)  # EDGAR 저장본 cik(없으면 빈 맵→"")
     config = BacktestConfig(
         strategy_name="equal_weight_top_n",
         top_n=min(5, universe.ticker_count()),

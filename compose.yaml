@@ -29,6 +29,7 @@ services:
       #   docker compose up -d --no-deps app
       TIINGO_API_KEY: "${TIINGO_API_KEY:-}"  # M1 파일럿 가격(현재상장)
       EODHD_API_KEY: "${EODHD_API_KEY:-}"  # M2 본격 가격(폐지 포함, ADR-003)
+      EDGAR_IDENTITY: "${EDGAR_IDENTITY:-}"  # SEC EDGAR User-Agent 신원(이름+이메일, 키 아님·#2)
     ports:
       # ⚠️ 호스트 localhost 만 — 외부망 노출 차단(인증 없음·1인 로컬).
       - "127.0.0.1:8000:8000"
