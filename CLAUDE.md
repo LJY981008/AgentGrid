@@ -66,8 +66,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
 - 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY). (구 한국 FDR/pykrx/KRX 보류)
 - 저장: **Parquet**(`pyarrow`)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙) — `compose.yaml`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
+- API(M3): **FastAPI**+**uvicorn[standard]**(`src/stockpick/api/`) — 수집·랭킹·학습을 HTTP 노출. pydantic 응답계약 = 프론트 단일 출처. CORS=localhost:5173. ⚠️ ranking `meta.validated=false`(§4.1 미검증 경고 상시)·키 비노출
 - 웹앱(M4): PWA/반응형 웹 (`webapp/`, 프레임워크 미정)
-- 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증) — 하위는 상위 import 금지
+- 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증) → `api`/`webapp`(상위 — 하위 조합) — 하위는 상위 import 금지
 
 ---
 
@@ -85,6 +86,9 @@ docker compose exec app ruff check src tests       # 린트
 docker compose exec app mypy                        # 타입(strict)
 docker compose exec app pytest -q                   # 테스트
 # 또는 일회성: docker compose run --rm app ruff check src tests
+
+# API 서버 기동(M3, 컨테이너 내부 0.0.0.0:8000 — 호스트 노출·포트매핑은 compose 후속 devops)
+docker compose exec -d app python -m stockpick.api  # uvicorn(STOCKPICK_API_PORT 로 포트 조정)
 
 # 개발 도구는 [dependency-groups].dev (PEP 735) — `uv sync` 가 기본 설치(extra 아님)
 # 런타임 의존성 추가 시(실측 2026-06-16): compose 에 uv.lock 바인드 마운트가 없어 `exec ... uv add`
@@ -109,6 +113,7 @@ docker compose exec app pytest -q                   # 테스트
 | `compose.yaml` | `postgres`(PG18 운영) + `app`(개발 컨테이너, 소스 바인드 마운트) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/`·`backtest/` 모듈 |
+| `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M4, 경로 예약) |
 | `docs/` | **옵시디언 볼트** — plans·decisions·research·dev-log·work-history. MOC: [docs/HOME.md](docs/HOME.md) |

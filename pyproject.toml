@@ -6,8 +6,10 @@ requires-python = ">=3.12"
 # 런타임 의존성(pandas·pyarrow·duckdb·tiingo 등)은 B-pipeline 단계에서 `uv add` 로 실측 고정 — 추측 고정 금지
 dependencies = [
     "duckdb>=1.5.3",
+    "fastapi>=0.137.1",
     "httpx>=0.28.1",
     "pyarrow>=24.0.0",
+    "uvicorn[standard]>=0.49.0",
 ]
 
 # 개발 도구는 PEP 735 dependency-group(uv 네이티브) — `uv sync` 가 기본 설치.
@@ -34,6 +36,11 @@ line-length = 100
 [tool.ruff.lint]
 # 실패 명확 보고 원칙(stock-1st_plan §4.1) — 빈 except·광역 except 금지(BLE), 보안(S), 버그(B)
 select = ["E", "F", "I", "B", "BLE", "UP", "S"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 관례: 라우트 기본값의 Depends()/Query() 는 함수 호출이지만 의도된 패턴(B008 오탐).
+# 이 두 호출만 immutable 로 허용 — 일반 가변 기본값(예: list())은 여전히 B008 로 잡힌다.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 
 [tool.ruff.lint.per-file-ignores]
 # 테스트는 assert 가 정상 패턴(S101) — pytest 단언

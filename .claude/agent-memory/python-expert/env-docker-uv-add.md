@@ -25,6 +25,13 @@ docker compose build app && docker compose up -d --no-deps app  # .venv 에 설�
 - 검증/format 쓰기도 컨테이너 app(999)→호스트 1000 소유 파일엔 못 씀 → `ruff format` 자동수정은
   호스트에서 Edit 도구로 직접 하고, `ruff check`/`mypy`/`pytest` 는 컨테이너 exec 로 읽기만.
 
+**⚠️ 추가 함정(2026-06-17 실측) — 단일파일 바인드 + atomic Edit 마운트 끊김:** compose 가
+`./pyproject.toml:/app/pyproject.toml` 처럼 **단일 파일**을 바인드하면, 호스트에서 그 파일을 Edit
+도구로 수정(= atomic write = 새 inode 로 교체)할 때 컨테이너의 바인드(기존 inode 고정)가 끊겨
+**컨테이너가 옛 내용을 본다**(ruff bugbear 설정 변경이 컨테이너 검증에 미반영된 실측). 디렉토리
+바인드(`./src`)는 영향 없음(파일 교체돼도 디렉토리 inode 불변). → **단일 파일 바인드 마운트를 호스트
+Edit 한 뒤엔 `docker compose up -d --no-deps --force-recreate app` 로 마운트 재연결** 후 검증.
+
 **근본 해결(후속, devops-engineer):** compose 에 `./uv.lock:/app/uv.lock` 바인드 추가하면 둘 다
 호스트 소유로 정합 → `--user 1000` 만으로 uv add 가능. 재생성·CI 영향 점검 필요해 단독 결정 보류 중.
-관련 [[impl-tiingo-adapter]].
+관련 [[impl-tiingo-adapter]]·[[impl-fastapi-api]].

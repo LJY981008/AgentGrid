@@ -12,3 +12,4 @@
 - [EODHD 어댑터 구현](impl-eodhd-adapter.md) — 쿼리 토큰 인증·httpx URL 토큰 누출(진입점 가드)·폐지 유니버스 병합·cik 미제공 한계
 - [adj_factor 방향·정밀도 함정](gotcha-adj-factor-direction.md) — 공유 헬퍼 adjusted/raw quantize 12자리. EODHD 명세 caveat 역수 함정(돈 걸림)
 - [rules 모듈 첫 구현(모멘텀)](impl-rules-momentum.md) — 룩어헤드 2중 가드·스캔/계산 분리·sabotage 검증·데이터셋 컨테이너 전용·ruff E501 한글 함정
+- [FastAPI API 층(M3)](impl-fastapi-api.md) — DI 테스트·키비노출·path-traversal·계약 wire-shape(거래소별 rank·validated=false)·fastapi 0.137/mypy/B008 함정

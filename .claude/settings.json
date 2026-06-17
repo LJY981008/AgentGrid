@@ -12,7 +12,8 @@
       "Bash(docker ps:*)",
       "Bash(docker logs:*)",
       "Bash(jq:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "WebFetch(domain:www.npmjs.com)"
     ],
     "deny": [
       "Bash(docker system prune:*)",

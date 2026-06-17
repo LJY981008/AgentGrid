@@ -20,3 +20,4 @@
 | 2026-06-17 | EODHD 미니 데이터셋 적재 — 소스무관 generic 적재기(ingest.py)·누적검증 소실탐지·라이브 9종목 2259행 PASS | 일반 구현 | [[2026-06-17-EODHD-미니데이터셋-적재]] |
 | 2026-06-17 | M2 (c) 룰엔진 수직 슬라이스 — 모멘텀 팩터(수정주가·룩어헤드 2중 가드)→Top 랭킹(TopEntry). 라이브 데모·sabotage 검증·테스트 18(114 passed) | 일반 구현 | [[2026-06-17-M2-룰엔진-수직슬라이스]] |
 | 2026-06-17 | webapp PWA 대시보드 + API 층(M3) — FastAPI(수집·랭킹·학습) + Vite+React+TS PWA(랭킹·데이터·유니버스·학습·백테스트 placeholder) | 플랜모드 승인 | [[2026-06-17-webapp-API-대시보드]] |
+| 2026-06-17 | M3 A층 — FastAPI API(health·dataset·ingest·ranking·learning, pydantic 계약·CORS·키비노출·path-traversal 가드). 테스트 20(134 passed)·기동 스모크 wire-shape 캡처 | 일반 구현 | [[2026-06-17-API-층-FastAPI]] |
