@@ -30,6 +30,7 @@
 
 ## 🔬 리서치 (research/)
 
+- [[research/2026-06-17-webapp-stack-버전|2026-06-17 webapp 스택 버전]] — Vite8/React19/TS6/router7/react-markdown10 + FastAPI0.137, API 표면 함정(urlTransform·runtimeCaching·CORS/Vite proxy·Starlette1.0 핀)
 - [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **현행** 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 기준선
 - [[research/2026-06-16-한국주식-데이터소스|2026-06-16 한국주식 데이터소스]] — 보류(미장 전환) 벌크=FDR+pykrx / 일일=KRX OpenAPI, 나중 한국장 추가 시 재사용
 - ~~[[research/2026-06-12-스택-버전-리서치]]~~ — (구) Boot 4.1/Next 16, 도메인 전환으로 폐기
