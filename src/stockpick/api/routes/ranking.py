@@ -18,15 +18,18 @@ from __future__ import annotations
 import logging
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
 from ...rules._scan import load_adjusted_series, load_ticker_exchanges
 from ...rules.factors import momentum_universe
 from ...rules.ranking import rank_by_momentum
-from ..deps import get_base_dir
+from ..deps import get_base_dir, get_identity_resolver
 from ..models import RankingMeta, RankingParams, RankingResponse, TopEntryModel
+
+if TYPE_CHECKING:
+    from ...backtest.ports import IdentityResolver
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,7 @@ def ranking(
     skip_recent_days: int = Query(default=21, ge=0, description="최근 N거래일 제외(reversal 회피)"),
     top_n: int = Query(default=5, ge=1, description="그룹(또는 전체)별 상위 N"),
     group: Literal["exchange", "all"] = Query(default="exchange", description="랭킹 단위"),
+    identity: IdentityResolver = Depends(get_identity_resolver),
 ) -> RankingResponse:
     group_by_exchange = group == "exchange"
     params = RankingParams(
@@ -94,7 +98,8 @@ def ranking(
     return RankingResponse(
         entries=[
             TopEntryModel(
-                cik=e.cik,
+                # cik enrich(api 층) — EDGAR 저장본으로 해소, 미해소면 기존 빈값(rules 불변).
+                cik=identity.cik_for(e.ticker, on=effective_as_of) or e.cik,
                 ticker=e.ticker,
                 exchange=e.exchange,
                 rank=e.rank,

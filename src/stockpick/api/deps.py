@@ -16,9 +16,16 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from fastapi import Depends
+
+from ..backtest.identity import EdgarSnapshotResolver
 from ..data.eodhd import EodhdSource
 from ..data.source import DataSource
+
+if TYPE_CHECKING:
+    from ..backtest.ports import IdentityResolver
 
 _DEFAULT_DATA_DIR = "data/parquet"
 _DEFAULT_LEARNING_DIR = "docs/learning"
@@ -50,3 +57,18 @@ def get_source() -> DataSource:
     따라서 이 팩토리 자체는 키 없이 생성되며, 키 부재는 fetch 시점에 EodhdAuthError 로 표면화한다.
     """
     return EodhdSource()
+
+
+@lru_cache(maxsize=8)
+def _resolver_for(base_dir: Path) -> EdgarSnapshotResolver:
+    """base_dir 별 EdgarSnapshotResolver 캐시 — 저장본 JSON 1회 read(요청마다 재read 방지)."""
+    return EdgarSnapshotResolver(base_dir)
+
+
+def get_identity_resolver(base_dir: Path = Depends(get_base_dir)) -> IdentityResolver:
+    """ticker→cik resolver. base_dir 의 EDGAR 저장본 기반(없으면 빈 맵→cik="" 폴백).
+
+    base_dir 를 Depends 로 받아 dependency_overrides(tmp) 가 그대로 반영되게 한다(_resolver_for 가
+    base_dir 별 캐시).
+    """
+    return _resolver_for(base_dir)

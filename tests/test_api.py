@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from stockpick.api import create_app
 from stockpick.api.deps import get_base_dir, get_learning_dir, get_source
+from stockpick.data.edgar import store_ticker_cik
 from stockpick.data.eodhd import EodhdAuthError, EodhdRateLimitError
 from stockpick.data.storage import write_daily_bars
 from stockpick.types import DailyBar, Exchange, Stock
@@ -398,3 +399,25 @@ def test_backtest_invalid_params_422(client: TestClient) -> None:
     assert client.get("/api/backtest", params={"top_n": 0}).status_code == 422  # ge=1 위반
     assert client.get("/api/backtest", params={"strategy": "bogus"}).status_code == 422  # Literal
     assert client.get("/api/backtest", params={"rebalance_freq": "weekly"}).status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# EDGAR cik enrich (#2) — ranking 응답 cik 채움(저장본 있으면)·없으면 graceful
+# ---------------------------------------------------------------------------
+
+
+def test_ranking_cik_enriched_from_edgar_store(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)  # NVDA·AAPL
+    store_ticker_cik({"NVDA": "0001045810", "AAPL": "0000320193"}, client.base_dir)
+    r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
+    assert r.status_code == 200
+    ciks = {e["ticker"]: e["cik"] for e in r.json()["entries"]}
+    assert ciks["NVDA"] == "0001045810"
+    assert ciks["AAPL"] == "0000320193"
+
+
+def test_ranking_cik_empty_without_edgar_store(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)  # EDGAR 저장본 없음 → cik="" 폴백(graceful)
+    r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
+    assert r.status_code == 200
+    assert all(e["cik"] == "" for e in r.json()["entries"])

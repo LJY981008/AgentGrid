@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
@@ -25,9 +25,8 @@ from ...backtest.adapters import ParquetPriceSeriesPort, PriceDerivedUniverse
 from ...backtest.benchmark import attach_benchmarks, equal_weight_universe
 from ...backtest.config import BacktestConfig
 from ...backtest.engine import run as run_backtest
-from ...backtest.fakes import StubIdentityResolver
 from ...backtest.strategy import EqualWeightTopN, ScoreWeightTopN, Strategy
-from ..deps import get_base_dir
+from ..deps import get_base_dir, get_identity_resolver
 from ..models import (
     BacktestMeta,
     BacktestMetrics,
@@ -35,6 +34,9 @@ from ..models import (
     BacktestResponse,
     EquityPoint,
 )
+
+if TYPE_CHECKING:
+    from ...backtest.ports import IdentityResolver
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,7 @@ def backtest(
     rebalance_freq: Literal["monthly", "quarterly"] = Query(
         default="monthly", description="리밸런싱 주기"
     ),
+    identity: IdentityResolver = Depends(get_identity_resolver),
 ) -> BacktestResponse:
     params = BacktestParams(
         strategy=strategy,
@@ -97,7 +100,7 @@ def backtest(
         config,
         price_port=price_port,
         universe_port=universe,
-        identity=StubIdentityResolver({}),  # cik 미해소 → ticker 앵커(caveat)
+        identity=identity,  # EdgarSnapshotResolver(저장본 없으면 빈 맵→cik="" 폴백)
         strategy=_STRATEGIES[strategy],
     )
     bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
