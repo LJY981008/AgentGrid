@@ -3,7 +3,7 @@
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-17(M3 API+webapp 반영).
 > 💡 **EODHD 무료티어 실측(2026-06-17)**: 가격 history=**최신 1년(251 거래일)만**, 과거 범위 요청은 무시. **유니버스는 무료 전체**(활성 51,705 + 폐지 57,825 = 109,530, 폐지 리스트 포함). 파이프라인 end-to-end(EodhdSource→Parquet→검증 게이트)가 무료 실데이터로 PASS. → **M2(룰·백테스트) 개발은 무료 1년치로 가능**, 전체 다년 history만 유료($19.99) 전환. 결제를 M2 끝까지 미룰 수 있음.
 
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **+ M3 착수·완료**(2c9ab10·b7c5b21): FastAPI API층(`src/stockpick/api/` — routes/{health,dataset,ingest,ranking,learning}로 수집·랭킹·학습 HTTP 노출, `ranking`에 `meta.validated=false` 하드코딩 §4.1 미검증 경고 상시) + webapp PWA(`webapp/` Vite8/React19, pages 5화면: Dashboard(랭킹)·Data·Universe·Learning·Backtest placeholder + 404) + compose 풀스택(postgres+app+web). **다음 = M2 백테스트 엔진**(현 `src/stockpick/backtest/`는 `__init__.py`만 있는 빈 패키지 · rolling as_of·CAGR/샤프/MDD·생존편향·거래비용) + EODHD 결제(다년 history) + cik 매핑(EDGAR).
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **+ M3 착수·완료**(2c9ab10·b7c5b21): FastAPI API층(`src/stockpick/api/` — routes/{health,dataset,ingest,ranking,learning}로 수집·랭킹·학습 HTTP 노출, `ranking`에 `meta.validated=false` 하드코딩 §4.1 미검증 경고 상시) + webapp PWA(`webapp/` Vite8/React19, pages 5화면: Dashboard(랭킹)·Data·Universe·Learning·Backtest placeholder + 404) + compose 풀스택(postgres+app+web). **+ M2 백테스트 엔진 골격 완료**(`src/stockpick/backtest/` 14모듈·자체구현 ADR-004·룩어헤드(진입 t+1)/생존편향(UniversePort)/폐지청산 가드·CAGR/Sharpe/MDD·IS/OOS 워크포워드·purge·decay·등가중 벤치, 173 passed, 데모 9종목 13기간 동작·룰이 등가중벤치 언더퍼폼=미검증 입증). **다음 = S6 데이터 신뢰성 게이트**(EODHD 결제 다년·전체유니버스·실폐지·cik 매핑) 후 백테스트 실검증 — 그 전 `meta.validated=true` 금지.
 > ⚠️ **데이터셋은 컨테이너 내부 `data/parquet`만**(호스트 미마운트·gitignore) — 컨테이너 재생성 시 소실, `python -m stockpick.data.ingest` 재실행으로 복원. 룰 데모/백테스트는 `docker compose exec` 로.
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
@@ -25,9 +25,9 @@
 - `src/stockpick/data/eodhd.py`: `EodhdSource(DataSource)` — `GET /api/eod/{TICKER}.{EX}`, `?api_token=` 쿼리 인증, raw OHLC+adjusted_close→adj_factor, 폐지 포함 유니버스. `tests/test_eodhd.py`.
 - `src/stockpick/data/_adjust.py`: 공유 `compute_adj_factor`(adjusted/raw 12자리 quantize). `src/stockpick/data/ingest.py`: 소스무관 generic 적재(history 무관·결제후 자동확장). `tests/test_{adjust,ingest}.py`.
 - `src/stockpick/rules/`: `factors.py`(모멘텀)·`ranking.py`(Top 랭킹·TopEntry)·`_scan.py`(룩어헤드 as_of 가드)·`demo.py`·`__main__.py`. `tests/test_rules.py`.
-- `src/stockpick/api/`: FastAPI(`app.py`·`deps.py`·`models.py` pydantic 계약·`routes/{health,dataset,ingest,ranking,learning}.py`). `python -m stockpick.api` 기동. `tests/test_api.py`. ⚠️ ranking `meta.validated=false` 상시(backtest 미구현).
+- `src/stockpick/api/`: FastAPI(`app.py`·`deps.py`·`models.py` pydantic 계약·`routes/{health,dataset,ingest,ranking,learning}.py`). `python -m stockpick.api` 기동. `tests/test_api.py`. ⚠️ ranking `meta.validated=false` 상시(백테스트 엔진은 구현됐으나 S6 미통과·골격이라 룰 미입증).
 - `webapp/`: PWA(Vite8/React19/react-router7/TS) — `src/{api,components,pages}`, 5 nav 화면+404. compose `web` 서비스.
-- `src/stockpick/backtest/`: ⚠️ **빈 패키지**(`__init__.py`만) — M2 백테스트 엔진 미구현(다음 작업).
+- `src/stockpick/backtest/`: **M2 엔진 골격**(config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo). 룩어헤드(진입 t+1)·생존편향(UniversePort.constituents)·폐지청산(recovery_rate)·IS/OOS 워크포워드·purge·decay·등가중 벤치. ⚠️ 골격 유니버스=가격기반(FakeUniversePort)·cik 미해소 — 실데이터(종목마스터·ticker_history)는 S6 후.
 - 명세: `docs/apis/{tiingo,eodhd}/`(tiingo 16섹션·eodhd 62섹션). 규칙: `.claude/rules/api-spec-reference.md`(data/** 편집 시 자동 로드).
 - **검증됨**: 라이브 5종목(AAPL/NVDA/TSLA/MSFT/JNJ)×2124행, 분할 교차검증 통과(AAPL 4:1 adj 0.2425·NVDA 10:1 0.0998·TSLA 3:1 0.3333), 중복 0.
 
@@ -74,5 +74,5 @@
 ## 핵심 파일 인덱스
 - 결정: `docs/decisions/ADR-001~003`. 기획: `docs/plans/stock-1st_plan.md`(기준선)·`M1-데이터파이프라인.md`(스펙)·`PLAN_STATUS.md`(현황).
 - 리서치: `docs/research/2026-06-16-미국주식-데이터소스.md`·`2026-06-17-webapp-stack-버전.md`. 명세: `docs/apis/{tiingo,eodhd}/`.
-- 코드: `src/stockpick/{types.py, data/{source,tiingo,eodhd,_adjust,ingest,storage,pilot}.py, rules/{factors,ranking,_scan}.py, api/{app,deps,models,routes/*}.py}` + `webapp/src/`. backtest/는 스텁(미구현). 계약 규칙: `.claude/rules/{python-conventions,api-spec-reference,logging-rules,webapp-conventions}.md`.
+- 코드: `src/stockpick/{types.py, data/{source,tiingo,eodhd,_adjust,ingest,storage,pilot}.py, rules/{factors,ranking,_scan}.py, api/{app,deps,models,routes/*}.py, backtest/{config,calendar,costs,strategy,ports,adapters,fakes,metrics,engine,benchmark,validation,demo}.py}` + `webapp/src/`. 계약 규칙: `.claude/rules/{python-conventions,api-spec-reference,logging-rules,webapp-conventions}.md`.
 - 커밋 흐름: 7d60ab9(M0)→606ba0b(M1 S0-S1)→8e5d136(미장아키)→24b030b(Docker)→2f4d496(계약)→e57b8d6·982574d(Tiingo명세)→61b55c0(어댑터)→0f69a53(저장·파일럿)→096e7f3(키주입)→11fedce(EODHD확정).
