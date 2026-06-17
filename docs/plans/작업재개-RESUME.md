@@ -3,7 +3,7 @@
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 2026-06-17(M3 API+webapp 반영).
 > 💡 **EODHD 무료티어 실측(2026-06-17)**: 가격 history=**최신 1년(251 거래일)만**, 과거 범위 요청은 무시. **유니버스는 무료 전체**(활성 51,705 + 폐지 57,825 = 109,530, 폐지 리스트 포함). 파이프라인 end-to-end(EodhdSource→Parquet→검증 게이트)가 무료 실데이터로 PASS. → **M2(룰·백테스트) 개발은 무료 1년치로 가능**, 전체 다년 history만 유료($19.99) 전환. 결제를 M2 끝까지 미룰 수 있음.
 
-> **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **+ M3 착수·완료**(2c9ab10·b7c5b21): FastAPI API층(`src/stockpick/api/` — routes/{health,dataset,ingest,ranking,learning}로 수집·랭킹·학습 HTTP 노출, `ranking`에 `meta.validated=false` 하드코딩 §4.1 미검증 경고 상시) + webapp PWA(`webapp/` Vite8/React19, pages 5화면: Dashboard(랭킹)·Data·Universe·Learning·Backtest placeholder + 404) + compose 풀스택(postgres+app+web). **+ M2 백테스트 엔진 골격 완료**(`src/stockpick/backtest/` 14모듈·자체구현 ADR-004·룩어헤드(진입 t+1)/생존편향(UniversePort)/폐지청산 가드·CAGR/Sharpe/MDD·IS/OOS 워크포워드·purge·decay·등가중 벤치, 173 passed, 데모 9종목 13기간 동작·룰이 등가중벤치 언더퍼폼=미검증 입증). **다음 = S6 데이터 신뢰성 게이트**(EODHD 결제 다년·전체유니버스·실폐지·cik 매핑) 후 백테스트 실검증 — 그 전 `meta.validated=true` 금지.
+> **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **+ M3 착수·완료**(2c9ab10·b7c5b21): FastAPI API층(`src/stockpick/api/` — routes/{health,dataset,ingest,ranking,learning}로 수집·랭킹·학습 HTTP 노출, `ranking`에 `meta.validated=false` 하드코딩 §4.1 미검증 경고 상시) + webapp PWA(`webapp/` Vite8/React19, pages 5화면: Dashboard(랭킹)·Data·Universe·Learning·Backtest placeholder + 404) + compose 풀스택(postgres+app+web). **+ M2 백테스트 엔진 골격 완료**(`src/stockpick/backtest/` 14모듈·자체구현 ADR-004·룩어헤드(진입 t+1)/생존편향(UniversePort)/폐지청산 가드·CAGR/Sharpe/MDD·IS/OOS 워크포워드·purge·decay·등가중 벤치, 173 passed, 데모 9종목 13기간 동작·룰이 등가중벤치 언더퍼폼=미검증 입증). **+ M3 후속 완료**(#4·#2·#5, 푸시됨): `/api/backtest`+BacktestPage(Recharts 자산곡선·벤치·미검증경고) · EDGAR cik resolver(`data/edgar`·`EdgarSnapshotResolver`, 라이브 10,414건·`/api/ranking` 실 CIK) · 리밸 루프 공유헬퍼(`calendar.holding_periods`). 197 passed. **다음 = S6 데이터 신뢰성 게이트**(EODHD 결제 $19.99·다년·전체유니버스·실폐지) 후 백테스트 실검증 — 그 전 `meta.validated=true` 금지. 상세 백로그 ↓.
 > ⚠️ **데이터셋은 컨테이너 내부 `data/parquet`만**(호스트 미마운트·gitignore) — 컨테이너 재생성 시 소실, `python -m stockpick.data.ingest` 재실행으로 복원. 룰 데모/백테스트는 `docker compose exec` 로.
 
 ## 확정 결정 (변경 금지 — 근거는 ADR)
@@ -42,7 +42,21 @@
 
 ## 🎯 남은 작업 (순서·실행단위 — "이거 하자" 하면 바로)
 
-> ⚠️ 진행 순서 실측: EODHD 무료 1년치로 **M2 룰 수직슬라이스·M3 API/webapp을 먼저 구현**(데이터 신뢰성과 독립한 코드층). **남은 핵심 = M2 백테스트 엔진** — 생존편향·룩어헤드가 데이터 신뢰성에 직결되므로 TASK-E(전체 유니버스+게이트) 선행 필요.
+> ⚠️ 진행 순서 실측: 무료 1년치로 **M2 룰 슬라이스·M3 API/webapp·M2 백테스트 엔진 골격·#4·#2·#5 까지 코드층 완료**(데이터 신뢰성과 독립). **남은 핵심 = 결제 후 데이터 신뢰성(S6) + 백테스트 실검증** — 생존편향·룩어헤드는 실데이터(폐지 포함)라야 의미.
+
+### 📋 후속 백로그 (M2 엔진+#4·#2·#5 후 — 영속 todo)
+
+> 💰 = EODHD 결제($19.99) 필수 / 🔮 = 무료 가능하나 가치는 데이터 후 / 🧹 = 코드 품질
+
+- [ ] 💰 **TASK-E/S5**: EODHD 결제 → 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted)
+- [ ] 💰 **실 UniversePort**: 종목마스터 기반 `UniversePort`(현 골격 `PriceDerivedUniverse` 가격기반 교체 — survivorship 정답)
+- [ ] 💰 **S6 신뢰성 게이트** 통과 → 백테스트 수치 신뢰 → `meta.validated=true` 전환(§4.1)
+- [ ] 🔮 **TickerHistoryResolver**: 시점별 ticker↔cik(SEC submissions 이력 — ticker 재사용 생존편향 정답). 현 `EdgarSnapshotResolver`는 현재 스냅샷만
+- [ ] 🔮 **EDGAR 재무층**: XBRL companyfacts·edgartools(미설치)·PER/ROE 등 재무팩터. 명세 `docs/apis/sec-edgar` forward_pointers
+- [ ] 🔮 **walk-forward·decay UI**: BacktestPage 에 IS/OOS·민감도(다년 데이터라야 통계 유의) / 파라미터 전체폼
+- [ ] 🧹 **recharts 청크 코드스플릿**(>500KB) · 거래비용/벤치 비대칭 등 리뷰 Open Question(work-history 참조)
+
+> 위 백로그 원천 = 각 work-history "후속" 섹션(2026-06-17 M2백테스트·#4·#2·#5). 이 목록이 단일 진입점.
 
 ### TASK-A: EODHD 명세 캐처 ✅ **완료**(커밋 397b244)
 - `docs/apis/eodhd/` 62섹션 JSON + `_index.json` + README(HOME 링크). 워크플로우 `eodhd-spec-capture`(discover→capture). 189 엔드포인트, OK 54/PARTIAL 8.
