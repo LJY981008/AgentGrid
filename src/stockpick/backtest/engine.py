@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import bisect
 import logging
 from dataclasses import replace
 from decimal import Decimal
@@ -50,10 +49,12 @@ def run(
     """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터)."""
     full = price_port.full_series()
     exchanges = price_port.ticker_exchanges()
-    all_days = price_port.trading_days()
-    in_range = [d for d in all_days if config.start <= d <= config.end]
-    reb = calendar.rebalance_dates(in_range, freq=config.rebalance_freq)
-    last_day = in_range[-1] if in_range else None
+    plan = calendar.holding_periods(
+        price_port.trading_days(),
+        start=config.start,
+        end=config.end,
+        freq=config.rebalance_freq,
+    )
 
     equity = Decimal(1)
     curve: list[tuple[date, Decimal]] = []
@@ -65,21 +66,10 @@ def run(
     prev_weights: dict[str, Decimal] = {}
 
     # 초기 자본 앵커 — MDD 가 첫 기간 낙폭을 포착하고 total_return 기준점이 1.0 이 되도록.
-    if reb and last_day is not None:
-        curve.append((in_range[0], equity))
+    if plan.anchor is not None:
+        curve.append((plan.anchor, equity))
 
-    for i, t in enumerate(reb):
-        entry_day = _next_day(all_days, t)
-        if entry_day is None or last_day is None:
-            break
-        next_reb = reb[i + 1] if i + 1 < len(reb) else None
-        exit_day = _next_day(all_days, next_reb) if next_reb is not None else last_day
-        if exit_day is None:
-            exit_day = last_day
-        if entry_day > exit_day:
-            # 진입일이 청산일을 넘으면 보유 구간 없음(마지막 리밸 직후 데이터 끝) — 건너뜀.
-            continue
-
+    for t, entry_day, exit_day in plan.periods:
         ranked = _rank_at(config, price_port, universe_port, identity, exchanges, t)
         weights = strategy.weights(ranked, as_of=t)
         key_to_ticker = {(e.cik or e.ticker): e.ticker for e in ranked}
@@ -119,7 +109,7 @@ def run(
     n_periods = len(period_returns)
     logger.info(
         "백테스트 완료: 리밸=%d, 보유기간=%d, 폐지청산=%d, skip=%d, 총회전=%s, 최종equity=%s",
-        len(reb),
+        len(plan.periods),
         n_periods,
         n_delisted,
         n_skipped,
@@ -169,12 +159,6 @@ def _rank_at(
     )
     # cik 앵커 enrich(가능 시) — 생존편향 ticker 재사용 오조인 방지. 미해소면 "" 유지(caveat).
     return [replace(e, cik=identity.cik_for(e.ticker, on=t) or e.cik) for e in ranked]
-
-
-def _next_day(days: list[date], after: date) -> date | None:
-    """days 에서 after **초과** 첫 거래일(진입 t+1·청산 t'+1 규칙). 없으면 None."""
-    idx = bisect.bisect_right(days, after)
-    return days[idx] if idx < len(days) else None
 
 
 def _turnover(old: dict[str, Decimal], new: dict[str, Decimal]) -> Decimal:

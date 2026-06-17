@@ -26,3 +26,4 @@
 | 2026-06-17 | M2 백테스트 엔진 골격 — 자체구현(ADR-004) backtest/ 14모듈: 리밸·forward-return·폐지청산·CAGR/Sharpe/MDD·IS/OOS·decay·등가중벤치. 적대적 금융리뷰 2회 반영. 173 passed·데모 9종목 동작 | 플랜모드 승인 | [[2026-06-17-M2-백테스트엔진]] |
 | 2026-06-17 | 백테스트 API 노출 + webapp BacktestPage 교체(#4) — GET /api/backtest + 프론트 자산곡선(Recharts)·지표·벤치·미검증경고. PriceDerivedUniverse 신설(demo smell 제거) | 플랜모드 승인 | [[2026-06-17-백테스트-API-webapp]] |
 | 2026-06-17 | EDGAR cik resolver(#2) — SEC company_tickers.json(무료·키없음·User-Agent) 적재→저장→읽기. EdgarSnapshotResolver(IdentityResolver 실전)·Stub 교체·ranking/backtest cik enrich. 현재 스냅샷(ticker_history 후속) | 플랜모드 승인 | [[2026-06-17-EDGAR-cik-resolver]] |
+| 2026-06-17 | 백테스트 리밸 루프 공유 헬퍼(#5 리팩터) — engine/benchmark 복제 루프를 calendar.holding_periods(회계 경계 단일출처)로 추출. 동작 불변(197 passed). 드리프트 리스크 제거 | 리팩터 | [[2026-06-17-백테스트-루프-공유헬퍼]] |

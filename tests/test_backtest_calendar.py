@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from stockpick.backtest.calendar import rebalance_dates
+from stockpick.backtest.calendar import holding_periods, rebalance_dates
 
 
 def _trading_days(start: date, n: int) -> list[date]:
@@ -14,6 +14,28 @@ def _trading_days(start: date, n: int) -> list[date]:
             days.append(d)
         d += timedelta(days=1)
     return days
+
+
+def test_holding_periods_entry_is_day_after_rebalance() -> None:
+    # 진입 = 리밸일 t 다음 거래일(룩어헤드 t+1). 청산 = 다음 리밸의 진입일. 앵커 = 첫 거래일.
+    td = _trading_days(date(2024, 1, 1), 200)
+    plan = holding_periods(td, start=td[0], end=td[-1], freq="monthly")
+    reb = rebalance_dates(td, freq="monthly")
+    assert plan.anchor == td[0]
+    assert len(plan.periods) >= 1
+    for t, entry, exit_ in plan.periods:
+        assert t in reb  # 리밸일
+        assert entry > t  # 진입은 t 초과(t+1 — 동시성 누설 차단)
+        assert entry <= exit_  # 유효 구간만
+    # 인접 구간 seam: 한 구간 청산 = 다음 구간 진입(겹침/공백 없음)
+    for (_t1, _e1, x1), (_t2, e2, _x2) in zip(plan.periods, plan.periods[1:], strict=False):
+        assert x1 == e2
+
+
+def test_holding_periods_empty_when_no_data() -> None:
+    plan = holding_periods([], start=date(2024, 1, 1), end=date(2024, 12, 31), freq="monthly")
+    assert plan.anchor is None
+    assert plan.periods == []
 
 
 def test_monthly_picks_first_trading_day_of_each_month() -> None:

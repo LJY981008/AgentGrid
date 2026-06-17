@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from . import calendar
-from .engine import _holding_period_return, _next_day
+from .engine import _holding_period_return
 from .metrics import compute_metrics
 
 if TYPE_CHECKING:
@@ -41,29 +41,21 @@ def equal_weight_universe(
 ) -> BacktestResult:
     """매 리밸 as_of=t 거래가능 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계."""
     full = price_port.full_series()
-    all_days = price_port.trading_days()
-    in_range = [d for d in all_days if config.start <= d <= config.end]
-    reb = calendar.rebalance_dates(in_range, freq=config.rebalance_freq)
-    last_day = in_range[-1] if in_range else None
+    plan = calendar.holding_periods(
+        price_port.trading_days(),
+        start=config.start,
+        end=config.end,
+        freq=config.rebalance_freq,
+    )
 
     equity = Decimal(1)
     curve: list[tuple[date, Decimal]] = []
     period_returns: list[Decimal] = []
     n_delisted = 0
-    if reb and last_day is not None:
-        curve.append((in_range[0], equity))
+    if plan.anchor is not None:
+        curve.append((plan.anchor, equity))
 
-    for i, t in enumerate(reb):
-        entry_day = _next_day(all_days, t)
-        if entry_day is None or last_day is None:
-            break
-        next_reb = reb[i + 1] if i + 1 < len(reb) else None
-        exit_day = _next_day(all_days, next_reb) if next_reb is not None else last_day
-        if exit_day is None:
-            exit_day = last_day
-        if entry_day > exit_day:
-            continue
-
+    for t, entry_day, exit_day in plan.periods:
         tradable = universe_port.constituents(as_of=t)
         loaded = price_port.load(as_of=t)
         members = [tk for tk in tradable if loaded.get(tk)]
