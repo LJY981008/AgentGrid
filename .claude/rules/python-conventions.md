@@ -11,7 +11,8 @@ paths: ["src/**/*.py", "tests/**/*.py", "pyproject.toml"]
 
 - Python ≥3.12 / **uv** 패키지·환경 관리 / src 레이아웃(`src/stockpick/`)
 - 검증: `ruff check` + `ruff format --check` + `mypy`(strict) + `pytest` — Stop 훅 자동(도구 설치 시)
-- 런타임 의존성은 `uv.lock` 실측 고정(현재: duckdb·httpx·pyarrow·fastapi·uvicorn[standard]) — 추측 고정 금지
+- 런타임 의존성은 `uv.lock` 실측 고정(현재: duckdb·httpx·pyarrow·fastapi·uvicorn[standard]·**alembic·psycopg[binary]**(S5-a PG)) — 추측 고정 금지
+- **PG 스키마 변경 = alembic 마이그레이션만**(`migrations/versions/`·[ADR-006]·`alembic upgrade head`). 직접 DDL 금지. PG18 기능은 raw SQL(op.execute). PG=파생 서빙(단방향 Parquet→PG·`data/db.py`), 직접 수정 금지
 
 ## 모듈 경계 (위반 금지 — AI 자동화 미래 확장 보존)
 

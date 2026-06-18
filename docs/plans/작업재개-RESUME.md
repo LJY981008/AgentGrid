@@ -49,7 +49,11 @@
 > 💰 = EODHD 결제 잠금해제(✅ **2026-06-18 결제 완료** — EOD Historical $19.99) → 이제 actionable / 🔮 = 무료 가능하나 가치는 데이터 후 / 🧹 = 코드 품질
 > ⚠️ EODHD 플랜 능력(허용/미허용) = [[../apis/eodhd/pricing_plan/PLANS|PLANS.md]]. 우리 플랜은 가격(EOD·수정주가·폐지·분할배당·30년+) 전부 ✅, **재무(Fundamentals)는 ❌** → 재무는 SEC EDGAR(#재무-1 구현됨). 결제만으로 validated=true 아님 — 다년 수집+S6 게이트 필요.
 
-- [ ] 💰→🟢 **TASK-E/S5**(결제됨·actionable): 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted)
+- [ ] 💰→🟢 **TASK-E/S5**(결제됨·actionable·**4분해 a→b→c→d**): 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted). 설계 `docs/superpowers/specs/2026-06-18-S5a-적재안전성-설계.md`
+  - [x] ✅ **S5-a 적재 안전성**(2026-06-18): PG 코어 스키마(alembic 첫 실사용·stock+ticker_history+daily_bar·ADR-006)·G1 write read-merge-write(소실 봉인)·`data/db.py`(Parquet→PG 단방향 동기·cik""≡NULL). 237 passed. [[../work-history/2026-06-18-S5a-적재안전성]]
+  - [ ] 🟢 **S5-b 종목마스터 채움**: `iter_universe` 실호출→유니버스 실측→stock/ticker_history UPSERT·expected 원천=마스터(G2)·ticker_history EXCLUDE 제약
+  - [ ] 🟢 **S5-c 벌크 오케스트레이션**: 유니버스 자동조회→적재 루프(G5)·체크포인트/재시도(G4)·검증 병목(G8)·실벌크 PG 동기. ⚠️ 진입점 configure_logging() 호출(G6)
+  - [ ] 🟢 **S5-d 실 UniversePort+S6**: 종목마스터 기반 UniversePort(G7)·S6 게이트→validated=true
 - [ ] 💰 **실 UniversePort**: 종목마스터 기반 `UniversePort`(현 골격 `PriceDerivedUniverse` 가격기반 교체 — survivorship 정답)
 - [ ] 💰 **S6 신뢰성 게이트** 통과 → 백테스트 수치 신뢰 → `meta.validated=true` 전환(§4.1)
 - [ ] 🔮 **TickerHistoryResolver**: 시점별 ticker↔cik(SEC submissions 이력 — ticker 재사용 생존편향 정답). 현 `EdgarSnapshotResolver`는 현재 스냅샷만

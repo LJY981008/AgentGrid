@@ -54,7 +54,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 버그·테스트/수집/백테스트 실패 | [debugging-discipline](.claude/skills/debugging-discipline/SKILL.md) | 추측 금지 + **이상결과 3분류**(버그/룩어헤드/생존편향) |
 | 하네스 변경 | [harness-update](.claude/skills/harness-update/SKILL.md) | 분류→배치→drift 매핑 |
 | 기획 작업 | `docs/plans/` (현황: [PLAN_STATUS.md](docs/plans/PLAN_STATUS.md)) | product-planner. 기준선 = stock-1st_plan |
-| 스키마 변경 | 마이그레이션 파일로만 (도구 미정 — 첫 작업 시 ADR, alembic 등) | 직접 DDL 은 pre-bash-guard 차단 |
+| 스키마 변경 | **alembic 마이그레이션으로만** (`migrations/versions/` — [ADR-006](docs/decisions/ADR-006-PG스키마-alembic-첫실사용.md) 첫 실사용·`docker compose exec app alembic upgrade head`) | 직접 DDL 은 pre-bash-guard 차단. PG18 기능은 raw SQL(op.execute) |
 
 ---
 
@@ -65,7 +65,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Tech Stack** (2026-06-16 전환):
 - Python ≥3.12 / **uv** + ruff + mypy(strict) + pytest — `pyproject.toml`, src 레이아웃(`src/stockpick/`)
 - 데이터(미국): 가격 **Tiingo**(파일럿)→**EODHD**(M2, [ADR-003](docs/decisions/ADR-003-M2-가격소스-EODHD.md)) / 재무 **SEC EDGAR**(filed=PIT)+edgartools ([ADR-002](docs/decisions/ADR-002-미국-데이터소스-아키텍처.md)). 식별=SEC EDGAR `company_tickers.json`(ticker→cik, 키없음·User-Agent=EDGAR_IDENTITY / `data/edgar.py`·`EdgarSnapshotResolver`). 명세=[docs/apis/](docs/apis/). 키=.env(TIINGO_API_KEY·EODHD_API_KEY·EDGAR_IDENTITY[키 아님·신원]). (구 한국 FDR/pykrx/KRX 보류)
-- 저장: **Parquet**(`pyarrow`)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙) — `compose.yaml`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
+- 저장: **Parquet**(`pyarrow`, 1차 진실원본)+**DuckDB**(백테스트 스캔) + **PostgreSQL 18**(운영 서빙·**alembic**+**psycopg3** S5-a, 단방향 Parquet→PG 동기) — `compose.yaml`·`migrations/`. HTTP=`httpx`. TimescaleDB 비채택. 런타임 deps 는 `uv add` 실측 고정(uv.lock)
 - API(M3): **FastAPI**+**uvicorn[standard]**(`src/stockpick/api/`) — 수집·랭킹·학습을 HTTP 노출. pydantic 응답계약 = 프론트 단일 출처. CORS=localhost:5173(컨테이너 내부 web). ⚠️ ranking `meta.validated=false`·키 비노출 — **validated=false 사유 = 백테스트 엔진은 구현(M2 골격)됐으나 현재 무료 1년치만 적재·S6 데이터 신뢰성 게이트 미통과라 룰 미입증. EODHD 결제 완료(2026-06-18 EOD Historical $19.99)됐으나 결제≠검증 — 다년 데이터 수집+S6 통과 전까지 false 고정**(§4.1 미검증 경고 상시)
 - 웹앱(M3 — 구현 완료): PWA (`webapp/`) — **Vite8/React19/react-router7/TS**, 5 nav 화면(랭킹=Dashboard·데이터·유니버스·학습·백테스트 placeholder)+404
 - 모듈 경계: `data`(수집·저장) / `rules`(Top20 랭킹) / `backtest`(검증 — M2 엔진 구현·골격, S6 게이트 후 신뢰) → `api`/`webapp`(상위 — 하위 조합) — 하위는 상위 import 금지
@@ -115,7 +115,8 @@ docker compose exec app pytest -q                   # 테스트
 | `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(단일 FROM·2단계 uv sync로 의존성/소스 레이어 분리·non-root·BuildKit 캐시) |
 | `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume) + `web`(node:22 Vite dev:5174→5173) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
-| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6) + `data/`·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay) |
+| `migrations/` | alembic PG 마이그레이션(S5-a·ADR-006) — `env.py`(DATABASE_URL→psycopg3)·`versions/`. compose app 에 마운트. 직접 DDL 금지 |
+| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay) |
 | `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M3 활성) — Vite8/React19/router7/TS, `src/{api,components,pages}`. 5화면(랭킹·데이터·유니버스·학습·백테스트 placeholder). 읽기위주·투자로직 프론트 중복 금지([webapp-conventions](.claude/rules/webapp-conventions.md)) |
