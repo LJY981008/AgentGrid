@@ -25,12 +25,21 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from ._financials import latest_as_of
+
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import date
 
+    from ..types import FinancialFact
     from ._scan import PricePoint
 
 logger = logging.getLogger(__name__)
+
+# 슬라이스 concept(ADR-005) — edgar._SLICE_CONCEPTS 의 bare tag 와 일치해야 함(드리프트 주의).
+_CONCEPT_EQUITY = "StockholdersEquity"  # 자기자본(USD) — ROE 분모·P/B 분모 BVPS
+_CONCEPT_NET_INCOME = "NetIncomeLoss"  # 순이익(USD·연간) — ROE 분자
+_CONCEPT_SHARES = "EntityCommonStockSharesOutstanding"  # 주식수(dei) — P/B BVPS 분모
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,3 +190,98 @@ def momentum_universe(
         skip_recent_days,
     )
     return scores
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialScore:
+    """재무 팩터 — ROE(퀄리티)·P/B(밸류) + 산출 근거(투명성·재현성).
+
+    ROE = 최신 연간(FY) NetIncomeLoss / 최신 연간 StockholdersEquity (슬라이스 단순화 — TTM
+    4분기합은 후속). P/B = price(as_of) / BVPS, BVPS = StockholdersEquity / shares
+    (= 시가총액/자기자본). 산출 불가(결측·분모<=0·가격 결측)→해당 값 None(조용한 추측 금지).
+
+    ⚠️ 이 점수는 정보 노출용이다 — 모멘텀과 **결합·가중 안 함**(§9-2 가중치는 백테스트가 결정).
+    재무팩터 노출이 검증을 뜻하지 않는다(meta.validated=false 불변).
+
+    근거 필드(None=미해소): equity/net_income/shares/price = 사용한 원시 입력, *_period =
+    선택된 fiscal_period(룩어헤드 추적 — disclosed_at<=as_of 중 최신).
+    """
+
+    roe: Decimal | None
+    pb: Decimal | None
+    equity: Decimal | None
+    net_income: Decimal | None
+    shares: Decimal | None
+    price: Decimal | None
+    equity_period: str | None
+    net_income_period: str | None
+
+
+def financial_factors(
+    facts: list[FinancialFact],
+    *,
+    ciks: Iterable[str],
+    as_of: date,
+    price_by_cik: dict[str, Decimal] | None = None,
+) -> dict[str, FinancialScore]:
+    """cik 별 재무 팩터(ROE·P/B) 산출. 순수 계산(facts·price 입력, 네트워크 없음)·PIT.
+
+    각 cik 에 대해 `_financials.latest_as_of`(disclosed_at<=as_of) 로 PIT 선택:
+      - equity = 최신 연간 StockholdersEquity (annual_only — ROE/BVPS 기준)
+      - net_income = 최신 연간 NetIncomeLoss (annual_only)
+      - shares = 최신 EntityCommonStockSharesOutstanding (annual_only=False — 최신 가용)
+    ROE = net_income/equity (equity>0), P/B = price*shares/equity (price·equity>0·shares>0).
+    분모<=0·결측·가격 결측 → 해당 값 None. price_by_cik 없거나 cik 미포함 → pb=None.
+    미해소 cik 도 맵에 남긴다(전부 None — 랭킹이 "산출 불가"를 알게, 조용한 누락 금지).
+    """
+    prices = price_by_cik or {}
+    result: dict[str, FinancialScore] = {}
+    for cik in ciks:
+        equity_fact = latest_as_of(
+            facts, concept=_CONCEPT_EQUITY, cik=cik, as_of=as_of, annual_only=True
+        )
+        income_fact = latest_as_of(
+            facts, concept=_CONCEPT_NET_INCOME, cik=cik, as_of=as_of, annual_only=True
+        )
+        shares_fact = latest_as_of(facts, concept=_CONCEPT_SHARES, cik=cik, as_of=as_of)
+        price = prices.get(cik)
+
+        equity = equity_fact.value if equity_fact is not None else None
+        net_income = income_fact.value if income_fact is not None else None
+        shares = shares_fact.value if shares_fact is not None else None
+
+        roe: Decimal | None = None
+        if equity is not None and equity > 0 and net_income is not None:
+            roe = net_income / equity
+
+        pb: Decimal | None = None
+        if (
+            price is not None
+            and equity is not None
+            and equity > 0
+            and shares is not None
+            and shares > 0
+        ):
+            pb = price * shares / equity
+
+        result[cik] = FinancialScore(
+            roe=roe,
+            pb=pb,
+            equity=equity,
+            net_income=net_income,
+            shares=shares,
+            price=price,
+            equity_period=equity_fact.fiscal_period if equity_fact is not None else None,
+            net_income_period=income_fact.fiscal_period if income_fact is not None else None,
+        )
+
+    with_roe = sum(1 for s in result.values() if s.roe is not None)
+    with_pb = sum(1 for s in result.values() if s.pb is not None)
+    logger.info(
+        "재무 팩터 산출: cik=%d, ROE해소=%d, P/B해소=%d, as_of=%s",
+        len(result),
+        with_roe,
+        with_pb,
+        as_of,
+    )
+    return result
