@@ -93,8 +93,24 @@ class TopEntry:
     factors: dict[str, float]
 
 
-# ⚠️ Financial 타입은 이번 범위(B-contract) 제외 — EDGAR 재무는 후속 단계(M2 직전).
-# M1 §3 스키마의 financial 설계는 그대로 유효: PK(cik, fiscal_period, disclosed_at)로
-# **fiscal_period(회계기간) ≠ disclosed_at(EDGAR filed=공시일) 분리**, PIT 조회는
-# disclosed_at <= t (룩어헤드 차단), 정정공시는 행 추가로 원본 보존. EDGAR 의 각 fact `filed`
-# 가 disclosed_at 과 1:1 매핑된다(ADR-002). 코드화는 재무층 착수 시 이 주석을 근거로 한다.
+@dataclass(frozen=True, slots=True)
+class FinancialFact:
+    """SEC EDGAR XBRL 재무 단일 fact — companyfacts 직접 파싱 산출(#재무-1, ADR-005).
+
+    M1 §3 financial 설계의 코드화 + concept 차원 추가. 자연키 =
+    (cik, concept, fiscal_period, disclosed_at) — 정정공시(amendment)는 같은 회계기간을
+    다른 disclosed_at 으로 갖는 **별 행**(원본 보존). PIT(룩어헤드 BLOCKING): 시점 t 결정엔
+    `disclosed_at <= t` 인 fact 만 — fiscal_period 말(period_end)이 아니라 공시일
+    (EDGAR `filed`)이 기준(재무는 분기말 후 수주~수개월 뒤 공시 — end 기준이면 미래 누설).
+
+    명세 = `docs/apis/sec-edgar/companyfacts.json`(진실 원천). concept = us-gaap/dei 태그
+    bare name(예 "StockholdersEquity"·"NetIncomeLoss"·"EntityCommonStockSharesOutstanding").
+    value = Decimal(float 금지 — 금액·주식수 정밀). 음수 가능(적자 NetIncomeLoss).
+    """
+
+    cik: str  # 안정 식별자(10자리 zero-pad) — ticker→cik 조인 기준
+    concept: str  # XBRL 태그 bare name(taxonomy 제외 — 슬라이스 3종은 이름 충돌 없음)
+    fiscal_period: str  # fy+fp 라벨(예 "2024-FY"·"2024-Q3") — 연/분기 판별·표시. "-FY"=연간
+    period_end: date  # 회계기간 말(EDGAR `end`) — 기간 최신성 정렬 기준(PIT 게이트 아님)
+    disclosed_at: date  # EDGAR `filed`(공시일) — PIT 게이트(disclosed_at<=as_of 룩어헤드 차단)
+    value: Decimal
