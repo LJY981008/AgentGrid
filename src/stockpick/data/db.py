@@ -26,8 +26,10 @@ from typing import TYPE_CHECKING
 import psycopg
 from psycopg.rows import TupleRow
 
+from ..types import Exchange
+
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from datetime import date
     from pathlib import Path
 
@@ -110,6 +112,50 @@ def master_tickers(conn: psycopg.Connection[TupleRow]) -> list[str]:
     with conn.cursor() as cur:
         cur.execute("SELECT DISTINCT ticker FROM stock ORDER BY ticker")
         return [str(row[0]) for row in cur.fetchall()]
+
+
+def master_securities(conn: psycopg.Connection[TupleRow]) -> list[tuple[str, Exchange, str]]:
+    """종목마스터 (ticker, exchange, listing_status) — S5-c 벌크 가격 적재 대상.
+
+    exchange 문자열을 `Exchange` enum 으로 좁힌다(write_daily_bars 가 enum 요구). 알 수 없는 값은
+    추측 매핑 금지·명시 실패(_scan.load_ticker_exchanges 와 일관).
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT ticker, exchange, listing_status FROM stock ORDER BY ticker")
+        rows = cur.fetchall()
+    out: list[tuple[str, Exchange, str]] = []
+    for row in rows:
+        ticker, exchange_str, status = str(row[0]), str(row[1]), str(row[2])
+        out.append((ticker, Exchange(exchange_str), status))
+    return out
+
+
+def update_stock_dates(
+    conn: psycopg.Connection[TupleRow],
+    date_map: Mapping[str, tuple[date, date]],
+) -> int:
+    """stock 날짜 backfill(S5-c) — listed_at=min(전체)·delisted_at=max(delisted 만). 반환=갱신 수.
+
+    date_map = `{ticker: (min, max)}`(Parquet 가격). ⚠️ delisted_at·delisted_at_source 는
+    `listing_status='delisted'` 행만(active 는 NULL 유지 — max=최근거래일 폐지 오표시 방지).
+    delisted 의 max=마지막 거래일=**추정 폐지일**이라 source 마킹(명세 폐지일 미제공).
+    ⚠️ ticker 유일 가정(마스터 실측 유일·UNIQUE(ticker) 없음) — 호출부 사전 assert.
+    """
+    if not date_map:
+        return 0
+    sql = """
+        UPDATE stock SET
+            listed_at = %s,
+            delisted_at = CASE WHEN listing_status = 'delisted' THEN %s ELSE delisted_at END,
+            delisted_at_source = CASE WHEN listing_status = 'delisted'
+                THEN 'eodhd_last_bar_estimate' ELSE delisted_at_source END
+        WHERE ticker = %s
+    """
+    params = [(mn, mx, ticker) for ticker, (mn, mx) in date_map.items()]
+    with conn.cursor() as cur:
+        cur.executemany(sql, params)
+    logger.info("stock 날짜 backfill: %d ticker(listed_at·delisted_at[delisted])", len(date_map))
+    return len(date_map)
 
 
 def upsert_ticker_history(

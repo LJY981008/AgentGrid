@@ -21,6 +21,7 @@ from stockpick.data.storage import (
     PrecisionError,
     VerificationError,
     build_expected,
+    load_trade_date_bounds,
     verify_parquet,
     write_daily_bars,
 )
@@ -176,6 +177,22 @@ def test_same_partition_different_tickers_preserved(tmp_path: Path) -> None:
     assert report.ticker_count == 2  # 둘 다 보존(1 이 아님 — 소실 회귀 차단)
     assert report.row_count == 2
     assert report.passed
+
+
+def test_load_trade_date_bounds(tmp_path: Path) -> None:
+    bars = [
+        _bar("AAA", date(2020, 1, 2)),
+        _bar("AAA", date(2022, 6, 3)),
+        _bar("BBB", date(2019, 5, 1)),
+    ]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="eodhd")
+    bounds = load_trade_date_bounds(tmp_path)
+    assert bounds["AAA"] == (date(2020, 1, 2), date(2022, 6, 3))  # min·max
+    assert bounds["BBB"] == (date(2019, 5, 1), date(2019, 5, 1))  # 단일 거래일
+
+
+def test_load_trade_date_bounds_empty(tmp_path: Path) -> None:
+    assert load_trade_date_bounds(tmp_path) == {}
 
 
 def test_verify_passes_clean_data(tmp_path: Path) -> None:

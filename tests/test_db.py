@@ -208,3 +208,46 @@ def test_master_tickers(conn: _Conn) -> None:
     tickers = db.master_tickers(conn)
     assert "ZZM1" in tickers
     assert "ZZM2" in tickers
+
+
+def test_master_securities(conn: _Conn) -> None:
+    db.upsert_stocks(
+        conn, [_stock("ZZA", exchange=Exchange.NASDAQ)], source="eodhd", ingested_at=_STAMP
+    )
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZD", exchange=Exchange.NYSE)],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    by = {t: (ex, st) for t, ex, st in db.master_securities(conn)}
+    assert by["ZZA"] == (Exchange.NASDAQ, "active")  # exchange→enum·status
+    assert by["ZZD"] == (Exchange.NYSE, "delisted")
+
+
+def test_update_stock_dates(conn: _Conn) -> None:
+    # active: listed_at 만·delisted_at NULL. delisted: listed_at+delisted_at(max)+source.
+    db.upsert_stocks(conn, [_stock("ZZACT", cik="0000000555")], source="eodhd", ingested_at=_STAMP)
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZDEL2", cik="0000000556")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    db.update_stock_dates(
+        conn,
+        {
+            "ZZACT": (date(2010, 1, 4), date(2026, 6, 16)),
+            "ZZDEL2": (date(2001, 3, 1), date(2008, 9, 15)),
+        },
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT ticker, listed_at, delisted_at, delisted_at_source FROM stock "
+            "WHERE ticker IN ('ZZACT', 'ZZDEL2')"
+        )
+        rows = {r[0]: (r[1], r[2], r[3]) for r in cur.fetchall()}
+    assert rows["ZZACT"] == (date(2010, 1, 4), None, None)  # active — delisted_at NULL 유지
+    assert rows["ZZDEL2"] == (date(2001, 3, 1), date(2008, 9, 15), "eodhd_last_bar_estimate")

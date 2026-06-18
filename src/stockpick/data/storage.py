@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -88,6 +88,10 @@ _SQL_OHLC_VIOLATION: Final = (  # noqa: S608
 _SQL_TICKER_ROW_COUNTS: Final = f"SELECT ticker, count(*) {_FROM} GROUP BY ticker"  # noqa: S608
 # DISTINCT ticker 정렬 — EDGAR 재무 적재가 "가격 보유 종목"만 companyfacts 받도록(SEC 호출 최소).
 _SQL_DISTINCT_TICKERS: Final = f"SELECT DISTINCT ticker {_FROM} ORDER BY ticker"  # noqa: S608
+# ticker별 (min, max) trade_date — S5-c stock 날짜 backfill(listed_at/delisted_at) 입력.
+_SQL_TRADE_DATE_BOUNDS: Final = (  # noqa: S608
+    f"SELECT ticker, min(trade_date), max(trade_date) {_FROM} GROUP BY ticker"
+)
 
 
 class StorageError(RuntimeError):
@@ -548,3 +552,31 @@ def list_dataset_tickers(base_dir: Path) -> list[str]:
     finally:
         con.close()
     return [str(row[0]) for row in rows if row[0] is not None]
+
+
+def load_trade_date_bounds(base_dir: Path) -> dict[str, tuple[date, date]]:
+    """Parquet ticker별 (min, max) trade_date — S5-c stock 날짜 backfill 입력. 빈 트리면 빈 맵.
+
+    DuckDB GROUP BY 로 ticker당 최초·최종 거래일 추출(전체 트리 1회 스캔). 읽기 전용.
+    """
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.info("trade_date_bounds 스캔 대상 없음 — 빈 맵: dataset=%s", dataset_root)
+        return {}
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(_SQL_TRADE_DATE_BOUNDS, {"glob": glob}).fetchall()
+    finally:
+        con.close()
+
+    bounds: dict[str, tuple[date, date]] = {}
+    for row in rows:
+        ticker, min_d, max_d = row
+        if isinstance(ticker, str) and isinstance(min_d, date) and isinstance(max_d, date):
+            bounds[ticker] = (min_d, max_d)
+    return bounds
