@@ -285,7 +285,10 @@ def write_daily_bars(
     신규와 병합**한 뒤 쓴다(통째 덮어쓰기 아님). 같은 (ticker, trade_date) 충돌은 **신규 값 우선**
     (adj_factor 정정 등 최신값 반영). 따라서 같은 ticker·연도를 연도분할 호출로 나눠 넘겨도(1월분
     호출 → 2월분만 호출) 이전 행이 보존된다(다년 적재는 본질적으로 연도분할 호출이라 BLOCKING).
-    쓰기는 temp 파일 → `os.replace`(atomic rename)로 중간 실패 시 기존 파일을 보존한다.
+    쓰기는 temp 파일 → `os.replace`(atomic rename)로 중간 실패 시 기존 파일을 보존한다. ⚠️ **단일
+    writer 가정**(1인 배치 적재) — 같은 (ticker,year)를 동시 write 하면 read-merge 사이 race 로
+    한쪽 소실 가능(동시성 락 없음). 프로세스 중단 시 `{ticker}.parquet.tmp` 잔존 가능(다음 스캔엔
+    비가시 — `*.parquet` 만 매치).
 
     ⚠️ ingested_at=None 이면 호출 시각(UTC)을 1회 고정해 모든 행에 동일 적용(같은 배치 = 같은 시각).
     """

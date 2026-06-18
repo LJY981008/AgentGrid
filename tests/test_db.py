@@ -97,6 +97,30 @@ def test_sync_daily_bars_idempotent(conn: _Conn, tmp_path: Path) -> None:
     assert _count(conn, "SELECT count(*) FROM daily_bar WHERE ticker = %s", ("ZZD",)) == 2  # 멱등
 
 
+def test_sync_daily_bars_decimal_precision(conn: _Conn, tmp_path: Path) -> None:
+    # 정밀 BLOCKING: DuckDB decimal128 → fetchall Decimal → PG NUMERIC(38,10/12) 무손실 round-trip.
+    # 정수 아닌 분수 가격·adj_factor 로 scale 보존 검증(float 다운캐스트면 깨짐).
+    bar = DailyBar(
+        ticker="ZZP",
+        trade_date=date(2024, 5, 1),
+        open=Decimal("129.0456"),
+        high=Decimal("130.1111"),
+        low=Decimal("128.0001"),
+        close=Decimal("129.5000"),
+        volume=1000,
+        value=None,
+        adj_factor=Decimal("0.987654321012"),  # scale 12 끝자리까지
+    )
+    write_daily_bars([bar], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="eodhd")
+    db.sync_daily_bars_from_parquet(conn, tmp_path)
+    with conn.cursor() as cur:
+        cur.execute("SELECT close, adj_factor FROM daily_bar WHERE ticker = %s", ("ZZP",))
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == Decimal("129.5000")  # close NUMERIC(38,10) — 분수 정밀 보존
+    assert row[1] == Decimal("0.987654321012")  # adj_factor NUMERIC(38,12) — scale 12 끝자리 보존
+
+
 def test_find_orphan_tickers(conn: _Conn, tmp_path: Path) -> None:
     write_daily_bars(
         [_bar("ZZORPHAN", date(2024, 4, 1))],

@@ -122,6 +122,10 @@ def sync_daily_bars_from_parquet(
 
     ⚠️ COPY 아님(ON CONFLICT 미지원). DuckDB 로 Parquet 스캔 → executemany UPSERT. 룩어헤드는
     여기서 안 거른다(전체 동기 — 시점 필터는 랭킹/백테스트 쿼리 책임). 빈 트리면 no-op. 반환=행수.
+
+    ⚠️ 현재 fetchall 로 전량 메모리 적재(소량 동기·단발 검증용). 다년·전체 유니버스 벌크 동기(S5-c)는
+    파티션 파일 단위/청크 스트리밍으로 재작성 필요(메모리 한계). ingested_at 은 Parquet 스탬프를
+    반영(재동기 시 갱신 — Parquet=1차 진실원본이라 무방).
     """
     dataset_root = base_dir / _DATASET_NAME
     files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
@@ -164,7 +168,12 @@ def sync_daily_bars_from_parquet(
 
 
 def find_orphan_tickers(conn: psycopg.Connection[TupleRow]) -> list[str]:
-    """daily_bar 에 있으나 stock 마스터에 없는 ticker(D2 — FK 미강제 대체 사후검증). 정렬 반환."""
+    """daily_bar 에 있으나 stock 마스터에 없는 ticker(D2 — FK 미강제 대체 사후검증). 정렬 반환.
+
+    ⚠️ ticker 조인 기반 **약한 휴리스틱** — ticker 는 시변·재사용(ADR-002)이라 시점 정확하지 않다
+    (폐지 후 타사 재취득 시 false negative). 시점 정확한 검증(trade_date 의 ticker_history 해소)은
+    S5-b reconciliation 책임. 현 단계는 "마스터에 ticker 자체가 없음" 정도의 sanity 만.
+    """
     with conn.cursor() as cur:
         cur.execute(
             "SELECT DISTINCT d.ticker FROM daily_bar d "
