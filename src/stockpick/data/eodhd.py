@@ -219,26 +219,78 @@ class EodhdSource:
             )
         return stocks
 
-    def _fetch_symbol_list(self, *, delisted: bool) -> list[Stock]:
+    def fetch_common_stock_universe(
+        self, *, include_delisted: bool = True
+    ) -> tuple[list[Stock], list[Stock]]:
+        """Common Stock 유니버스를 (활성, 폐지) 분리 반환 — S5-b 종목마스터용.
+
+        iter_universe 와 차이: (1) **Common Stock 만**(ETF/펀드/우선주 제외) (2) 활성·폐지를
+        **분리**(listing_status 구분 — iter_universe 는 병합). 분류는 클라 Type 필터(`keep_types`)가
+        1차·정답 보장이고, 서버 `type=common_stock` 는 페이로드 최적화(best-effort — 서버가 무시/미
+        결합해도 클라 필터가 정확). 활성이 0/의심스럽게 작으면 WARNING(빈 마스터 silent 실패 방지).
+        이 메서드는 EodhdSource 구체 API(DataSource Protocol 아님 — 유니버스 전수는 EODHD 만).
+        """
+        keep = frozenset({"common stock"})
+        active = self._fetch_symbol_list(
+            delisted=False, keep_types=keep, security_type="common_stock"
+        )
+        delisted = (
+            self._fetch_symbol_list(delisted=True, keep_types=keep, security_type="common_stock")
+            if include_delisted
+            else []
+        )
+        if not active:
+            logger.warning(
+                "EODHD Common Stock 유니버스: 활성 0개 — 서버 type= 오작동/빈 응답 의심"
+                "(빈 마스터 방지 점검 필요)"
+            )
+        logger.info(
+            "EODHD Common Stock 유니버스: 활성=%d, 폐지=%d(include_delisted=%s)",
+            len(active),
+            len(delisted),
+            include_delisted,
+        )
+        return active, delisted
+
+    def _fetch_symbol_list(
+        self,
+        *,
+        delisted: bool,
+        keep_types: frozenset[str] | None = None,
+        security_type: str | None = None,
+    ) -> list[Stock]:
         """`GET /exchange-symbol-list/US` 한 호출 → `list[Stock]`. delisted=True 면 폐지만 반환.
 
         명세 response_fields(Code/Name/Country/Exchange/Currency/Type/Isin)만 사용. Code/Name 결측
         행은 추측 채움 없이 WARNING 후 누락(조용한 채움 금지). cik 는 미제공 → 빈 문자열.
+
+        필터(S5-b): `keep_types`(예 {"common stock"}) 주면 응답 `Type` 정규화(`.lower()`) 비교로
+        **클라 1차 필터**(항상 정확). `security_type`(예 "common_stock") 주면 서버 `type=` 쿼리에
+        실어 페이로드 축소(best-effort). 둘은 다른 네임스페이스(서버=소문자언더바·클라=응답필드).
         """
         params: dict[str, str] = {"fmt": "json"}
         if delisted:
             params["delisted"] = "1"
+        if security_type is not None:
+            params["type"] = security_type  # 서버 최적화(best-effort) — 클라 keep_types 가 정답
         path = f"/exchange-symbol-list/{_DEFAULT_EXCHANGE_SUFFIX}"
         rows = self._get_json_array(path, params=params, context=path)
 
         stocks: list[Stock] = []
         dropped = 0
+        type_dropped = 0
         for row in rows:
             code = row.get("Code")
             name = row.get("Name")
             if not isinstance(code, str) or not code or not isinstance(name, str):
                 dropped += 1
                 continue
+            if keep_types is not None:
+                type_val = row.get("Type")
+                normalized = type_val.strip().lower() if isinstance(type_val, str) else ""
+                if normalized not in keep_types:
+                    type_dropped += 1
+                    continue
             stocks.append(
                 Stock(
                     cik="",  # EODHD 미제공 — EDGAR 매핑 후속(docstring 한계 참조)
@@ -253,6 +305,13 @@ class EodhdSource:
             logger.warning(
                 "EODHD 심볼 목록 Code/Name 결측 %d행 누락(추측 채움 금지): delisted=%s",
                 dropped,
+                delisted,
+            )
+        if type_dropped:
+            logger.info(
+                "EODHD 심볼 목록 Type 필터 제외 %d행(keep=%s·delisted=%s)",
+                type_dropped,
+                sorted(keep_types) if keep_types else None,
                 delisted,
             )
         return stocks

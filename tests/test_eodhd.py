@@ -360,3 +360,54 @@ def test_iter_universe_drops_rows_missing_code(caplog: pytest.LogCaptureFixture)
         stocks = src.iter_universe(include_delisted=True)
     assert {s.ticker for s in stocks} == {"AAPL"}
     assert any("결측" in r.message for r in caplog.records)
+
+
+# ---- fetch_common_stock_universe (S5-b) ----
+
+_ETF_SYMBOL: dict[str, object] = {
+    "Code": "SPY",
+    "Name": "SPDR S&P 500",
+    "Exchange": "US",
+    "Type": "ETF",
+}
+_FUND_SYMBOL: dict[str, object] = {
+    "Code": "VFINX",
+    "Name": "Vanguard Index Fund",
+    "Exchange": "US",
+    "Type": "Fund",
+}
+
+
+def test_fetch_common_stock_universe_filters_type_and_splits() -> None:
+    captured: list[dict[str, str]] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.url.params))
+        is_delisted = request.url.params.get("delisted") == "1"
+        active = [_ACTIVE_SYMBOL, _ETF_SYMBOL, _FUND_SYMBOL]
+        return httpx.Response(200, json=[_DELISTED_SYMBOL] if is_delisted else active)
+
+    src = _make_source(httpx.MockTransport(_handler))
+    active, delisted = src.fetch_common_stock_universe(include_delisted=True)
+    assert [s.ticker for s in active] == ["AAPL"]  # ETF/Fund 제외(Common Stock 만)
+    assert [s.ticker for s in delisted] == ["LEHMQ"]
+    assert all(p.get("type") == "common_stock" for p in captured)  # 서버 type= 최적화 전송
+    assert any(p.get("delisted") == "1" for p in captured)  # 폐지 별도 호출
+
+
+def test_fetch_common_stock_universe_type_case_insensitive() -> None:
+    row = {"Code": "MSFT", "Name": "Microsoft", "Exchange": "US", "Type": "COMMON STOCK"}
+    src = _make_source(httpx.MockTransport(lambda _r: httpx.Response(200, json=[row])))
+    active, _ = src.fetch_common_stock_universe(include_delisted=False)
+    assert [s.ticker for s in active] == ["MSFT"]  # 대소문자 무관(클라 정규화 매칭)
+
+
+def test_fetch_common_stock_universe_warns_empty_active(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # 활성 0(서버 type= 오작동/빈 응답 가정) → WARNING(빈 마스터 silent 실패 방지·생존편향)
+    src = _make_source(httpx.MockTransport(lambda _r: httpx.Response(200, json=[])))
+    with caplog.at_level(logging.WARNING):
+        active, _ = src.fetch_common_stock_universe(include_delisted=False)
+    assert active == []
+    assert any("활성 0개" in rec.message for rec in caplog.records)
