@@ -6,7 +6,8 @@ Create Date: 2026-06-18
 
 S5-a 첫 마이그레이션(ADR-006). PG18 코어 3테이블. raw SQL(op.execute) — 파티션·ENUM·CHECK·BRIN.
 - stock: surrogate BIGINT PK + cik nullable UNIQUE(repo가 ""→NULL 매핑·생존편향). DELETE 금지(델=delisted_at).
-- ticker_history: 시점별 ticker↔cik(valid_from<=t<valid_to). 구간중첩 EXCLUDE 제약은 S5-b 동반.
+- ticker_history: 시점별 ticker↔cik(valid_from<=t<valid_to). 구간중첩 EXCLUDE 제약은 S5-d(실 history) 동반
+  — S5-b 는 floor→NULL 무한스냅샷 1행이라 지금 EXCLUDE 추가 시 S5-d 실구간과 겹쳐 거부(C2 재이연).
 - daily_bar: 연도 RANGE 파티션·NUMERIC scale=storage.py(가격38,10·adj38,12) 일치·CHECK=DuckDB 게이트 동형(PG 2차 방어선)·FK 없음(D2). 빈 테이블(채움은 S5-b/c).
 """
 
