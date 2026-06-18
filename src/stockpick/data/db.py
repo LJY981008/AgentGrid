@@ -62,11 +62,12 @@ def upsert_stocks(
     """stock UPSERT(폐지 포함·DELETE 금지). 반환 = 처리 행수. 커밋은 호출부 책임.
 
     status = listing_status('active'|'delisted'·S5-b). 한 호출은 단일 status(활성·폐지 목록을
-    분리 호출하므로). ⚠️ **B1 — active-wins 는 resolved cik 전용**: cik 해소 종목은
-    `ON CONFLICT(cik) DO UPDATE`(부분 UNIQUE·listing_status 도 EXCLUDED 갱신)라 delisted 먼저→active
-    나중 순서면 active 가 승리. 미해소(`cik==""`→SQL NULL)는 충돌 안 해 active·delisted 가
-    **2행 의도 공존**(dedup 금지 — 서로 다른 entity 가능·생존편향). 두 경로는 disjoint. exchange 는
-    `::exchange_enum` 캐스트.
+    분리 호출하므로). ⚠️ **충돌키 = (cik, ticker)**(migration 0003): cik 은 **발행사** 식별자라
+    다중 클래스주(GOOG·GOOGL→동일 cik)가 한 cik 를 공유 — cik 단독 UNIQUE 면 클래스주가 1행으로
+    collapse(소실). (cik, ticker) 면 클래스주 보존·같은 보안(cik+ticker) 만 collapse. resolved
+    cik 보안이 active·delisted 양 목록에 있으면 delisted 먼저→active 나중 순서로 active 승리. 미해소
+    (`cik==""`→SQL NULL)는 부분 인덱스 밖이라 충돌 안 함 → 다수 공존(dedup 금지·생존편향).
+    exchange 는 `::exchange_enum` 캐스트.
     """
     if not stocks:
         return 0
@@ -75,8 +76,8 @@ def upsert_stocks(
             (cik, ticker, name, exchange, listed_at, delisted_at, listing_status,
              source, ingested_at)
         VALUES (%s, %s, %s, %s::exchange_enum, %s, %s, %s, %s, %s)
-        ON CONFLICT (cik) WHERE cik IS NOT NULL DO UPDATE SET
-            ticker = EXCLUDED.ticker, name = EXCLUDED.name, exchange = EXCLUDED.exchange,
+        ON CONFLICT (cik, ticker) WHERE cik IS NOT NULL DO UPDATE SET
+            name = EXCLUDED.name, exchange = EXCLUDED.exchange,
             listed_at = EXCLUDED.listed_at, delisted_at = EXCLUDED.delisted_at,
             listing_status = EXCLUDED.listing_status,
             source = EXCLUDED.source, ingested_at = EXCLUDED.ingested_at

@@ -31,8 +31,12 @@ def conn() -> Iterator[_Conn]:
     except (RuntimeError, psycopg.OperationalError) as exc:
         pytest.skip(f"PG 미연결 — db 테스트 skip: {exc!r}")
     try:
+        # 트랜잭션 내 TRUNCATE — 커밋된 마스터(라이브 적재분)와 격리(clean slate). rollback 이
+        # TRUNCATE+변경 모두 undo 해 복원(RESTART IDENTITY 미사용 — sequence 보존).
+        with c.cursor() as cur:
+            cur.execute("TRUNCATE stock, ticker_history, daily_bar CASCADE")
         yield c
-        c.rollback()  # 커밋 안 함 — 테스트 격리(running PG 오염 방지)
+        c.rollback()
     finally:
         c.close()
 
@@ -75,16 +79,37 @@ def test_upsert_stocks_unresolved_cik_both_persist(conn: _Conn) -> None:
     assert n == 2
 
 
-def test_upsert_stocks_resolved_cik_conflict_updates(conn: _Conn) -> None:
+def test_upsert_stocks_same_security_idempotent(conn: _Conn) -> None:
+    # 같은 (cik, ticker) 재적재 → 1행 갱신(멱등·충돌키 (cik,ticker)).
     db.upsert_stocks(conn, [_stock("ZZC", cik="0000000111")], source="eodhd", ingested_at=_STAMP)
-    # 같은 cik, 다른 ticker 재적재 → 갱신(중복 0).
-    db.upsert_stocks(conn, [_stock("ZZC2", cik="0000000111")], source="eodhd", ingested_at=_STAMP)
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZC", cik="0000000111", exchange=Exchange.NYSE)],
+        source="eodhd",
+        ingested_at=_STAMP,
+    )
     assert _count(conn, "SELECT count(*) FROM stock WHERE cik = %s", ("0000000111",)) == 1
     with conn.cursor() as cur:
-        cur.execute("SELECT ticker FROM stock WHERE cik = %s", ("0000000111",))
+        cur.execute("SELECT exchange FROM stock WHERE cik = %s", ("0000000111",))
         row = cur.fetchone()
     assert row is not None
-    assert row[0] == "ZZC2"  # 신규 ticker 로 갱신
+    assert row[0] == "NYSE"  # 갱신됨
+
+
+def test_upsert_stocks_multiclass_same_cik_distinct_rows(conn: _Conn) -> None:
+    # ⭐ 다중 클래스주(GOOG/GOOGL 동일 cik 1652044) — (cik,ticker) UNIQUE 로 2행 보존.
+    # cik 단독 UNIQUE 면 collapse 돼 GOOGL 소실됐던 라이브 버그 회귀 봉인.
+    db.upsert_stocks(
+        conn,
+        [_stock("GOOG", cik="0001652044"), _stock("GOOGL", cik="0001652044")],
+        source="eodhd",
+        ingested_at=_STAMP,
+    )
+    assert _count(conn, "SELECT count(*) FROM stock WHERE cik = %s", ("0001652044",)) == 2
+    with conn.cursor() as cur:
+        cur.execute("SELECT ticker FROM stock WHERE cik = %s ORDER BY ticker", ("0001652044",))
+        tickers = [r[0] for r in cur.fetchall()]
+    assert tickers == ["GOOG", "GOOGL"]  # 둘 다 보존(클래스주)
 
 
 def test_sync_daily_bars_idempotent(conn: _Conn, tmp_path: Path) -> None:

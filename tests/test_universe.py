@@ -38,6 +38,9 @@ def conn() -> Iterator[_Conn]:
     except (RuntimeError, psycopg.OperationalError) as exc:
         pytest.skip(f"PG 미연결 — universe 테스트 skip: {exc!r}")
     try:
+        # 트랜잭션 내 TRUNCATE — 커밋된 마스터와 격리. rollback 이 복원(sequence 보존).
+        with c.cursor() as cur:
+            cur.execute("TRUNCATE stock, ticker_history, daily_bar CASCADE")
         yield c
         c.rollback()
     finally:
