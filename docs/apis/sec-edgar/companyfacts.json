@@ -1,0 +1,131 @@
+{
+  "section": "companyfacts",
+  "category": "financials",
+  "relevant_to_stockpick": true,
+  "captured_at": "2026-06-18",
+  "capture_method": "응답 구조·필드명·값타입은 r.jina.ai 렌더 프록시로 실측(직접 WebFetch 는 User-Agent 미설정으로 HTTP 403). companyfacts 전체는 대용량(전 concept)이라, 그 per-concept 슬라이스인 companyconcept 엔드포인트(CIK0000320193=AAPL, us-gaap/StockholdersEquity·us-gaap/NetIncomeLoss·dei/EntityCommonStockSharesOutstanding 3종)로 fact 객체 스키마를 정밀 실측. companyfacts 는 동일 fact 스키마를 facts.<taxonomy>.<Concept>.units.<unit> 아래에 중첩. User-Agent 규칙·rate limit·무인증은 #2 company-tickers 캡처(SEC 공식 문서 교차확인)와 동일 — 재확인. 2026-06-18.",
+  "source_url": "https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json",
+  "fetch_status": "ok (fact 객체 스키마 end/val/accn/fy/fp/form/filed/start?/frame? 는 companyconcept 3종으로 라이브 실측. companyfacts 중첩 구조 facts.{taxonomy}.{Concept}.units.{unit}[] 는 SEC 공식 문서 + companyconcept 가 그 슬라이스임으로 확정. User-Agent/rate 는 #2 캡처 교차확인분 재사용)",
+  "auth": "API 키 없음(무료·무인증). SEC 공식 문서 명시: 'These APIs do not require any authentication or API keys to access.' 단 공정접근(fair access) 정책상 모든 요청 HTTP 헤더에 신원 User-Agent 필수 — 누락/부적절 시 HTTP 403(본 캡처 중 직접 WebFetch 가 실제로 403). 형식: 'Sample Company Name AdminContact@<sample company domain>.com'(이름+연락 이메일). 권장 'Accept-Encoding: gzip, deflate'. 키=.env 불요 — EDGAR_IDENTITY(신원 문자열)는 비밀값 아님(EODHD/Tiingo 키와 다름).",
+  "base_url": "https://data.sec.gov",
+  "notes": "회사의 모든 XBRL concept(재무 항목)를 단일 호출로 반환하는 데이터셋 API. ##########=CIK 10자리 zero-pad(company_tickers.json 의 cik_str 정수를 str(cik).zfill(10) 변환 — 미변환 시 404). 최상위 {cik:int, entityName:str, facts:{...}}. facts 는 taxonomy 별('us-gaap','dei','srt','ifrs-full') 객체이고, 각 taxonomy 아래 Concept 태그(예 'StockholdersEquity','NetIncomeLoss')→{label, description, units}. units 는 단위 키('USD','shares','USD/shares' 등)→fact 객체 배열. ⚠️ stockpick #재무-1 은 전 concept 파싱이 아니라 소수 concept 만 직접 추출(ROE·P/B 슬라이스, ADR-005). PIT(룩어헤드 방지) = fact 의 `filed`(공시일), `end`(회계기간말) 아님 — 둘은 수주~수개월 차이(실측 31일 시차). 동일 concept 에 amendment(정정 신고)로 여러 fact 가 누적될 수 있음(원본 보존·신규 행). stockpick rules/_financials·data/edgar.fetch_companyfacts 의 진실 원천.",
+  "endpoints": [
+    {
+      "name": "Company Facts (회사 전 XBRL concept 단일 호출)",
+      "method": "GET",
+      "url_pattern": "https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json",
+      "description": "한 회사(CIK)의 모든 XBRL 공시 concept 를 단일 JSON 으로 반환. concept 별 시계열 fact 배열 포함. 쿼리 파라미터 없음 — CIK 만 path. 전체 응답이 큼(수백 KB~수 MB, concept 수에 비례). stockpick 은 받은 뒤 메모리에서 소수 concept(StockholdersEquity·NetIncomeLoss·EntityCommonStockSharesOutstanding)만 추출.",
+      "example": "curl -H 'User-Agent: stockpick coclcoclde@gmail.com' https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json",
+      "path_params": [
+        {
+          "name": "CIK##########",
+          "type": "string",
+          "required": true,
+          "description": "10자리 zero-pad CIK(선행 0 포함). 예 AAPL=CIK0000320193. company_tickers.json cik_str(320193) → str(cik).zfill(10)."
+        }
+      ],
+      "query_params": [],
+      "request_headers": [
+        {
+          "name": "User-Agent",
+          "type": "string",
+          "required": true,
+          "description": "신원 식별자 + 연락 이메일. 누락/부적절 시 403. data/edgar.py 는 EDGAR_IDENTITY env 로 주입(company_tickers fetch 와 동일 헤더)."
+        },
+        {
+          "name": "Accept-Encoding",
+          "type": "string",
+          "required": false,
+          "description": "SEC 권장 'gzip, deflate'. 응답이 크므로 압축 권장."
+        }
+      ],
+      "response_fields": [
+        {
+          "name": "cik",
+          "type": "integer",
+          "description": "엔티티 CIK(zero-pad 안 된 정수, 예 320193)."
+        },
+        {
+          "name": "entityName",
+          "type": "string",
+          "description": "회사 공식명(예 'Apple Inc.')."
+        },
+        {
+          "name": "facts",
+          "type": "object",
+          "description": "taxonomy 키('us-gaap','dei','srt','ifrs-full')→객체. stockpick 은 'us-gaap'·'dei' 만 사용."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>",
+          "type": "object",
+          "description": "concept 태그(예 'StockholdersEquity','NetIncomeLoss','EntityCommonStockSharesOutstanding')→{label, description, units}. 회사마다 보유 concept 상이(결측 정상)."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units",
+          "type": "object",
+          "description": "단위 키→fact 배열. 'USD'(금액)·'shares'(주식수)·'USD/shares'(주당) 등. 한 concept 에 보통 단위 1종."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].end",
+          "type": "string(date)",
+          "description": "회계기간 말일(YYYY-MM-DD). 잔액(balance)·주식수는 시점, 손익(flow)은 기간 종료일. ⚠️ PIT 아님 — 룩어헤드 가드는 filed 사용."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].start",
+          "type": "string(date)",
+          "description": "기간 시작일(YYYY-MM-DD). ⚠️ flow concept(NetIncomeLoss 등 손익)에만 존재. balance(StockholdersEquity)·주식수에는 없음. 연간/분기 구분의 보조."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].val",
+          "type": "number",
+          "description": "값(금액 USD 정수, 주식수 정수). Decimal 로 파싱 권장(정밀). 음수 가능(NetIncomeLoss 적자)."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].filed",
+          "type": "string(date)",
+          "description": "⚠️ PIT 핵심 — 공시 제출일(YYYY-MM-DD). stockpick disclosed_at 1:1. 룩어헤드 가드 = `filed <= as_of` 인 fact 만 사용(end 아님 — 재무는 분기말 후 수주~수개월 뒤 공시)."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].fy",
+          "type": "integer",
+          "description": "회계연도(예 2024)."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].fp",
+          "type": "string",
+          "description": "회계기간 — 'FY'(연간)·'Q1'·'Q2'·'Q3'. ⚠️ NetIncomeLoss 등 손익은 연간(FY/10-K)과 분기(Q1-Q3/10-Q)가 한 배열에 혼재 — 연간 ROE 산출 시 `fp=='FY'`(또는 form=='10-K') 필터 필수."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].form",
+          "type": "string",
+          "description": "신고서 종류 — '10-K'(연간)·'10-Q'(분기)·'8-K' 등. fp 와 함께 연간/분기 판별."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].accn",
+          "type": "string",
+          "description": "Accession Number(신고 고유 ID, 예 '0000320193-24-000123'). 동일 concept 의 정정(amendment) 식별·중복 제거 보조."
+        },
+        {
+          "name": "facts.<taxonomy>.<Concept>.units.<unit>[].frame",
+          "type": "string",
+          "description": "⚠️ optional(일부 fact 만). 횡단 비교용 표준 기간 프레임(예 'CY2024Q3I'). 횡단 표준화 산물이라 PIT 미보장 — stockpick 미사용(filed 기반 시계열만)."
+        }
+      ],
+      "response_format": "중첩 JSON. companyfacts 슬라이스(companyconcept) 실측 샘플(2026-06-18, r.jina.ai, AAPL CIK0000320193):\nus-gaap/StockholdersEquity(units.USD): {\"end\":\"2009-09-26\",\"val\":27832000000,\"accn\":\"0001193125-09-214859\",\"fy\":2009,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2009-10-27\"} (balance — start 없음).\nus-gaap/NetIncomeLoss(units.USD) 연간: {\"start\":\"2023-10-01\",\"end\":\"2024-09-28\",\"val\":93736000000,\"accn\":\"0000320193-24-000123\",\"fy\":2024,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2024-11-01\"} / 분기: {\"start\":\"2024-03-31\",\"end\":\"2024-06-29\",\"val\":21448000000,\"fy\":2024,\"fp\":\"Q3\",\"form\":\"10-Q\",\"filed\":\"2024-08-02\"} (flow — start 있음·연분기 혼재).\ndei/EntityCommonStockSharesOutstanding(units.shares): {\"end\":\"2024-10-18\",\"val\":15115823000,\"accn\":\"0000320193-24-000123\",\"fy\":2024,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2024-11-01\",\"frame\":\"CY2024Q3I\"} (주식수·end=표지일).\ncompanyconcept(per-concept) 최상위: {cik, taxonomy, tag, label, description, entityName, units}. companyfacts(전 concept): {cik, entityName, facts:{<taxonomy>:{<Concept>:{label, description, units}}}}."
+    }
+  ],
+  "rate_limits": "SEC 공식: 최대 10 requests/second(사용자·IP 당, 머신 수 무관). 초과 시 SEC 가 IP 차단 권리 보유. companyfacts 는 회사당 1호출로 전 concept 확보 — 데이터셋 N종목이면 N호출. stockpick __main__ 은 가격 데이터셋에 있는 종목의 cik 만(전체 10,414 아님) 순회하며 10req/s 준수(호출 간 간격).",
+  "pricing_notes": "무료. API 키·구독·등록 불필요. SEC EDGAR 재무는 결제 게이트 무관(결제 게이트는 가격 EODHD 다년·폐지뿐). 비용 발생 요소 없음.",
+  "caveats": [
+    "⚠️ PIT(룩어헤드 BLOCKING): 룩어헤드 가드는 반드시 `filed`(공시일) 기준 — `end`(회계기간말) 아님. 재무는 분기말 후 수주~수개월 뒤 공시(실측 31일 시차)되므로 end 기준이면 미래 정보 누설. rules/_financials 가 `disclosed_at(filed) <= as_of` 강제.",
+    "⚠️ NetIncomeLoss(손익)는 연간(fp='FY'/form='10-K')과 분기(fp='Q1'~'Q3'/form='10-Q')가 한 units 배열에 혼재. 슬라이스 연간 ROE 는 fp=='FY' 만 사용(TTM 4분기합은 후속). 미필터 시 분기·연간 혼합 오류.",
+    "⚠️ concept 결측 정상: 회사마다 태그 상이(IFRS 신고사·금융사·소규모사 등 StockholdersEquity/NetIncomeLoss 미존재 가능). 결측·분모<=0 → None 반환(조용한 추측 금지·집계 보고).",
+    "⚠️ StockholdersEquity 변형 존재: 'StockholdersEquity'(모회사 귀속) vs 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'(소수지분 포함). 슬라이스는 'StockholdersEquity' 우선, 결측 시 변형 폴백 여부는 구현 판단(현 슬라이스=우선 태그만).",
+    "⚠️ 동일 concept 다중 fact: 같은 (end, fy, fp) 가 amendment(정정 10-K/A) 또는 후속 신고 재게재로 여러 filed 일자로 나타날 수 있음. PIT 선택은 `filed <= as_of` 중 fiscal_period(end/fy+fp) 최신·동률 시 filed 최신. 원본은 보존(별 행).",
+    "⚠️ `frame` 필드는 일부 fact 만·횡단 표준화 산물 — PIT 미보장이라 stockpick 미사용.",
+    "⚠️ `start` 필드는 flow concept(NetIncomeLoss)만 — balance(StockholdersEquity)·주식수엔 없음. 코드는 .get('start') 로 안전 접근.",
+    "⚠️ 직접 WebFetch(data.sec.gov)는 User-Agent 미설정으로 403 — 본 캡처도 r.jina.ai 프록시 경유. 코드는 반드시 User-Agent(EDGAR_IDENTITY) 헤더 설정.",
+    "⚠️ 응답 대용량(전 concept): 압축(Accept-Encoding gzip) 권장·파싱 시 소수 concept 만 추출해 메모리 절감. 전 concept 저장 금지(슬라이스만 financials.json 영속).",
+    "주식수 concept: 'dei:EntityCommonStockSharesOutstanding'(units 'shares') 라이브 확인 — end=표지(cover) 일자라 회계연도말과 약간 다름. us-gaap:CommonStockSharesOutstanding 도 존재하나 dei 표지값이 최신·신뢰성 높음(P/B 분모 BVPS 산출용)."
+  ]
+}

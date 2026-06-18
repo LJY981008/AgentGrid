@@ -27,3 +27,4 @@
 | 2026-06-17 | 백테스트 API 노출 + webapp BacktestPage 교체(#4) — GET /api/backtest + 프론트 자산곡선(Recharts)·지표·벤치·미검증경고. PriceDerivedUniverse 신설(demo smell 제거) | 플랜모드 승인 | [[2026-06-17-백테스트-API-webapp]] |
 | 2026-06-17 | EDGAR cik resolver(#2) — SEC company_tickers.json(무료·키없음·User-Agent) 적재→저장→읽기. EdgarSnapshotResolver(IdentityResolver 실전)·Stub 교체·ranking/backtest cik enrich. 현재 스냅샷(ticker_history 후속) | 플랜모드 승인 | [[2026-06-17-EDGAR-cik-resolver]] |
 | 2026-06-17 | 백테스트 리밸 루프 공유 헬퍼(#5 리팩터) — engine/benchmark 복제 루프를 calendar.holding_periods(회계 경계 단일출처)로 추출. 동작 불변(197 passed). 드리프트 리스크 제거 | 리팩터 | [[2026-06-17-백테스트-루프-공유헬퍼]] |
+| 2026-06-18 | EDGAR 재무층 슬라이스(#재무-1) — companyfacts 직접파싱(소수 concept)·FinancialFact·PIT(filed<=t)·ROE/P/B 팩터→ranking factors 노출(결합 안함·§9-2). edgartools 미사용(ADR-005). SEC 무료·결제 무관 | 플랜모드 승인 | [[2026-06-18-EDGAR-재무층]] |

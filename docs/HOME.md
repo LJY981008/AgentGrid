@@ -21,6 +21,7 @@
 - [[decisions/ADR-002-미국-데이터소스-아키텍처|ADR-002 미국 데이터소스 아키텍처]] — 승인(2026-06-16). 가격 Tiingo→(M2 EODHD) / 재무 EDGAR(filed=PIT) / SimFin·RabbitMQ·LLM정규화 기각
 - [[decisions/ADR-003-M2-가격소스-EODHD|ADR-003 M2 가격소스 = EODHD]] — 승인(2026-06-16). 가성비 1위 $19.99/월·raw+adjusted 분리·폐지 2000~·Linux. ADR-002 가격 graduation 개정
 - [[decisions/ADR-004-백테스트-프레임워크-자체구현|ADR-004 백테스트 프레임워크 = 자체구현]] — 승인(2026-06-17). Decimal·DuckDB 자체구현. vectorbt(float BLOCKING)·backtrader(과설계) 기각. §9-3 미결 해소
+- [[decisions/ADR-005-재무-직접파싱|ADR-005 재무 정규화 = 직접 JSON 파싱]] — 승인(2026-06-18). companyfacts 소수 concept 직접 추출(ROE·P/B)·PIT(filed) 가드 직접 통제. edgartools(heavy·미검증) 미사용. ADR-002 정규화 도구 부분 개정
 
 ## 📡 API 명세 (apis/) — 환각 방지 권위 레퍼런스
 
@@ -29,7 +30,7 @@
 - [[apis/README|API 명세 인덱스]] — 외부 API 권위 명세(환각 방지). 코드는 `.claude/rules/api-spec-reference.md` 로 자동 참조
   - **Tiingo**(파일럿 가격) [[apis/tiingo/_index|16섹션/34EP]] — end-of-day(raw OHLCV+adjClose+divCash), 인증 `Token` 헤더(Bearer 아님)·심볼 대시(-)
   - **EODHD**(M2 본격 가격) [[apis/eodhd/README|62섹션/189EP]] — `/api/eod/{SYM}`(raw OHLC+adjusted_close), 인증 `?api_token=` 쿼리·폐지 2000~·지수 historical constituents(생존편향 보정)
-  - **SEC EDGAR**(ticker→cik 식별·재무) [[apis/sec-edgar/_index|sec-edgar]] — `company_tickers.json`(현재 ticker→cik 10자리), 키 없음·`User-Agent`(EDGAR_IDENTITY) 필수·~10req/s. 재무(XBRL submissions/companyfacts)는 후속
+  - **SEC EDGAR**(ticker→cik 식별·재무) [[apis/sec-edgar/_index|sec-edgar]] — `company_tickers.json`(현재 ticker→cik 10자리) + `companyfacts.json`(XBRL 재무 — `facts.{taxonomy}.{Concept}.units.{unit}[].{end,val,filed,fy,fp,form}`·PIT=filed·ROE/P/B concept). 키 없음·`User-Agent`(EDGAR_IDENTITY) 필수·~10req/s
 
 ## 🔬 리서치 (research/)
 
