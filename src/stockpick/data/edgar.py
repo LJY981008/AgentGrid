@@ -34,6 +34,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
+import time
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -385,15 +387,71 @@ def load_financials(base_dir: Path) -> list[FinancialFact]:
     return facts
 
 
-def main() -> int:
-    """`python -m stockpick.data.edgar` — EDGAR_IDENTITY 로 fetch → base_dir 저장(진입점)."""
+def fetch_dataset_financials(
+    base_dir: Path,
+    identity: str,
+    *,
+    sleep_s: float = 0.12,
+    client: httpx.Client | None = None,
+) -> tuple[list[FinancialFact], list[str]]:
+    """가격 데이터셋에 있는 ticker 의 cik 만 companyfacts fetch → (facts, 실패 cik). 10req/s 준수.
+
+    데이터셋 ticker(`storage.list_dataset_tickers`) ∩ 저장된 ticker_cik 으로 대상 cik 산출
+    (전체 수만 건 아님 — SEC 호출 최소·공정접근). cik 별 fetch 사이 sleep_s 대기(client 주입 시
+    생략 — 테스트). 개별 cik 실패는 집계해 계속(전체 중단 안 함 — 실패 명확 보고).
+    """
+    from .storage import list_dataset_tickers  # 지연 import(pyarrow 로딩 — ticker 모드엔 불요)
+
+    tickers = list_dataset_tickers(base_dir)
+    ticker_cik = load_ticker_cik(base_dir)
+    # ticker→cik 해소(미해소 ticker 건너뜀). cik 중복 제거(클래스주 GOOGL/GOOG = 동일 cik).
+    target_ciks = sorted({ticker_cik[t] for t in tickers if ticker_cik.get(t)})
+    logger.info(
+        "재무 적재 대상: 데이터셋 ticker=%d, cik 해소=%d (저장 ticker_cik=%d)",
+        len(tickers),
+        len(target_ciks),
+        len(ticker_cik),
+    )
+    all_facts: list[FinancialFact] = []
+    failed: list[str] = []
+    for i, cik in enumerate(target_ciks):
+        if i > 0 and client is None:
+            time.sleep(sleep_s)  # 공정접근(10req/s) — 라이브만. 테스트는 client 주입 시 생략.
+        try:
+            all_facts.extend(fetch_companyfacts(cik, identity, client=client))
+        except EdgarError as exc:
+            logger.warning("companyfacts fetch 실패(cik=%s): %r", cik, exc)
+            failed.append(cik)
+    return all_facts, failed
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m stockpick.data.edgar [financials]` — 기본=ticker→cik, 'financials'=companyfacts.
+
+    공통: EDGAR_IDENTITY(User-Agent 신원) 필수. base_dir = STOCKPICK_DATA_DIR(기본 data/parquet).
+    financials 모드는 ticker_cik 저장본·가격 데이터셋 선행 필요(둘의 교집합 cik 만 fetch).
+    """
     configure_logging()
+    args = sys.argv[1:] if argv is None else argv
+    mode = args[0] if args else "tickers"
     identity = os.environ.get(_IDENTITY_ENV, "")
     if not identity.strip():
-        print(f"[EDGAR] 환경변수 {_IDENTITY_ENV} 미설정 — SEC User-Agent 신원 필요(이름+이메일).")  # noqa: T201
+        print(f"[EDGAR] 환경변수 {_IDENTITY_ENV} 미설정 — SEC User-Agent 신원 필요(이름+이메일).")  # noqa: T201, E501
         print("  → .env 에 EDGAR_IDENTITY 설정 후 컨테이너 재생성.")  # noqa: T201
         return 1
     base_dir = Path(os.environ.get(_DATA_DIR_ENV, _DEFAULT_DATA_DIR))
+
+    if mode == "financials":
+        facts, failed = fetch_dataset_financials(base_dir, identity)
+        path = store_financials(facts, base_dir)
+        print(f"[EDGAR] 재무 fact {len(facts)}건 저장: {path}")  # noqa: T201
+        if failed:
+            print(f"[EDGAR] ⚠️ companyfacts 실패 cik {len(failed)}건: {', '.join(failed)}")  # noqa: T201
+        return 0
+    if mode != "tickers":
+        print(f"[EDGAR] 알 수 없는 모드 '{mode}' — 'tickers'(기본) 또는 'financials'.")  # noqa: T201
+        return 2
+
     mapping = fetch_company_tickers(identity)
     path = store_ticker_cik(mapping, base_dir)
     print(f"[EDGAR] ticker→cik {len(mapping)}건 저장: {path}")  # noqa: T201

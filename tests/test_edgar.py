@@ -21,6 +21,7 @@ from stockpick.data.edgar import (
     EdgarResponseError,
     fetch_company_tickers,
     fetch_companyfacts,
+    fetch_dataset_financials,
     financials_path,
     load_financials,
     load_ticker_cik,
@@ -28,7 +29,8 @@ from stockpick.data.edgar import (
     store_path,
     store_ticker_cik,
 )
-from stockpick.types import FinancialFact
+from stockpick.data.storage import list_dataset_tickers, write_daily_bars
+from stockpick.types import DailyBar, Exchange, FinancialFact
 
 # docs/apis/sec-edgar/company-tickers.json 실측 샘플 구조(인덱스 키 비안정·cik_str int)
 _SAMPLE: dict[str, object] = {
@@ -345,3 +347,68 @@ def test_load_financials_malformed_raises(tmp_path: Path) -> None:
     path.write_text('{"not": "a list"}', encoding="utf-8")
     with pytest.raises(EdgarError, match="형식"):
         load_financials(tmp_path)
+
+
+# ---- fetch_dataset_financials (Step5) — 데이터셋 cik 만·실패 집계 ----
+
+
+def _write_bar(base_dir: Path, ticker: str) -> None:
+    bar = DailyBar(
+        ticker=ticker,
+        trade_date=date(2025, 1, 2),
+        open=Decimal("100"),
+        high=Decimal("105"),
+        low=Decimal("95"),
+        close=Decimal("100"),
+        volume=1000,
+        value=None,
+        adj_factor=Decimal("1"),
+    )
+    write_daily_bars([bar], exchange=Exchange.NASDAQ, base_dir=base_dir, source="synthetic")
+
+
+def test_list_dataset_tickers(tmp_path: Path) -> None:
+    _write_bar(tmp_path, "AAPL")
+    _write_bar(tmp_path, "NVDA")
+    assert list_dataset_tickers(tmp_path) == ["AAPL", "NVDA"]  # 정렬
+
+
+def test_list_dataset_tickers_empty(tmp_path: Path) -> None:
+    assert list_dataset_tickers(tmp_path) == []
+
+
+def test_fetch_dataset_financials_only_dataset_ciks(tmp_path: Path) -> None:
+    _write_bar(tmp_path, "AAPL")
+    _write_bar(tmp_path, "NVDA")
+    # MSFT 는 ticker_cik 에 있으나 데이터셋(가격)엔 없음 → companyfacts fetch 대상 아님.
+    store_ticker_cik({"AAPL": "0000320193", "NVDA": "0001045810", "MSFT": "0000789019"}, tmp_path)
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(str(req.url))
+        return httpx.Response(200, json=_FACTS_SAMPLE)
+
+    client = _client(httpx.MockTransport(handler))
+    facts, failed = fetch_dataset_financials(tmp_path, _IDENTITY, client=client)
+    assert failed == []
+    assert len(seen) == 2  # 데이터셋 cik(AAPL·NVDA)만 — MSFT 제외
+    assert any("0000320193" in u for u in seen)
+    assert any("0001045810" in u for u in seen)
+    assert not any("0000789019" in u for u in seen)  # MSFT 미fetch(SEC 호출 최소)
+    assert len(facts) == 10  # 2 cik × 5 sample fact
+
+
+def test_fetch_dataset_financials_collects_failures(tmp_path: Path) -> None:
+    _write_bar(tmp_path, "AAPL")
+    _write_bar(tmp_path, "NVDA")
+    store_ticker_cik({"AAPL": "0000320193", "NVDA": "0001045810"}, tmp_path)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if "0001045810" in str(req.url):  # NVDA → 500(개별 실패)
+            return httpx.Response(500, json={})
+        return httpx.Response(200, json=_FACTS_SAMPLE)
+
+    client = _client(httpx.MockTransport(handler))
+    facts, failed = fetch_dataset_financials(tmp_path, _IDENTITY, client=client)
+    assert failed == ["0001045810"]  # 실패 cik 집계(전체 중단 안 함)
+    assert len(facts) == 5  # AAPL 성공분만

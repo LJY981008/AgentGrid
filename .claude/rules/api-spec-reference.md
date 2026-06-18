@@ -27,8 +27,8 @@ paths: ["src/stockpick/data/**/*.py"]
 
 - **인증**: **API 키 없음**. 단 `User-Agent` 헤더에 신원(이름+이메일) 필수 — 없으면 **403**(실측). 값 = `.env` 의 `EDGAR_IDENTITY`(비밀 아님·연락처, 토큰 아님). rate limit ~10 req/s.
 - **현재 ticker→cik**: `GET https://www.sec.gov/files/company_tickers.json` — 응답 `{idx:{cik_str:int, ticker, title}}`. ⚠️ 인덱스 키 비안정 → `.values()` 순회. cik 는 **10자리 zero-pad**. 어댑터 = `data/edgar.py`(fetch→`base_dir/edgar/ticker_cik.json` 저장→`EdgarSnapshotResolver` 읽기). 커버리지=SEC 신고사만(ETF·외국주 미수록 → 미해소 cik="").
-- **재무(후속·XBRL)**: `data.sec.gov/submissions/CIK##########.json`·`/api/xbrl/companyfacts/CIK##########.json` — `filed`=PIT. edgartools 도입 시(현재 미설치).
-- ⚠️ '현재' 매핑만 — 폐지·과거 ticker 미수록(생존편향 소스 아님). 시점별 ticker_history 는 후속.
+- **재무(XBRL companyfacts — `docs/apis/sec-edgar/companyfacts.json` 캡처됨)**: `GET https://data.sec.gov/api/xbrl/companyfacts/CIK##########.json` — 응답 `{cik, entityName, facts:{<taxonomy>:{<Concept>:{units:{<unit>:[{end,val,filed,fy,fp,form,start?,frame?}]}}}}}`. ⚠️ **PIT=`filed`(공시일)** — `end`(회계기간말) 아님(공시 시차 → end 기준이면 미래 누설). ⚠️ NetIncomeLoss 는 연간(fp=FY/10-K)+분기(Q1~3/10-Q) **혼재** → 연간만 쓰려면 fp=='FY' 필터. concept 결측 정상. **직접 JSON 파싱**(edgartools 미사용 — [ADR-005](../../docs/decisions/ADR-005-재무-직접파싱.md)). 어댑터 = `data/edgar.fetch_companyfacts`(소수 concept: StockholdersEquity·NetIncomeLoss·EntityCommonStockSharesOutstanding)→`store_financials`→`base_dir/edgar/financials.json`. PIT 선택=`rules/_financials.latest_as_of`(disclosed_at<=as_of). 팩터=`rules/factors.financial_factors`(ROE·P/B). `__main__ financials` 는 가격 데이터셋 ticker 의 cik 만 fetch(전체 아님·10req/s).
+- ⚠️ '현재' 매핑만 — 폐지·과거 ticker 미수록(생존편향 소스 아님). 시점별 ticker_history 는 후속. submissions 엔드포인트는 미사용.
 
 ## Tiingo (M1 파일럿 가격 소스 — `docs/apis/tiingo/`)
 

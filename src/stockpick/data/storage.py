@@ -85,6 +85,8 @@ _SQL_OHLC_VIOLATION: Final = (  # noqa: S608
 )
 # ticker별 실제 적재 행수 — expected(기대) 와 대조해 누락·행수 미달(생존편향 소실)을 탐지.
 _SQL_TICKER_ROW_COUNTS: Final = f"SELECT ticker, count(*) {_FROM} GROUP BY ticker"  # noqa: S608
+# DISTINCT ticker 정렬 — EDGAR 재무 적재가 "가격 보유 종목"만 companyfacts 받도록(SEC 호출 최소).
+_SQL_DISTINCT_TICKERS: Final = f"SELECT DISTINCT ticker {_FROM} ORDER BY ticker"  # noqa: S608
 
 
 class StorageError(RuntimeError):
@@ -495,3 +497,26 @@ def _ticker_row_counts(
             continue
         counts[str(row[0])] = int(row[1])
     return counts
+
+
+def list_dataset_tickers(base_dir: Path) -> list[str]:
+    """적재된 Parquet 트리의 DISTINCT ticker 정렬 리스트. 빈 트리면 빈 리스트.
+
+    EDGAR 재무 적재(edgar.__main__)가 "가격이 있는 종목"만 companyfacts 를 받도록 — 전체
+    ticker_cik(수만 건)이 아니라 이 교집합으로 SEC 호출을 최소화(rate limit·공정접근). 읽기 전용.
+    """
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.info("ticker 목록 스캔 대상 Parquet 없음 — 빈 리스트: dataset=%s", dataset_root)
+        return []
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(_SQL_DISTINCT_TICKERS, {"glob": glob}).fetchall()
+    finally:
+        con.close()
+    return [str(row[0]) for row in rows if row[0] is not None]
