@@ -29,7 +29,7 @@
 
 - [[apis/README|API 명세 인덱스]] — 외부 API 권위 명세(환각 방지). 코드는 `.claude/rules/api-spec-reference.md` 로 자동 참조
   - **Tiingo**(파일럿 가격) [[apis/tiingo/_index|16섹션/34EP]] — end-of-day(raw OHLCV+adjClose+divCash), 인증 `Token` 헤더(Bearer 아님)·심볼 대시(-)
-  - **EODHD**(M2 본격 가격) [[apis/eodhd/README|62섹션/189EP]] — `/api/eod/{SYM}`(raw OHLC+adjusted_close), 인증 `?api_token=` 쿼리·폐지 2000~·지수 historical constituents(생존편향 보정)
+  - **EODHD**(M2 본격 가격) [[apis/eodhd/README|62섹션/189EP]] — `/api/eod/{SYM}`(raw OHLC+adjusted_close), 인증 `?api_token=` 쿼리·폐지 2000~·지수 historical constituents(생존편향 보정). 구독=[[apis/eodhd/pricing_plan/PLANS|EOD Historical $19.99]](2026-06-18 결제·100k calls/day·30년+·**재무❌→EDGAR**)
   - **SEC EDGAR**(ticker→cik 식별·재무) [[apis/sec-edgar/_index|sec-edgar]] — `company_tickers.json`(현재 ticker→cik 10자리) + `companyfacts.json`(XBRL 재무 — `facts.{taxonomy}.{Concept}.units.{unit}[].{end,val,filed,fy,fp,form}`·PIT=filed·ROE/P/B concept). 키 없음·`User-Agent`(EDGAR_IDENTITY) 필수·~10req/s
 
 ## 🔬 리서치 (research/)

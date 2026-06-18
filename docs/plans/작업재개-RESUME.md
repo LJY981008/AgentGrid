@@ -46,9 +46,10 @@
 
 ### 📋 후속 백로그 (M2 엔진+#4·#2·#5 후 — 영속 todo)
 
-> 💰 = EODHD 결제($19.99) 필수 / 🔮 = 무료 가능하나 가치는 데이터 후 / 🧹 = 코드 품질
+> 💰 = EODHD 결제 잠금해제(✅ **2026-06-18 결제 완료** — EOD Historical $19.99) → 이제 actionable / 🔮 = 무료 가능하나 가치는 데이터 후 / 🧹 = 코드 품질
+> ⚠️ EODHD 플랜 능력(허용/미허용) = [[../apis/eodhd/pricing_plan/PLANS|PLANS.md]]. 우리 플랜은 가격(EOD·수정주가·폐지·분할배당·30년+) 전부 ✅, **재무(Fundamentals)는 ❌** → 재무는 SEC EDGAR(#재무-1 구현됨). 결제만으로 validated=true 아님 — 다년 수집+S6 게이트 필요.
 
-- [ ] 💰 **TASK-E/S5**: EODHD 결제 → 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted)
+- [ ] 💰→🟢 **TASK-E/S5**(결제됨·actionable): 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted)
 - [ ] 💰 **실 UniversePort**: 종목마스터 기반 `UniversePort`(현 골격 `PriceDerivedUniverse` 가격기반 교체 — survivorship 정답)
 - [ ] 💰 **S6 신뢰성 게이트** 통과 → 백테스트 수치 신뢰 → `meta.validated=true` 전환(§4.1)
 - [ ] 🔮 **TickerHistoryResolver**: 시점별 ticker↔cik(SEC submissions 이력 — ticker 재사용 생존편향 정답). 현 `EdgarSnapshotResolver`는 현재 스냅샷만

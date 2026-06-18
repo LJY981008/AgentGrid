@@ -17,6 +17,7 @@ paths: ["src/stockpick/data/**/*.py"]
 
 ## EODHD (M2 현행 가격 소스 — `docs/apis/eodhd/`, 62섹션/189EP)
 
+- **구독 플랜 = EOD Historical — All World $19.99/mo**(2026-06-18 결제, [pricing_plan/PLANS.md](../../docs/apis/eodhd/pricing_plan/PLANS.md) 능력 목록). 허용 ✅: 미국+전세계 EOD·수정주가(Adjusted)·분할/배당·**폐지(Delisted)**·Search/Exchanges·30년+·100k calls/day·1k req/min. 미허용 ❌: **Fundamentals(재무)**·Intraday·Technical/Screener·Websocket 실시간. ⚠️ **재무는 EODHD 에 없음 → SEC EDGAR 직접 파싱**(ADR-005·#재무-1). EODHD 는 가격 전용.
 - **인증**: `?api_token=<KEY>` **쿼리 파라미터**(⚠️ Tiingo 의 `Authorization: Token` 헤더와 다름). 키 = `.env` 의 `EODHD_API_KEY`(하드코딩·로깅 금지). DEMO 키로 일부 테스트 가능.
 - **base**: `https://eodhd.com/api`.
 - **가격(EOD)**: `GET /api/eod/{SYMBOL}` — raw OHLC + `adjusted_close`(split+dividend) → 우리 **원주가 + adj_factor** 모델로 적재(원본 불변). 어댑터 = `data/eodhd.py`(`EodhdSource`).
