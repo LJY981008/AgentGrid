@@ -130,7 +130,12 @@ class IngestResult(BaseModel):
 
 
 class TopEntryModel(BaseModel):
-    """랭킹 엔트리 1건. cik 는 현재 미국 어댑터가 미제공이라 빈 문자열(표시 키는 ticker)."""
+    """랭킹 엔트리 1건. cik = EDGAR 저장본으로 해소(#2, 미해소 ticker 는 빈 문자열).
+
+    factors = 산출 근거 dict. 기본 `momentum`, 재무 적재 시 `roe`(퀄리티)·`pb`(밸류) 추가
+    (#재무-1 — 미해소·결측 키는 생략). ⚠️ rank·score 는 모멘텀만 — 재무는 결합·가중 안 함
+    (§9-2, factors 는 정보 노출). 노출이 검증을 뜻하지 않음(meta.validated=false 불변).
+    """
 
     cik: str
     ticker: str

@@ -52,6 +52,15 @@ _SQL_SERIES_ALL: Final = (  # noqa: S608
 _SQL_TICKER_EXCHANGE: Final = (  # noqa: S608
     f"SELECT ticker, max(exchange) {_FROM} GROUP BY ticker ORDER BY ticker"
 )
+# ticker → as_of 이하 최신 거래일의 raw close(명목 시장가). arg_max(close, trade_date) = 최신가.
+# ⚠️ raw(미수정) — P/B 분자는 명목가라야 명목 장부가와 일관(adjusted 는 명목 P/B 왜곡).
+_SQL_CLOSE_AS_OF: Final = (  # noqa: S608
+    f"SELECT ticker, arg_max(close, trade_date) {_FROM} "
+    f"WHERE trade_date <= $as_of GROUP BY ticker ORDER BY ticker"
+)
+_SQL_CLOSE_ALL: Final = (  # noqa: S608
+    f"SELECT ticker, arg_max(close, trade_date) {_FROM} GROUP BY ticker ORDER BY ticker"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +125,47 @@ def load_adjusted_series(
         sum(len(v) for v in series.values()),
     )
     return series
+
+
+def load_close_as_of(base_dir: Path, *, as_of: date | None = None) -> dict[str, Decimal]:
+    """Parquet 트리 → {ticker: as_of 이하 최신 거래일의 raw close}. P/B 분자(명목 시장가)용.
+
+    ⚠️ raw close(미수정) 반환 — 수정주가(adjusted) 아님. P/B = 시장가/BVPS 는 **명목가** 기준이라야
+    명목 장부가(equity/shares)와 일관(adjusted 는 back-adjust 라 명목 P/B 왜곡). 룩어헤드
+    1차 가드: `trade_date <= as_of` 의 최신(arg_max(close, trade_date)). as_of=None 이면 전체 최신.
+    빈 트리면 빈 맵(조용한 추측 채움 금지). 모듈 경계: 읽기 전용 스캔.
+    """
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.warning("close 스캔 대상 Parquet 없음 — 빈 맵: dataset=%s", dataset_root)
+        return {}
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    params: dict[str, object] = {"glob": glob}
+    if as_of is not None:
+        sql = _SQL_CLOSE_AS_OF
+        params["as_of"] = as_of
+    else:
+        sql = _SQL_CLOSE_ALL
+
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+
+    mapping: dict[str, Decimal] = {}
+    for row in rows:
+        ticker, close = row
+        if not (isinstance(ticker, str) and isinstance(close, Decimal)):
+            msg = f"예상치 못한 close 행 타입: ticker={type(ticker)}, close={type(close)}"
+            raise TypeError(msg)
+        mapping[ticker] = close
+    logger.info("raw close 로드: tickers=%d, as_of=%s", len(mapping), as_of or "(전체)")
+    return mapping
 
 
 def load_ticker_exchanges(base_dir: Path) -> dict[str, Exchange]:

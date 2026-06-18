@@ -22,20 +22,33 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from ...rules._scan import load_adjusted_series, load_ticker_exchanges
-from ...rules.factors import momentum_universe
+from ...rules._financials import load_financial_facts
+from ...rules._scan import load_adjusted_series, load_close_as_of, load_ticker_exchanges
+from ...rules.factors import financial_factors, momentum_universe
 from ...rules.ranking import rank_by_momentum
 from ..deps import get_base_dir, get_identity_resolver
 from ..models import RankingMeta, RankingParams, RankingResponse, TopEntryModel
 
 if TYPE_CHECKING:
     from ...backtest.ports import IdentityResolver
+    from ...rules.factors import FinancialScore
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 _WARNING = "백테스트 검증 전 — 알파 아님(stock-1st_plan §4.1)"
+
+
+def _enrich_factors(base: dict[str, float], score: FinancialScore | None) -> dict[str, float]:
+    """모멘텀 factors dict 에 재무 팩터(roe·pb) 추가. 미해소·결측 키는 생략(rank 영향 0·§9-2)."""
+    merged = dict(base)
+    if score is not None:
+        if score.roe is not None:
+            merged["roe"] = float(score.roe)
+        if score.pb is not None:
+            merged["pb"] = float(score.pb)
+    return merged
 
 
 @router.get("/ranking", response_model=RankingResponse)
@@ -95,17 +108,37 @@ def ranking(
     # 산출 불가(score=None) 종목 — 조용한 누락 금지, meta 에 명시 고지(결정적 정렬).
     unrankable = sorted(t for t, s in scores.items() if s.score is None)
 
+    # cik enrich(api 층) — EDGAR 저장본으로 ticker→cik 해소(미해소면 기존 빈값, rules 불변).
+    entry_cik = {
+        e.ticker: (identity.cik_for(e.ticker, on=effective_as_of) or e.cik) for e in entries
+    }
+
+    # 재무 팩터 enrich(밸류 P/B·퀄리티 ROE) — ⚠️ rank 순서·점수 불변(§9-2 결합 안 함, factors dict
+    # 에 정보 추가만). 가격은 명목 raw close(P/B 일관성). 미해소 cik·재무 결측 → 해당 키 생략.
+    financial_facts = load_financial_facts(base_dir)
+    raw_close = load_close_as_of(base_dir, as_of=effective_as_of)
+    price_by_cik = {
+        cik: raw_close[e.ticker]
+        for e in entries
+        if (cik := entry_cik[e.ticker]) and e.ticker in raw_close
+    }
+    fin_scores = financial_factors(
+        financial_facts,
+        ciks=[c for c in entry_cik.values() if c],
+        as_of=effective_as_of,
+        price_by_cik=price_by_cik,
+    )
+
     return RankingResponse(
         entries=[
             TopEntryModel(
-                # cik enrich(api 층) — EDGAR 저장본으로 해소, 미해소면 기존 빈값(rules 불변).
-                cik=identity.cik_for(e.ticker, on=effective_as_of) or e.cik,
+                cik=entry_cik[e.ticker],
                 ticker=e.ticker,
                 exchange=e.exchange,
                 rank=e.rank,
                 score=e.score,
                 rule_version=e.rule_version,
-                factors=e.factors,
+                factors=_enrich_factors(e.factors, fin_scores.get(entry_cik[e.ticker])),
             )
             for e in entries
         ],

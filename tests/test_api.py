@@ -21,10 +21,10 @@ from fastapi.testclient import TestClient
 
 from stockpick.api import create_app
 from stockpick.api.deps import get_base_dir, get_learning_dir, get_source
-from stockpick.data.edgar import store_ticker_cik
+from stockpick.data.edgar import store_financials, store_ticker_cik
 from stockpick.data.eodhd import EodhdAuthError, EodhdRateLimitError
 from stockpick.data.storage import write_daily_bars
-from stockpick.types import DailyBar, Exchange, Stock
+from stockpick.types import DailyBar, Exchange, FinancialFact, Stock
 
 _DUMMY_KEY = "DUMMY-SECRET-EODHD-KEY-9f3a"  # 키 비노출 단언용 — 응답에 이 값이 절대 안 나와야 함
 
@@ -421,3 +421,63 @@ def test_ranking_cik_empty_without_edgar_store(client: TestClient) -> None:
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
     assert all(e["cik"] == "" for e in r.json()["entries"])
+
+
+# ---------------------------------------------------------------------------
+# 재무 팩터 enrich (#재무-1) — factors 에 roe/pb 추가(rank 불변·미해소 키 생략·룩어헤드)
+# ---------------------------------------------------------------------------
+
+
+def _store_nvda_financials(base_dir: Path, *, filed: tuple[int, int, int]) -> None:
+    # NVDA cik=0001045810 의 슬라이스 재무(연간). period_end 2024-12-31.
+    cik = "0001045810"
+    facts = [
+        FinancialFact(
+            cik, "StockholdersEquity", "2024-FY", date(2024, 12, 31), date(*filed), Decimal("1000")
+        ),
+        FinancialFact(
+            cik, "NetIncomeLoss", "2024-FY", date(2024, 12, 31), date(*filed), Decimal("200")
+        ),
+        FinancialFact(
+            cik,
+            "EntityCommonStockSharesOutstanding",
+            "2024-FY",
+            date(2024, 12, 31),
+            date(*filed),
+            Decimal("100"),
+        ),
+    ]
+    store_financials(facts, base_dir)
+
+
+def test_ranking_financial_factors_enriched(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)  # NVDA 마지막 close=218 @2025-03-01
+    store_ticker_cik({"NVDA": "0001045810", "AAPL": "0000320193"}, client.base_dir)
+    _store_nvda_financials(client.base_dir, filed=(2025, 1, 15))  # as_of(2025-03-01) 이전 공시
+    r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["entries"][0]["ticker"] == "NVDA"  # rank 불변(모멘텀만 — 재무 결합 안 함)
+    entries = {e["ticker"]: e for e in body["entries"]}
+    nvda = entries["NVDA"]
+    assert nvda["factors"]["roe"] == pytest.approx(0.2)  # 200/1000
+    assert nvda["factors"]["pb"] == pytest.approx(21.8)  # close 218 * shares 100 / equity 1000
+    assert "momentum" in nvda["factors"]  # 기존 팩터 보존
+    # AAPL: cik 해소되나 재무 미적재 → roe/pb 키 생략(미해소).
+    aapl = entries["AAPL"]
+    assert "roe" not in aapl["factors"]
+    assert "pb" not in aapl["factors"]
+
+
+def test_ranking_financial_factors_lookahead_excludes_future_filing(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)
+    store_ticker_cik({"NVDA": "0001045810"}, client.base_dir)
+    _store_nvda_financials(client.base_dir, filed=(2026, 2, 1))  # as_of 이후 공시 → 누설 차단
+    r = client.get(
+        "/api/ranking",
+        params={"as_of": "2025-03-01", "top_n": 5, "lookback_days": 20, "skip_recent_days": 0},
+    )
+    assert r.status_code == 200
+    nvda = next(e for e in r.json()["entries"] if e["ticker"] == "NVDA")
+    assert "roe" not in nvda["factors"]  # 미래 공시 미사용(룩어헤드 BLOCKING)
+    assert "pb" not in nvda["factors"]
