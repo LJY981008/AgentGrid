@@ -1,6 +1,7 @@
 # 기획 문서 현황
 
 > 🔄 **작업 재개(compact 생존)**: 진행상황·다음 작업·환경·함정은 **[작업재개-RESUME](작업재개-RESUME.md)** 하나로. compact된 세션은 이거부터 읽고 이어가라.
+> 최근(2026-06-18): **EODHD $19.99 결제 + S5 4분해 착수**. S5-a(적재 안전성·PG 스키마 alembic 0001~0003)·S5-b(종목마스터 50,184 Common Stock·active+delisted)·S5-c(벌크 가격 파이프라인·체크포인트 재개·verify 1회·날짜 backfill) **✅ 완료**. 전체 50,184 **풀백필 진행 중**(`python -m stockpick.data.bulk`·~15h·일일한도 50k/100k 여유). **다음 작업 순서(사용자 확정)=① S5-d 실 UniversePort(MasterUniverse·파킹된 플랜) → ② S6 신뢰성 게이트(→`validated=true`) → ③ 증분 스케줄러**. 상세·설계메모는 RESUME "📍 다음 작업 순서" 참조.
 > 최근(2026-06-17): **M2 룰 수직슬라이스 + M3 API/webapp 완료**. M2 — EODHD generic 적재(무료 1년치 9종목, history 무관 설계)·룰엔진 수직슬라이스(rules/ 모멘텀→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed, ec9d3b0). M3 — FastAPI API층(src/stockpick/api/ 수집·랭킹·학습 HTTP 노출, 2c9ab10) + webapp PWA 5화면(webapp/ Vite/React, b7c5b21). **M2 백테스트 엔진 골격 완료**(backtest/ 14모듈: 리밸·forward-return·폐지청산·CAGR/Sharpe/MDD·IS/OOS·decay·등가중벤치·자체구현 ADR-004, 173 passed, 골격 데모 9종목 13기간 동작·룰이 등가중벤치 언더퍼폼=미검증 입증). **다음=S6 데이터 신뢰성 게이트**(EODHD 결제 다년·전체유니버스·실폐지·cik 매핑) 통과 후 룰 검증. | (06-16): **TASK-A~D + 전체점검 완료** — 도커컴포즈 라이브 파일럿 통과·다차원 코드리뷰(BLOCKING 0·M2 가능)·리뷰반영(양수성 게이트·httpx 가드·89 passed, 7f3b286). **TASK-A~D 완료** — EODHD 명세(`docs/apis/eodhd/` 62섹션)·게이트 소실탐지(734a52f)·adj_factor quantize·EodhdSource 어댑터(42df8d1, 모킹 77 passed). **다음 = TASK-E(S5 전체 유니버스) — EODHD 결제 후 라이브**. ⛔라이브 전: httpx 토큰누출 가드(`httpx 로거 WARNING`).
 
 > 기획 문서 추가/수정 시 이 표를 같은 커밋에서 갱신한다 (harness-drift-check 가 감지).

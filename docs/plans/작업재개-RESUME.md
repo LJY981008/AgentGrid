@@ -6,6 +6,24 @@
 > **현 위치 한 줄**: 미장(미국주식) stockpick. M0~M1 파일럿·전체점검·코드리뷰 완료. **+ M2 착수**: EODHD generic 적재(`ingest.py`, history 무관·결제후 자동확장)로 무료 1년치 9종목 데이터셋 + **룰엔진 수직슬라이스**(`src/stockpick/rules/` 모멘텀 팩터→Top 랭킹, 룩어헤드 sabotage 검증, 114 passed). Top 랭킹 라이브 동작 확인(GOOGL 38.58%·XOM 36.68% 등). **+ M3 착수·완료**(2c9ab10·b7c5b21): FastAPI API층(`src/stockpick/api/` — routes/{health,dataset,ingest,ranking,learning}로 수집·랭킹·학습 HTTP 노출, `ranking`에 `meta.validated=false` 하드코딩 §4.1 미검증 경고 상시) + webapp PWA(`webapp/` Vite8/React19, pages 5화면: Dashboard(랭킹)·Data·Universe·Learning·Backtest placeholder + 404) + compose 풀스택(postgres+app+web). **+ M2 백테스트 엔진 골격 완료**(`src/stockpick/backtest/` 14모듈·자체구현 ADR-004·룩어헤드(진입 t+1)/생존편향(UniversePort)/폐지청산 가드·CAGR/Sharpe/MDD·IS/OOS 워크포워드·purge·decay·등가중 벤치, 173 passed, 데모 9종목 13기간 동작·룰이 등가중벤치 언더퍼폼=미검증 입증). **+ M3 후속 완료**(#4·#2·#5, 푸시됨): `/api/backtest`+BacktestPage(Recharts 자산곡선·벤치·미검증경고) · EDGAR cik resolver(`data/edgar`·`EdgarSnapshotResolver`, 라이브 10,414건·`/api/ranking` 실 CIK) · 리밸 루프 공유헬퍼(`calendar.holding_periods`). 197 passed. **다음 = S6 데이터 신뢰성 게이트**(EODHD 결제 $19.99·다년·전체유니버스·실폐지) 후 백테스트 실검증 — 그 전 `meta.validated=true` 금지. 상세 백로그 ↓.
 > ⚠️ **데이터셋은 컨테이너 내부 `data/parquet`만**(호스트 미마운트·gitignore) — 컨테이너 재생성 시 소실, `python -m stockpick.data.ingest` 재실행으로 복원. 룰 데모/백테스트는 `docker compose exec` 로.
 
+## 📍 다음 작업 순서 (2026-06-18 확정 — 사용자)
+
+> S5 4분해: **S5-a(적재 안전성)·S5-b(종목마스터 50,184)·S5-c(벌크 가격 파이프라인) ✅ 완료**. EODHD $19.99 결제(2026-06-18). 전체 50,184 풀백필 **진행 중**(`python -m stockpick.data.bulk`·~15h ETA·체크포인트 재개 가능·일일한도 50k/100k 여유).
+
+**풀백필 완료 후 이 순서로 구현**:
+1. **S5-d 실 UniversePort**(파킹된 플랜 `~/.claude/plans/pro-3-5-twinkling-adleman.md` — critic 반영 완료). 종목마스터(listed_at/delisted_at)→`MasterUniverse`로 `PriceDerivedUniverse` 교체. stock 스냅샷 JSON export·생존편향/룩어헤드-correct 시점 멤버십·폐지 청산.
+   - ⛔ **BLOCKING(critic)**: `stock.delisted_at`=마지막 실거래일 추정(`eodhd_last_bar_estimate`)인데 engine/Fake/Protocol은 경계를 "첫 거래불가일"로 해석 → MasterUniverse가 로드 시 `delisted_at+1day`로 변환해야 마지막 실봉 안 잃음. 경계 pin 테스트 필수.
+   - one-shot export 후 `stock_snapshot.json` 행수=stock 카운트 게이트(미생성 시 조용히 PriceDerivedUniverse 폴백되어 무력화 방지).
+2. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**(그 전까지 false 고정).
+3. **증분 스케줄러**(신규 운영 마일스톤 — 아래 설계 메모):
+
+### 증분 스케줄러 설계 메모 (캡처 명세 실측 — `docs/apis/eodhd/`)
+- **패턴**: 1회 풀백필(완료 후) → 일일 증분(last_bar+1 ~ today). EOD 표준.
+- **증분 효율**: per-symbol(50,184콜/일·일일한도 절반) ❌ → **`/eod-bulk-last-day/{EXCHANGE}`**(거래소 전체 1일치 1요청=100콜·`date`로 과거일 지정·`type=splits|dividends` 분기) ✅ ~6거래소×100 ≈ 600콜/일.
+- ⛔ **BLOCKING — 분할/배당 소급 재조정**: `adjusted_close`는 미래 분할·배당으로 과거 전체가 소급 변동. 순수 append=과거 수정주가 stale=백테스트 오염(수정주가 통일 위반). 해결: **(권장)** 원주가 불변 저장+splits/dividends 액션테이블 별도 적재→읽을 때 adj_factor 재계산(`type=splits|dividends` 또는 per-symbol `/api/splits`·`/api/div`, 배당 `value`(수정)/`unadjustedValue`(실액) 분리). 차선: 매일 액션 발생 심볼만 full-history 재싱크. **선결: 현 저장모델이 원주가+adj_factor인지 adjusted 스냅샷인지 확인**(후자면 stale 실재).
+- **폐지종목=증분 불요**(terminal). 활성만 갱신. **신규상장/재활성**=주기적 유니버스 재적재(S5-b 재실행). 증분 후 stock_snapshot.json 재export(MasterUniverse 최신화).
+- **스케줄러=로컬**(cron/systemd/compose cron 서비스/in-app APScheduler) — `/schedule` 클라우드 에이전트 ❌(로컬 PG·parquet 볼륨 접근 불가).
+
 ## 확정 결정 (변경 금지 — 근거는 ADR)
 - **시장**: 미국(NYSE/NASDAQ/AMEX). 한국 보류(나중 재사용 가능).
 - **가격**: Tiingo(파일럿·무료)→**EODHD**(본격 $19.99/월, [ADR-003](../decisions/ADR-003-M2-가격소스-EODHD.md)). **재무**: SEC EDGAR(무료·`filed`=PIT)+edgartools ([ADR-002](../decisions/ADR-002-미국-데이터소스-아키텍처.md)).
