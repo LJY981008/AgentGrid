@@ -10,6 +10,23 @@ jobs:
   python:
     name: Python (ruff + mypy + pytest)
     runs-on: ubuntu-latest
+    # PG18 서비스 — data/db.py·test_db.py PG repo 테스트용(로컬 인프라, 라이브 외부데이터 아님).
+    # 없으면 test_db.py 가 skip 되어 S5-a 핵심 신규 코드가 CI 미검증으로 남음.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: stockpick
+          POSTGRES_USER: stockpick
+          POSTGRES_PASSWORD: stockpick-local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stockpick -d stockpick"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # GitHub Actions services 는 러너 localhost 로 포트 매핑.
+      DATABASE_URL: postgresql://stockpick:stockpick-local@localhost:5432/stockpick
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -24,6 +41,8 @@ jobs:
         run: uv run ruff format --check src tests
       - name: Type check (mypy)
         run: uv run mypy
+      - name: Migrate (alembic upgrade head)
+        run: uv run alembic upgrade head
       - name: Test (pytest)
         run: PYTHONPATH=src uv run pytest -q
 
