@@ -14,20 +14,31 @@ done 기록. 재실행은 read-merge-write 멱등이라 부분 완성.
 
 from __future__ import annotations
 
+import argparse
 import logging
+import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .eodhd import EodhdRateLimitError, EodhdResponseError
+from . import configure_logging
+from .db import connect, master_securities, update_stock_dates
+from .eodhd import EodhdAuthError, EodhdRateLimitError, EodhdResponseError, EodhdSource
+from .storage import build_expected, load_trade_date_bounds, verify_parquet, write_daily_bars
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
+
+    import psycopg
+    from psycopg.rows import TupleRow
 
     from ..types import DailyBar
-    from .eodhd import EodhdSource
+    from .storage import TickerExpectation
 
 logger = logging.getLogger(__name__)
+
+_DATA_DIR_ENV = "STOCKPICK_DATA_DIR"
+_DEFAULT_DATA_DIR = "data/parquet"
 
 _CHECKPOINT_NAME = "bulk_checkpoint.jsonl"
 _SKIP_STATUSES = frozenset({"done", "empty"})  # 재개 시 skip(failed 는 재시도)
@@ -118,3 +129,110 @@ def fetch_with_retry(
                 "transient(%s) %s — 재시도(%d/%d)", exc.status_code, ticker, attempt, max_retries
             )
             sleep_fn(_backoff_seconds(attempt))
+
+
+def run_bulk(
+    source: EodhdSource,
+    *,
+    base_dir: Path,
+    conn: psycopg.Connection[TupleRow],
+    limit: int | None = None,
+    max_retries: int = 3,
+    rate_sleep: float = 0.06,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> dict[str, int]:
+    """종목마스터 대상 다년 EOD → Parquet 벌크 + 날짜 backfill + verify 1회. 반환 = 커버리지 요약.
+
+    재개(체크포인트 done/empty skip·failed 재시도). verify expected=**이번 run 성공 fetch 누적**
+    (C1 — 마스터 전체 아님). 마스터-vs-fetch 갭은 요약(coverage)으로 고지. 커밋은 호출부.
+    """
+    securities = master_securities(conn)
+    tickers = [t for t, _, _ in securities]
+    if len(tickers) != len(set(tickers)):  # M1 — update_stock_dates ticker 키 안전 의존
+        msg = f"마스터 ticker 비유일({len(tickers)} vs {len(set(tickers))} distinct) — 적재 중단"
+        raise ValueError(msg)
+    if limit is not None:
+        securities = securities[:limit]
+
+    checkpoint = Checkpoint.load(base_dir / _CHECKPOINT_NAME)
+    expected: dict[str, TickerExpectation] = {}
+    fetched = empty = failed = skipped = 0
+
+    for ticker, exchange, _status in securities:
+        if checkpoint.should_skip(ticker):
+            skipped += 1
+            continue
+        try:
+            bars = fetch_with_retry(source, ticker, max_retries=max_retries, sleep_fn=sleep_fn)
+        except EodhdAuthError:
+            raise  # 키/쿼터 — 전체 중단(체크포인트 증분 기록됨)
+        except EodhdRateLimitError:
+            logger.error(
+                "일일쿼터 소진 추정 — 중단·재개 가능. 처리: done=%d empty=%d failed=%d",
+                fetched,
+                empty,
+                failed,
+            )
+            raise  # graceful stop
+        except EodhdResponseError:
+            checkpoint.mark(ticker, "failed")
+            failed += 1
+            continue
+        if not bars:
+            checkpoint.mark(ticker, "empty")
+            empty += 1
+            continue
+        write_daily_bars(bars, exchange=exchange, base_dir=base_dir, source=source.name)
+        checkpoint.mark(ticker, "done")  # ⚠️ write 완료 후에만(M3)
+        expected.update(build_expected(bars))
+        fetched += 1
+        if rate_sleep:
+            sleep_fn(rate_sleep)
+
+    # verify 1회(per-ticker 아님·O(n²) 회피) — 이번 run 성공분 소실 봉인.
+    report = verify_parquet(base_dir, expected=expected)
+    # 날짜 backfill(Parquet min/max → stock).
+    update_stock_dates(conn, load_trade_date_bounds(base_dir))
+
+    total = len(tickers)
+    summary = {
+        "master": total,
+        "fetched": fetched,
+        "empty": empty,
+        "failed": failed,
+        "skipped": skipped,
+        "verify_passed": int(report.passed),
+    }
+    coverage = 100.0 * fetched / total if total else 0.0
+    logger.info("벌크 적재 요약: %s · coverage(이번 run fetched/master)=%.1f%%", summary, coverage)
+    return summary
+
+
+def _parse_limit(argv: list[str] | None) -> int | None:
+    parser = argparse.ArgumentParser(prog="stockpick.data.bulk")
+    parser.add_argument("--limit", type=int, default=None, help="처리 ticker 수 제한(스모크/단계)")
+    limit: int | None = parser.parse_args(argv).limit
+    return limit
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`python -m stockpick.data.bulk [--limit N]` — 마스터 대상 다년 EOD 벌크(진입점·commit).
+
+    ⚠️ 전체 50,184 풀런은 수시간. `--limit` 로 스모크/단계 실행. 재개 가능(체크포인트).
+    """
+    configure_logging()  # G6 — httpx 토큰 로거 가드
+    limit = _parse_limit(argv)
+    base_dir = Path(os.environ.get(_DATA_DIR_ENV, _DEFAULT_DATA_DIR))
+    source = EodhdSource()
+    conn = connect()
+    try:
+        summary = run_bulk(source, base_dir=base_dir, conn=conn, limit=limit)
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"[bulk] 벌크 가격 적재: {summary}")  # noqa: T201 — 진입점 출력
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
