@@ -52,7 +52,8 @@
 - [ ] 💰 **실 UniversePort**: 종목마스터 기반 `UniversePort`(현 골격 `PriceDerivedUniverse` 가격기반 교체 — survivorship 정답)
 - [ ] 💰 **S6 신뢰성 게이트** 통과 → 백테스트 수치 신뢰 → `meta.validated=true` 전환(§4.1)
 - [ ] 🔮 **TickerHistoryResolver**: 시점별 ticker↔cik(SEC submissions 이력 — ticker 재사용 생존편향 정답). 현 `EdgarSnapshotResolver`는 현재 스냅샷만
-- [ ] 🔮 **EDGAR 재무층**: XBRL companyfacts·edgartools(미설치)·PER/ROE 등 재무팩터. 명세 `docs/apis/sec-edgar` forward_pointers
+- [x] ✅ **EDGAR 재무층 슬라이스(#재무-1, 2026-06-18)**: companyfacts 직접 JSON 파싱([ADR-005](../decisions/ADR-005-재무-직접파싱.md))·`FinancialFact`·PIT(filed<=as_of)·ROE/P/B 팩터→ranking factors 노출(결합 안함·§9-2). 라이브 9종목 4571 fact·7/9 ROE·5/9 P/B 실값. [[../work-history/2026-06-18-EDGAR-재무층]]
+  - 후속 [ ] 🔮 **재무 커버리지 확장**: ① StockholdersEquity 변형 태그 폴백(JNJ=NCI 포함 태그라 연간 0) ② 다중클래스 주식수 합산(GOOGL/META dei shares=0 → P/B 불가) ③ TTM(4분기합) ROE ④ edgartools 광범위 정규화(~15필드) — ADR-005 재검토 트리거
 - [ ] 🔮 **walk-forward·decay UI**: BacktestPage 에 IS/OOS·민감도(다년 데이터라야 통계 유의) / 파라미터 전체폼
 - [ ] 🧹 **recharts 청크 코드스플릿**(>500KB) · 거래비용/벤치 비대칭 등 리뷰 Open Question(work-history 참조)
 
