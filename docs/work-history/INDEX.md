@@ -29,4 +29,5 @@
 | 2026-06-17 | 백테스트 리밸 루프 공유 헬퍼(#5 리팩터) — engine/benchmark 복제 루프를 calendar.holding_periods(회계 경계 단일출처)로 추출. 동작 불변(197 passed). 드리프트 리스크 제거 | 리팩터 | [[2026-06-17-백테스트-루프-공유헬퍼]] |
 | 2026-06-18 | EDGAR 재무층 슬라이스(#재무-1) — companyfacts 직접파싱(소수 concept)·FinancialFact·PIT(filed<=t)·ROE/P/B 팩터→ranking factors 노출(결합 안함·§9-2). edgartools 미사용(ADR-005). SEC 무료·결제 무관 | 플랜모드 승인 | [[2026-06-18-EDGAR-재무층]] |
 | 2026-06-18 | S5-a 적재 안전성 선결 — PG 코어 스키마(alembic 첫 실사용·stock+ticker_history+daily_bar·surrogate PK·cik""≡NULL)·G1 write read-merge-write(소실 봉인)·data/db.py(Parquet→PG 단방향 동기). EODHD 결제 후 S5 4분해 첫 단계(ADR-006) | 플랜모드 승인 | [[2026-06-18-S5a-적재안전성]] |
+| 2026-06-18 | S5-c 벌크 가격 적재 — 종목마스터 50,184 대상 다년 EOD→Parquet(백테스트 진실원본)·체크포인트/재시도·verify 1회(O(n²) 회피)·stock 날짜 backfill·커버리지 요약. Parquet 벌크만(PG 동기 이연)·풀런 운영자 트리거. critic 1C+4M 반영 | 플랜모드 승인 | [[2026-06-18-S5c-벌크가격]] |
 | 2026-06-18 | S5-b 종목마스터 채움 — EODHD Common Stock 유니버스(폐지 포함)→PG stock UPSERT(listing_status·cik EDGAR enrich)·ticker_history 현재 스냅샷·G2 master_tickers. 날짜는 S5-c·거래소 OTC 한계. critic 2회 반영(C1 클라필터1차·C2 EXCLUDE S5-d·B1 resolved/unresolved 분리) | 플랜모드 승인 | [[2026-06-18-S5b-종목마스터]] |
