@@ -13,7 +13,7 @@ EODHD 결제 완료 → S5(다년·전체유니버스·폐지 포함 적재) 잠
 
 **alembic + psycopg3 로 PG18 코어 3테이블을 단일 첫 마이그레이션으로 생성한다.**
 
-1. **alembic 첫 실사용**: `migrations/`(src 밖·인프라)·`env.py` 가 compose `DATABASE_URL`(`postgresql://`→`postgresql+psycopg://` 치환) 읽음·`target_metadata=None`(ORM 모델 없음, PG18 기능은 raw SQL `op.execute`). 드라이버 = **psycopg3**(`psycopg[binary]`). SQLAlchemy 는 alembic 전이의존. ⚠️ 버전은 `uv add` 후 uv.lock 실측 고정(ADR-001 — 추측 금지). 실측 버전: alembic·SQLAlchemy·psycopg = (Task2 적재 시 기입).
+1. **alembic 첫 실사용**: `migrations/`(src 밖·인프라)·`env.py` 가 compose `DATABASE_URL`(`postgresql://`→`postgresql+psycopg://` 치환) 읽음·`target_metadata=None`(ORM 모델 없음, PG18 기능은 raw SQL `op.execute`). 드라이버 = **psycopg3**(`psycopg[binary]`). SQLAlchemy 는 alembic 전이의존. ⚠️ 버전은 `uv add` 후 uv.lock 실측 고정(ADR-001 — 추측 금지). **실측 버전(2026-06-18 uv.lock)**: alembic 1.18.4 · SQLAlchemy 2.0.51 · psycopg/psycopg-binary 3.3.4 · mako 1.3.12 · greenlet 3.5.2. SQLAlchemy 2.0 이 `postgresql+psycopg://`(psycopg3) dialect 지원 — `alembic current` 라이브 PG 연결 실증(exit 0).
 
 2. **R1 — stock PK = surrogate BIGINT + cik nullable UNIQUE**: cik 를 PK 로 강제하면 cik 미해소(EODHD CIK 미제공·EDGAR 현재스냅샷만 → 폐지·ETF·외국주 다수)가 적재 불가 → 생존편향 누수(BLOCKING). 인공 `id BIGINT GENERATED ALWAYS AS IDENTITY` PK + `cik` nullable, 부분 UNIQUE(`WHERE cik IS NOT NULL`).
 

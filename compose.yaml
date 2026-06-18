@@ -39,6 +39,9 @@ services:
       - ./src:/app/src
       - ./tests:/app/tests
       - ./pyproject.toml:/app/pyproject.toml
+      # alembic 마이그레이션(ADR-006) — env.py 가 DATABASE_URL 로 PG 접속. 런타임 마운트로 반영.
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini
       # ⭐ 데이터 영속 — named volume(Docker 관리·app 소유·재생성에도 유지). ⚠️ 호스트 바인드는
       #   uid 불일치(호스트 1000 vs 컨테이너 app 999)로 Parquet 쓰기 거부 → named volume 으로 회피
       #   (Dockerfile 이 /app/data 를 app 소유로 생성 → 볼륨이 그 소유권 상속, 쓰기 가능·포터블).
