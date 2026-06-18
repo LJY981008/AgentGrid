@@ -116,7 +116,7 @@ docker compose exec app pytest -q                   # 테스트
 | `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume) + `web`(node:22 Vite dev:5174→5173) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `migrations/` | alembic PG 마이그레이션(S5-a·ADR-006) — `env.py`(DATABASE_URL→psycopg3)·`versions/`. compose app 에 마운트. 직접 DDL 금지 |
-| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`universe.py` 종목마스터 적재 S5-b)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay) |
+| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`universe.py` 종목마스터 적재 S5-b·`bulk.py` 다년 EOD 벌크 적재 S5-c·체크포인트/재시도)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay) |
 | `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M3 활성) — Vite8/React19/router7/TS, `src/{api,components,pages}`. 5화면(랭킹·데이터·유니버스·학습·백테스트 placeholder). 읽기위주·투자로직 프론트 중복 금지([webapp-conventions](.claude/rules/webapp-conventions.md)) |

@@ -52,7 +52,7 @@
 - [ ] 💰→🟢 **TASK-E/S5**(결제됨·actionable·**4분해 a→b→c→d**): 다년 history + 전체 유니버스(폐지 포함) 적재 + 종목마스터(listed/delisted). 설계 `docs/superpowers/specs/2026-06-18-S5a-적재안전성-설계.md`
   - [x] ✅ **S5-a 적재 안전성**(2026-06-18): PG 코어 스키마(alembic 첫 실사용·stock+ticker_history+daily_bar·ADR-006)·G1 write read-merge-write(소실 봉인)·`data/db.py`(Parquet→PG 단방향 동기·cik""≡NULL). 237 passed. [[../work-history/2026-06-18-S5a-적재안전성]]
   - [x] ✅ **S5-b 종목마스터 채움**(2026-06-18): EODHD Common Stock 유니버스(`data/universe.py`)→PG stock 50,184 security(active 18,316+delisted 31,868)·listing_status·cik EDGAR enrich(16.4%)·ticker_history 스냅샷·G2 master_tickers. 다중클래스주 보존((cik,ticker) UNIQUE·migration 0003·GOOGL 버그수정)·demo 9/9. 246 passed. [[../work-history/2026-06-18-S5b-종목마스터]]
-  - [ ] 🟢 **S5-c 벌크 오케스트레이션**: 유니버스 자동조회→가격 적재 루프(G5)·체크포인트/재시도(G4)·검증 병목(G8)·실벌크 PG 동기·**날짜 backfill(listed_at/delisted_at=가격 min/max trade_date)**·expected shortfall wiring. ⚠️ 진입점 configure_logging() 호출(G6)
+  - [x] ✅ **S5-c 벌크 가격 적재**(2026-06-18·파이프라인): `data/bulk.py`(run_bulk) — 종목마스터 대상 다년 EOD→Parquet(백테스트 진실원본)·체크포인트/재시도(G4)·verify 1회(G8 O(n²) 회피)·날짜 backfill(listed_at/delisted_at=가격 min/max·delisted만+source)·커버리지 요약(C1). Parquet 벌크만(PG daily_bar 동기 이연). 스모크 `--limit 20` PASS(259 passed). ⚠️ **전체 50,184 풀런=운영자 트리거**(`python -m stockpick.data.bulk`·수시간·재개). [[../work-history/2026-06-18-S5c-벌크가격]]
   - [ ] 🟢 **S5-d 실 UniversePort+S6**: 종목마스터 기반 UniversePort(G7)·**ticker_history EXCLUDE 구간중첩 제약(C2 — S5-b 무한스냅샷 대체 후)**·시점 cik 해소(TickerHistoryResolver·G9)·거래소 정밀화(EODHD OTC 폴백 보강)·S6 게이트→validated=true
 - [ ] 💰 **실 UniversePort**: 종목마스터 기반 `UniversePort`(현 골격 `PriceDerivedUniverse` 가격기반 교체 — survivorship 정답)
 - [ ] 💰 **S6 신뢰성 게이트** 통과 → 백테스트 수치 신뢰 → `meta.validated=true` 전환(§4.1)
