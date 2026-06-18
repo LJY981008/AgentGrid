@@ -130,3 +130,56 @@ def test_find_orphan_tickers(conn: _Conn, tmp_path: Path) -> None:
     )
     db.sync_daily_bars_from_parquet(conn, tmp_path)
     assert "ZZORPHAN" in db.find_orphan_tickers(conn)  # stock 마스터에 없음 → 고아
+
+
+def test_upsert_stocks_status_delisted(conn: _Conn) -> None:
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZDEL", cik="0000000222")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    with conn.cursor() as cur:
+        cur.execute("SELECT listing_status FROM stock WHERE cik = %s", ("0000000222",))
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "delisted"
+
+
+def test_upsert_stocks_active_wins_on_cik_conflict(conn: _Conn) -> None:
+    # B1: resolved cik — delisted 먼저 → active 나중 → ON CONFLICT(cik) active 승리.
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZW", cik="0000000333")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZW", cik="0000000333")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="active",
+    )
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*), max(listing_status) FROM stock WHERE cik = %s", ("0000000333",)
+        )
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == 1  # 1행 collapse(resolved cik)
+    assert row[1] == "active"  # active-wins
+
+
+def test_master_tickers(conn: _Conn) -> None:
+    db.upsert_stocks(
+        conn,
+        [_stock("ZZM1"), _stock("ZZM2", cik="0000000444")],
+        source="eodhd",
+        ingested_at=_STAMP,
+    )
+    tickers = db.master_tickers(conn)
+    assert "ZZM1" in tickers
+    assert "ZZM2" in tickers

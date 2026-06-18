@@ -57,21 +57,28 @@ def upsert_stocks(
     *,
     source: str,
     ingested_at: datetime,
+    status: str = "active",
 ) -> int:
     """stock UPSERT(폐지 포함·DELETE 금지). 반환 = 처리 행수. 커밋은 호출부 책임.
 
-    cik 해소 종목은 `ON CONFLICT(cik) DO UPDATE`(부분 UNIQUE 대상)로 갱신, 미해소(`cik==""`)는
-    SQL NULL 매핑 후 INSERT(충돌 안 함 — 다수 NULL 공존, 생존편향). cik NULL 행의 멱등 재조정은
-    S5-b(유니버스 reconciliation)에서. exchange 는 `::exchange_enum` 캐스트.
+    status = listing_status('active'|'delisted'·S5-b). 한 호출은 단일 status(활성·폐지 목록을
+    분리 호출하므로). ⚠️ **B1 — active-wins 는 resolved cik 전용**: cik 해소 종목은
+    `ON CONFLICT(cik) DO UPDATE`(부분 UNIQUE·listing_status 도 EXCLUDED 갱신)라 delisted 먼저→active
+    나중 순서면 active 가 승리. 미해소(`cik==""`→SQL NULL)는 충돌 안 해 active·delisted 가
+    **2행 의도 공존**(dedup 금지 — 서로 다른 entity 가능·생존편향). 두 경로는 disjoint. exchange 는
+    `::exchange_enum` 캐스트.
     """
     if not stocks:
         return 0
     sql = """
-        INSERT INTO stock (cik, ticker, name, exchange, listed_at, delisted_at, source, ingested_at)
-        VALUES (%s, %s, %s, %s::exchange_enum, %s, %s, %s, %s)
+        INSERT INTO stock
+            (cik, ticker, name, exchange, listed_at, delisted_at, listing_status,
+             source, ingested_at)
+        VALUES (%s, %s, %s, %s::exchange_enum, %s, %s, %s, %s, %s)
         ON CONFLICT (cik) WHERE cik IS NOT NULL DO UPDATE SET
             ticker = EXCLUDED.ticker, name = EXCLUDED.name, exchange = EXCLUDED.exchange,
             listed_at = EXCLUDED.listed_at, delisted_at = EXCLUDED.delisted_at,
+            listing_status = EXCLUDED.listing_status,
             source = EXCLUDED.source, ingested_at = EXCLUDED.ingested_at
     """
     params = [
@@ -82,6 +89,7 @@ def upsert_stocks(
             s.exchange.value,
             s.listed_at,
             s.delisted_at,
+            status,
             source,
             ingested_at,
         )
@@ -89,8 +97,18 @@ def upsert_stocks(
     ]
     with conn.cursor() as cur:
         cur.executemany(sql, params)
-    logger.info("stock UPSERT: %d건(미해소 cik→NULL)", len(stocks))
+    logger.info("stock UPSERT: %d건(status=%s·미해소 cik→NULL)", len(stocks), status)
     return len(stocks)
+
+
+def master_tickers(conn: psycopg.Connection[TupleRow]) -> list[str]:
+    """종목마스터(stock)의 DISTINCT ticker 정렬 리스트 — G2 expected 원천(마스터 기반 존재검증).
+
+    expected 조립(TickerExpectation row_count=0·존재검증)+벌크 wiring 은 S5-c. 전부 Common Stock.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT ticker FROM stock ORDER BY ticker")
+        return [str(row[0]) for row in cur.fetchall()]
 
 
 def upsert_ticker_history(
