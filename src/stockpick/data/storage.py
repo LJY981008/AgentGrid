@@ -21,6 +21,7 @@ ticker_history 책임.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -238,6 +239,28 @@ def _bars_to_table(bars: Sequence[DailyBar], *, source: str, ingested_at: dateti
     return pa.Table.from_pydict(cols, schema=schema)
 
 
+def _merge_existing(target: Path, new_table: pa.Table) -> pa.Table:
+    """기존 (ticker,year) 파일 있으면 신규와 병합 — 같은 trade_date 는 **신규 우선**(G1 소실 봉인).
+
+    다년 증분 적재는 같은 (ticker,year)를 여러 호출로 나눠 쓰므로(연도분할), 통째 덮어쓰기는 이전
+    행을 소실시킨다. 기존 파일을 읽어 **신규에 없는 trade_date 만** 보존하고 신규를 덧붙인다(같은
+    날짜 충돌은 신규 값 우선 — adj_factor 정정 등 최신값 반영, stale 방지). 파일 없으면 신규 그대로.
+    파일당 단일 ticker 라 trade_date 만으로 dedup 충분.
+    """
+    if not target.exists():
+        return new_table
+    # read_table 은 py.typed(partial)에서 untyped — strict no-untyped-call 만 예외(stub 한계).
+    # ⚠️ Hive 경로(exchange=/year=)에서 읽으면 파티션 컬럼이 덧붙고 필드도 nullable 로 와
+    # new_table(11컬럼·not-null)과 불일치 → 데이터 컬럼만 select 후 new_table.schema 로 cast
+    # (데이터에 null 없으므로 안전).
+    old_raw = pq.read_table(str(target))  # type: ignore[no-untyped-call]
+    old_table: pa.Table = old_raw.select(new_table.column_names).cast(new_table.schema)
+    new_dates = set(new_table.column("trade_date").to_pylist())
+    keep_mask = [d not in new_dates for d in old_table.column("trade_date").to_pylist()]
+    old_keep = old_table.filter(pa.array(keep_mask))
+    return pa.concat_tables([old_keep, new_table])
+
+
 def write_daily_bars(
     bars: Sequence[DailyBar],
     *,
@@ -258,13 +281,11 @@ def write_daily_bars(
     한다(라이브 파일럿 실측 회귀: 단일 파티션 파일 방식이면 같은 거래소·연도를 공유하는 이전 ticker
     가 조용히 소실됐고 게이트도 못 잡았다). 빈 입력은 no-op(파일 미생성).
 
-    ⚠️ 호출 계약 BLOCKING (증분 적재 시 데이터 소실 위험): 이 write 는 **(ticker, year) 파일을
-    통째로 재작성**한다(read-merge 가 아니라 받은 행으로 그 파일을 덮어씀). 따라서 증분 적재 시에는
-    **그 ticker·그 연도의 전체 행을 한 write 호출에 모아 넘겨야 한다.** 같은 ticker·같은 연도의
-    비중복 날짜를 별도 write 호출로 나눠 넘기면(예: 1월분 호출 → 이후 2월분만 호출) 두 번째 호출이
-    같은 `{ticker}.parquet` 파일을 1월분 없이 통째로 덮어써 **이전 행이 조용히 소실된다**(검증
-    게이트의 expected 대조에는 같은 배치 입력만 흘리면 잡히지 않는다 — 다른 배치의 과거 행이므로).
-    근본 해소(read-merge-write)는 M2 일일증분 티켓으로 이월한다 — 그 전까지는 이 호출 계약을 지킨다.
+    ⚠️ read-merge-write (S5-a·G1 — 다년 증분 소실 봉인): 기존 `{ticker}.parquet` 가 있으면 **읽어
+    신규와 병합**한 뒤 쓴다(통째 덮어쓰기 아님). 같은 (ticker, trade_date) 충돌은 **신규 값 우선**
+    (adj_factor 정정 등 최신값 반영). 따라서 같은 ticker·연도를 연도분할 호출로 나눠 넘겨도(1월분
+    호출 → 2월분만 호출) 이전 행이 보존된다(다년 적재는 본질적으로 연도분할 호출이라 BLOCKING).
+    쓰기는 temp 파일 → `os.replace`(atomic rename)로 중간 실패 시 기존 파일을 보존한다.
 
     ⚠️ ingested_at=None 이면 호출 시각(UTC)을 1회 고정해 모든 행에 동일 적용(같은 배치 = 같은 시각).
     """
@@ -283,17 +304,21 @@ def write_daily_bars(
 
     total_rows = 0
     for (year, ticker), group_bars in by_group.items():
-        table = _bars_to_table(group_bars, source=source, ingested_at=stamp)
-        # trade_date 정렬(M1 §3) — 파일 내부 정렬로 스캔·압축 효율(파일당 단일 ticker).
-        table = table.sort_by([("trade_date", "ascending")])
-
+        new_table = _bars_to_table(group_bars, source=source, ingested_at=stamp)
         part_dir = dataset_root / f"exchange={exchange}" / f"year={year}"
         part_dir.mkdir(parents=True, exist_ok=True)
-        # 멱등: 이 ticker 파일만 덮어쓴다(같은 파티션의 다른 ticker 보존). write_table 은
-        # py.typed(partial)에서 untyped — strict no-untyped-call 만 예외(라이브러리 stub 한계).
         target = part_dir / f"{ticker}.parquet"
-        pq.write_table(table, str(target), compression=_ZSTD)  # type: ignore[no-untyped-call]
-        total_rows += table.num_rows
+        # read-merge-write(G1) — 기존 파일과 병합(신규 우선)·소실 봉인. 파일당 단일 ticker 이므로
+        # 같은 파티션의 다른 ticker 파일은 무관(보존).
+        merged = _merge_existing(target, new_table)
+        # trade_date 정렬(M1 §3) — 파일 내부 정렬로 스캔·압축 효율.
+        merged = merged.sort_by([("trade_date", "ascending")])
+        # atomic: temp(같은 디렉토리=동일 fs) write → os.replace. 중간 실패 시 기존 파일 보존.
+        # write_table 은 py.typed(partial)에서 untyped — strict no-untyped-call 만 예외.
+        tmp = part_dir / f"{ticker}.parquet.tmp"
+        pq.write_table(merged, str(tmp), compression=_ZSTD)  # type: ignore[no-untyped-call]
+        os.replace(tmp, target)
+        total_rows += merged.num_rows
 
     logger.info(
         "Parquet 적재 완료: dataset=%s, exchange=%s, rows=%d, files=%d, source=%s",

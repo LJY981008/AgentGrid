@@ -110,6 +110,52 @@ def test_idempotent_reload_no_duplicates(tmp_path: Path) -> None:
     assert report.passed
 
 
+def test_incremental_same_ticker_year_preserves_prior_rows(tmp_path: Path) -> None:
+    """⭐ G1 소실 봉인(S5-a): 같은 (ticker, year) 를 연도분할 부분 호출로 나눠 적재해도
+    이전 호출 행이 보존된다(read-merge-write). 통째 덮어쓰기면 2번째 호출이 1번째를 소실시킴.
+    다년 적재는 본질적으로 연도분할 호출이라 이게 BLOCKING.
+    """
+    write_daily_bars(  # 1월분
+        [_bar("AAPL", date(2024, 1, 3)), _bar("AAPL", date(2024, 1, 4))],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="eodhd",
+    )
+    write_daily_bars(  # 2월분만(같은 ticker·연도, 다른 날짜)
+        [_bar("AAPL", date(2024, 2, 1))],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="eodhd",
+    )
+    rows = _read_all(tmp_path)
+    assert len(rows) == 3  # 1월 2행 + 2월 1행 — 1월분 보존(소실 0)
+    assert {r["trade_date"] for r in rows} == {date(2024, 1, 3), date(2024, 1, 4), date(2024, 2, 1)}
+    assert verify_parquet(tmp_path).duplicate_count == 0
+
+
+def test_incremental_overlap_new_value_wins(tmp_path: Path) -> None:
+    """⭐ G1 dedup 신규우선(BLOCKING·finance): 같은 (ticker, trade_date) 재적재 시 신규 값 우선.
+
+    예: adj_factor 정정 재적재 → 최신값 반영(stale adj_factor 방지). build_expected 는 행수만 봐
+    값 교체를 못 잡으므로 값 자체를 단언한다.
+    """
+    write_daily_bars(
+        [_bar("AAPL", date(2024, 1, 3), adj_factor="1")],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="eodhd",
+    )
+    write_daily_bars(  # 같은 날짜, adj_factor 정정
+        [_bar("AAPL", date(2024, 1, 3), adj_factor="0.5")],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="eodhd",
+    )
+    rows = _read_all(tmp_path)
+    assert len(rows) == 1  # 중복 누적 0
+    assert rows[0]["adj_factor"] == Decimal("0.500000000000")  # 신규 값 우선(stale 방지)
+
+
 def test_same_partition_different_tickers_preserved(tmp_path: Path) -> None:
     """⭐ 회귀 봉인(라이브 파일럿 버그): 같은 (exchange, year) 파티션에 ticker 따로
     적재해도 서로 데이터 안 지워진다. (단일 파티션 파일이면 마지막 ticker 만 남아 소실됐음.)
