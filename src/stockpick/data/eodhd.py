@@ -9,10 +9,11 @@
 - **인증**: `?api_token=<KEY>` **쿼리 파라미터**(Tiingo 는 `Authorization: Token` 헤더). 토큰이
   URL 에 실리므로 URL 을 로깅·예외·repr 어디에도 그대로 노출하지 않는다 — 마스킹하거나 토큰을 뺀
   형태만 남긴다(logging-rules BLOCKING).
-  ⚠️ **진입점 가드 필요**: 이 어댑터의 자체 로그/예외엔 토큰을 안 남기지만, `httpx` 라이브러리의
-  INFO 로거(`httpx._client`)는 토큰이 실린 완성 URL 을 로깅한다(라이브러리 동작 — 어댑터 내부에서
-  끌 수 없음). 진입점에서 `logging.getLogger("httpx").setLevel(WARNING)` 등으로 막아야 한다
-  (logging-rules: 핸들러·레벨 설정은 진입점 책임). 후속: 운영 진입점에 이 가드 추가 필요.
+  ⚠️ **진입점 가드(코드화됨·G6)**: 이 어댑터의 자체 로그/예외엔 토큰을 안 남기지만, `httpx`
+  라이브러리의 INFO 로거(`httpx._client`)는 토큰이 실린 완성 URL 을 로깅한다(라이브러리 동작 —
+  어댑터 내부에서 끌 수 없음). → `data/__init__.py:configure_logging` 이 `httpx`·`httpcore` 를
+  WARNING 으로 올려 차단하며(logging-rules: 레벨 설정은 진입점 책임), 진입점(`api/app`·edgar/ingest
+  `__main__`)이 이를 호출한다. ⚠️ S5-c 벌크 진입점도 반드시 configure_logging() 호출할 것.
 - **유니버스 구현 가능**: Tiingo 는 전체 나열 수단이 없어 `NotImplementedError` 였으나, EODHD 는
   `exchange-symbol-list/{EX}` 로 활성 목록을, `delisted=1` 로 폐지 목록을 별도 반환한다(한 번에
   둘 다 받는 파라미터는 명세에 없음 → 두 호출 병합). 생존편향 회피의 핵심.
