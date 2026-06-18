@@ -22,6 +22,7 @@
 - [[decisions/ADR-003-M2-가격소스-EODHD|ADR-003 M2 가격소스 = EODHD]] — 승인(2026-06-16). 가성비 1위 $19.99/월·raw+adjusted 분리·폐지 2000~·Linux. ADR-002 가격 graduation 개정
 - [[decisions/ADR-004-백테스트-프레임워크-자체구현|ADR-004 백테스트 프레임워크 = 자체구현]] — 승인(2026-06-17). Decimal·DuckDB 자체구현. vectorbt(float BLOCKING)·backtrader(과설계) 기각. §9-3 미결 해소
 - [[decisions/ADR-005-재무-직접파싱|ADR-005 재무 정규화 = 직접 JSON 파싱]] — 승인(2026-06-18). companyfacts 소수 concept 직접 추출(ROE·P/B)·PIT(filed) 가드 직접 통제. edgartools(heavy·미검증) 미사용. ADR-002 정규화 도구 부분 개정
+- [[decisions/ADR-006-PG스키마-alembic-첫실사용|ADR-006 PG 코어 스키마 + alembic 첫 실사용]] — 승인(2026-06-18). S5-a — stock(surrogate PK·cik""≡NULL 매핑)·ticker_history·daily_bar(연도 RANGE 파티션·CHECK=DuckDB 게이트 동형). 단방향 Parquet→PG(INSERT ON CONFLICT). ADR-001 첫 실사용
 
 ## 📡 API 명세 (apis/) — 환각 방지 권위 레퍼런스
 
