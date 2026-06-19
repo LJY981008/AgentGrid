@@ -83,6 +83,12 @@ docker compose up -d                               # 풀스택: postgres + app(F
 #   ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측): postgres 5432→5433·web 5173→5174 (컨테이너 내부 불변)
 docker compose build app                           # 이미지 빌드(베이스 pull 네트워크 필요)
 
+# ⚠️ 대용량 벌크 적재(data.bulk·다년 전체유니버스)는 상주 app(uvicorn)과 분리된 일회성 컨테이너로 실행.
+#   상주 app 의 full_series() 전구간 메모리 로드(adapters.py)와 동시 가동 시 호스트 메모리 OOM
+#   (2026-06-18 실측 ExitCode 137 — app mem_limit:12g 로 방어하나, 적재 자체는 API 와 격리가 정답).
+docker compose stop app web                         # 상주 API·web 정지(메모리 경쟁 제거)
+docker compose run -d --rm --no-deps --name stockpick-bulk app python -m stockpick.data.bulk  # 격리·detached·체크포인트 재개
+
 # 검증은 app 컨테이너 안에서 — 소스는 ./src·./tests 바인드 마운트(수정 즉시 반영, editable 설치)
 #   app 은 uvicorn(0.0.0.0:8000) 상주여도 exec 로 ruff/mypy/pytest·uv add 그대로 가능
 docker compose exec app ruff check src tests       # 린트
@@ -113,7 +119,7 @@ docker compose exec app pytest -q                   # 테스트
 | 경로 | 역할 |
 |---|---|
 | `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(단일 FROM·2단계 uv sync로 의존성/소스 레이어 분리·non-root·BuildKit 캐시) |
-| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume) + `web`(node:22 Vite dev:5174→5173) |
+| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume·`mem_limit:12g` OOM 방어) + `web`(node:22 Vite dev:5174→5173). ⚠️ 대용량 벌크는 app 격리 실행(위 Build 주석) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `migrations/` | alembic PG 마이그레이션(S5-a·ADR-006) — `env.py`(DATABASE_URL→psycopg3)·`versions/`. compose app 에 마운트. 직접 DDL 금지 |
 | `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`universe.py` 종목마스터 적재 S5-b·`bulk.py` 다년 EOD 벌크 적재 S5-c·체크포인트/재시도)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay) |

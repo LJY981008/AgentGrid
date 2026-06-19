@@ -52,6 +52,12 @@ services:
       # ⚠️ .venv 는 마운트하지 않음 — 호스트엔 .venv 없고, 이미지의 .venv(컨테이너 플랫폼 빌드)를 써야 함.
     # FastAPI(uvicorn 0.0.0.0:8000) 상주 — `python -m stockpick.api`(__main__.py 진입점).
     command: ["python", "-m", "stockpick.api"]
+    # 메모리 상한(2026-06-18 OOM 인시던트 대응) — `ParquetPriceSeriesPort.full_series()` 가 전구간
+    #   전체 ticker 를 메모리 로드(adapters.py:35-38)해 호스트 31Gi 를 다 먹고 커널이 컨테이너를
+    #   OOM-kill → 같은 컨테이너의 풀백필(bulk)까지 동반 사망(ExitCode 137). app 만 상한 격리:
+    #   초과 시 app 만 죽고 postgres·진행중 bulk·호스트 보호. ⚠️ 정상 백테스트도 대용량에선 이 한도에
+    #   걸릴 수 있음 = full_series 구조 결함(DuckDB 집계/스트리밍 전환)은 S6 선결 백로그.
+    mem_limit: 12g
 
   # 프론트(Vite dev) — PWA 대시보드. 소스 바인드 + node_modules 익명볼륨(호스트가 컨테이너 것을 안 덮음).
   #   vite proxy(/api·/learning-assets)는 컨테이너 내부에서 app:8000 이 아니라 호스트 기준이므로,
