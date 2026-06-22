@@ -38,11 +38,18 @@ class PriceSeriesPort(Protocol):
 @runtime_checkable
 class UniversePort(Protocol):
     def constituents(self, *, as_of: date) -> set[str]:
-        """as_of 시점 거래가능 ticker 집합(listed<=as_of and (delisted None or as_of<delisted))."""
+        """as_of 시점 거래가능 ticker 집합(listed<=as_of and (boundary None or as_of<boundary)).
+
+        ⚠️ boundary = **첫 거래불가일**(마지막 실거래일+1). MasterUniverse 는 스냅샷
+        delisted_at(=마지막 실거래일 추정)을 +1day 변환해 이 규약에 주입한다(어댑터 책임).
+        """
         ...
 
     def delisting_event(self, ticker: str) -> date | None:
-        """ticker 폐지일(없으면 None). 엔진이 보유구간 내 폐지 청산 판정에 사용."""
+        """ticker boundary(첫 거래불가일·없으면 None).
+
+        엔진 `_price_before(boundary)` = 마지막 실봉 가격으로 청산.
+        """
         ...
 
 

@@ -44,6 +44,8 @@ S5-c 가 종목마스터 50,184(폐지 포함) 대상 다년 EOD 를 Parquet 에
 
 **Task2(export_stock_snapshot)**: `db.export_stock_snapshot(conn, base_dir)` 신규 — stock 마스터 SELECT→`{generated_at, stocks:[...]}` JSON·dates ISO·None 보존(active delisted_at→null·미해소 cik→null)·temp(같은 디렉토리)→os.replace atomic·OSError 분류 로그+temp 정리·conn 재사용(commit 호출부). 게이트 통과(ruff·format·mypy·pytest 13). 리뷰 2종 반영: convention(W1 fetchall Any 명시 언팩·W2 IO 실패 분류 로그+tmp.unlink) + code-reviewer(0행 빈 스냅샷·미해소 cik=null·generated_at ISO 파싱 테스트 추가).
 
+**Task3(MasterUniverse·_select_universe)**: adapters.py 신규 `MasterUniverse`(스냅샷→시점 멤버십·`boundary=delisted_at+1day` 경계변환·degenerate/listed-None 제외·ticker_count·dropped 관측성)·`_select_universe`(스냅샷 유무 분기·폴백 WARNING)·ports.py UniversePort docstring 단일화(boundary=첫 거래불가일). 게이트 통과(universe 6 + engine 회귀). 리뷰 2종 반영: code-reviewer 경계 **end-to-end correct 검증**(D 포함·D+1 배제·청산가=마지막봉·주말 off-by-one 없음) + MEDIUM(docstring "동일 규약·입력의미 다름"·json isinstance narrowing·listed-None 집계 로그·FakeUniversePort 동치 테스트·degenerate caplog·미래 delisted 테스트).
+
 - 검증 결과: (최종 Task5)
 - 변경 규모: (최종 Task5)
 - 커밋: (Task별 SHA — Task5 종합)
