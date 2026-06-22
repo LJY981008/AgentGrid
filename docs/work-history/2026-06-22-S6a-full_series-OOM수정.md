@@ -42,7 +42,9 @@ S5-d 가 `MasterUniverse`(생존편향 유니버스)를 배선했으나 라이�
 
 **Task2(trading_days DuckDB)**: `_scan.load_trading_days(base_dir)`(DuckDB `SELECT DISTINCT trade_date {_FROM} ORDER BY`·full_series 비의존·메모리 O(거래일수~7,560)) 신규 + `adapters.ParquetPriceSeriesPort.trading_days` 전환. 게이트 PASS(ruff·format·mypy·backtest 15·**결과 불변**). 리뷰 2종: convention **0위반** + code-reviewer **APPROVE**(결과 불변 empirical 검증 — cross-partition 전역정렬·DISTINCT 1회·list[date]·empty 동치·`port._full is None` 회귀; LOW 3=기존 패턴 inherited·out of scope).
 
-(Task3~5 완료 시 기입)
+**Task3(load_range)**: `_scan.load_range_series(base_dir, tickers, start, end)`(DuckDB `ticker = ANY($tickers) AND trade_date BETWEEN`·spike 검증·빈 tickers→{}) + `PriceSeriesPort.load_range` Protocol 확장·adapters(위임)·fakes(슬라이스). load_range·load_window 동일 SQL(BETWEEN)이라 **load_range 하나로 통합**(랭킹 윈도우 end=as_of=상한 가드). 게이트 PASS(ruff·format·mypy·backtest 35). 리뷰 2종: convention **0위반** + code-reviewer **APPROVE**(Fake↔_scan 동치 전 축 검증 — ticker 필터·빈 window 제외·BETWEEN inclusive·정렬·adjusted; MEDIUM 1=다중점 오름차순 단언 반영, LOW 3=중복날짜/import/double-walk 기존패턴·Task4/S6 이연).
+
+(Task4~5 완료 시 기입)
 - 검증 결과:
 - 라이브 측정(peak mem·wall-clock):
 - 변경 규모:

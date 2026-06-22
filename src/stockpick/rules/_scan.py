@@ -50,6 +50,13 @@ _SQL_SERIES_ALL: Final = (  # noqa: S608
 _SQL_TRADING_DAYS: Final = (  # noqa: S608
     f"SELECT DISTINCT trade_date {_FROM} ORDER BY trade_date"
 )
+# 종목집합 × [start,end] 구간 수정주가 — full_series/load 전체(OOM) 대신 보유/거래가능 종목만.
+# ticker = ANY($tickers)(spike 검증·빈 리스트→0행)·trade_date BETWEEN $start AND $end(경계 포함).
+_SQL_SERIES_RANGE: Final = (  # noqa: S608
+    f"SELECT ticker, trade_date, close, adj_factor {_FROM} "
+    f"WHERE ticker = ANY($tickers) AND trade_date BETWEEN $start AND $end "
+    f"ORDER BY ticker, trade_date"
+)
 # ticker → exchange 매핑. exchange 는 Hive 파티션 키(디렉토리)라 read_parquet 가 컬럼으로 노출.
 # 한 ticker 가 여러 exchange 파티션에 있으면 거래소 이전 이력(드묾)이므로 max 로 단일화(데모
 # 단순화 — 시점별 거래소 이력은 M2+ ticker_history 책임). GROUP BY 로 (ticker, exchange) 쌍만.
@@ -247,6 +254,53 @@ def load_trading_days(base_dir: Path) -> list[date]:
         days.append(trade_date)
     logger.info("거래일 로드: %d일(DuckDB DISTINCT·full_series 비의존)", len(days))
     return days
+
+
+def load_range_series(
+    base_dir: Path,
+    tickers: set[str],
+    start: date,
+    end: date,
+) -> dict[str, list[PricePoint]]:
+    """종목집합 × [start, end] 구간 수정주가(오름차순). full_series 전체 메모리 회피.
+
+    백테스트 실제 필요 = 보유/거래가능 종목 × 평가·룩백 구간뿐(전체 50k×30년 아님). DuckDB 가
+    `ticker = ANY($tickers) AND trade_date BETWEEN $start AND $end` 로 필터해 그만큼만 올린다
+    (adjusted = close * adj_factor 합성). ⚠️ 랭킹 윈도우로 쓸 때 `end=as_of` 면 trade_date<=as_of
+    (룩어헤드 상한 유지·1차 가드). 빈 tickers·빈 트리면 {}(no-op·조용한 추측 금지). 읽기 전용.
+    """
+    if not tickers:
+        return {}
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.warning("range 스캔 대상 Parquet 없음 — 빈 맵: dataset=%s", dataset_root)
+        return {}
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(
+            _SQL_SERIES_RANGE,
+            {"glob": glob, "tickers": list(tickers), "start": start, "end": end},
+        ).fetchall()
+    finally:
+        con.close()
+
+    series: dict[str, list[PricePoint]] = {}
+    for ticker, trade_date, close, adj_factor in _iter_rows(rows):
+        adjusted = close * adj_factor
+        series.setdefault(ticker, []).append(PricePoint(trade_date=trade_date, adjusted=adjusted))
+    logger.info(
+        "range 시계열 로드: 요청 tickers=%d, 반환=%d, 구간=[%s,%s]",
+        len(tickers),
+        len(series),
+        start,
+        end,
+    )
+    return series
 
 
 def _iter_rows(rows: list[tuple[object, ...]]) -> list[tuple[str, date, Decimal, Decimal]]:

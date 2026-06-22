@@ -85,3 +85,20 @@ def test_parquet_trading_days_distinct_without_full_series(tmp_path: Path) -> No
 
 def test_parquet_trading_days_empty(tmp_path: Path) -> None:
     assert ParquetPriceSeriesPort(tmp_path).trading_days() == []
+
+
+def test_parquet_load_range_filters_tickers_and_dates(tmp_path: Path) -> None:
+    # S6-a: load_range = 종목집합 × [start,end] 만 로드(메모리 절감·full_series OOM 회피).
+    days = _weekdays(date(2024, 1, 1), 10)
+    ingested = datetime(2026, 6, 17, tzinfo=UTC)
+    bars = _bars("AAA", days, 100, 1) + _bars("BBB", days, 200, 1) + _bars("CCC", days, 300, 1)
+    write_daily_bars(
+        bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="test", ingested_at=ingested
+    )
+    port = ParquetPriceSeriesPort(tmp_path)
+    rng = port.load_range(tickers={"AAA", "CCC"}, start=days[2], end=days[5])
+    assert set(rng) == {"AAA", "CCC"}  # BBB 제외(tickers 필터)
+    assert [p.trade_date for p in rng["AAA"]] == days[2:6]  # [start,end] 경계 포함(BETWEEN)
+    # adjusted=close*adj_factor·DuckDB ORDER BY 오름차순(Task4 결과불변 의존 — 다중점 순서 봉인)
+    assert [p.adjusted for p in rng["AAA"]] == [Decimal(n) for n in (102, 103, 104, 105)]
+    assert port.load_range(tickers=set(), start=days[0], end=days[-1]) == {}  # 빈 tickers→{}

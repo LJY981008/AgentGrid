@@ -31,6 +31,19 @@ class FakePriceSeriesPort:
     def full_series(self) -> dict[str, list[PricePoint]]:
         return self._series
 
+    def load_range(
+        self, *, tickers: set[str], start: date, end: date
+    ) -> dict[str, list[PricePoint]]:
+        # _scan.load_range_series 동치 — tickers∩·[start,end] 슬라이스·빈 window ticker 제외.
+        out: dict[str, list[PricePoint]] = {}
+        for t, pts in self._series.items():
+            if t not in tickers:
+                continue
+            window = [p for p in pts if start <= p.trade_date <= end]
+            if window:
+                out[t] = window
+        return out
+
     def trading_days(self) -> list[date]:
         return sorted({p.trade_date for pts in self._series.values() for p in pts})
 

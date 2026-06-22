@@ -23,7 +23,15 @@ class PriceSeriesPort(Protocol):
         ...
 
     def full_series(self) -> dict[str, list[PricePoint]]:
-        """전구간 시계열(수익 실현용 — 엔진이 진입일~청산일 구간만 슬라이스)."""
+        """전구간 시계열(수익 실현용). ⚠️ 대용량 OOM — 엔진은 `load_range`(종목×구간) 사용.
+        full_series 는 소규모 폴백·테스트용."""
+        ...
+
+    def load_range(
+        self, *, tickers: set[str], start: date, end: date
+    ) -> dict[str, list[PricePoint]]:
+        """종목집합 × [start, end] 구간 수정주가(메모리 절감 — full_series 전체 대신). 랭킹 윈도우로
+        쓸 때 `end=as_of` 면 trade_date<=as_of(룩어헤드 상한 유지). 빈 tickers→{}."""
         ...
 
     def trading_days(self) -> list[date]:

@@ -43,6 +43,12 @@ class ParquetPriceSeriesPort:
             self._full = _scan.load_adjusted_series(self._base_dir, as_of=None)
         return self._full
 
+    def load_range(
+        self, *, tickers: set[str], start: date, end: date
+    ) -> dict[str, list[PricePoint]]:
+        # 종목집합 × [start,end] 만 로드(메모리 절감 — full_series 전체 OOM 회피). _scan 위임.
+        return _scan.load_range_series(self._base_dir, tickers, start, end)
+
     def trading_days(self) -> list[date]:
         # full_series 전체 메모리 로드(OOM) 대신 DuckDB DISTINCT 집계(_scan.load_trading_days).
         return _scan.load_trading_days(self._base_dir)

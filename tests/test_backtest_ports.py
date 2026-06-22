@@ -62,6 +62,25 @@ def test_price_port_load_filters_as_of() -> None:
     assert port.trading_days() == [date(2024, 1, 2), date(2024, 2, 1)]
 
 
+def test_fake_load_range_slices_tickers_and_dates() -> None:
+    # S6-a: load_range = tickers∩ × [start,end] 슬라이스·빈 window ticker 제외(_scan 동치).
+    series = {
+        "A": [
+            PricePoint(date(2024, 1, 2), Decimal("10")),
+            PricePoint(date(2024, 1, 5), Decimal("11")),
+            PricePoint(date(2024, 1, 10), Decimal("12")),
+        ],
+        "B": [PricePoint(date(2024, 1, 3), Decimal("20"))],
+    }
+    port = FakePriceSeriesPort(series)
+    rng = port.load_range(tickers={"A"}, start=date(2024, 1, 4), end=date(2024, 1, 8))
+    assert set(rng) == {"A"}  # B 제외(tickers 필터)
+    assert [p.trade_date for p in rng["A"]] == [date(2024, 1, 5)]  # [4,8] 내 = 5만(경계 포함)
+    # 빈 window ticker 제외 + 빈 tickers → {}
+    assert port.load_range(tickers={"A"}, start=date(2024, 1, 6), end=date(2024, 1, 7)) == {}
+    assert port.load_range(tickers=set(), start=date(2024, 1, 1), end=date(2024, 1, 31)) == {}
+
+
 def test_stub_identity_resolver() -> None:
     r = StubIdentityResolver({"AAPL": "0000320193"})
     assert r.cik_for("AAPL", on=date(2024, 1, 1)) == "0000320193"
