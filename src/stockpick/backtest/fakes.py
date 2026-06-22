@@ -55,6 +55,9 @@ class FakeUniversePort:
     def delisting_event(self, ticker: str) -> date | None:
         return self._delisted.get(ticker)
 
+    def ticker_count(self) -> int:
+        return len(self._listed)
+
 
 class StubIdentityResolver:
     """골격용 — 주입된 ticker→cik 맵. 미해소면 빈 문자열(caveat). 실전=ticker_history(후속)."""

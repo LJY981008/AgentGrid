@@ -1,9 +1,11 @@
 """S5-c 벌크 가격 적재 오케스트레이터 — 종목마스터 대상 다년 EOD → Parquet(백테스트 진실원본).
 
-흐름(run_bulk): ticker 유일 assert → master_securities → 체크포인트 skip(done/empty) → ticker별
-fetch_with_retry → write_daily_bars(G1) → 체크포인트 기록 → **verify 끝에 1회**(per-ticker O(n²)
-회피) → load_trade_date_bounds → update_stock_dates(날짜 backfill) → 커버리지 요약.
-Parquet 벌크만(PG daily_bar 동기 이연). `meta.validated=false` 불변(데이터≠검증).
+흐름(run_bulk): master_securities → 체크포인트 skip(done/empty) → fetch_with_retry →
+write_daily_bars(G1) → 체크포인트 기록 → 후처리 `_apply_dates_and_snapshot`
+(update_stock_dates → export_stock_snapshot) → 커버리지 요약.
+⚠️ commit 은 호출부(main/CLI) — 코어 commit 금지(test rollback 격리·critic C1).
+`verify_parquet` 은 `--verify` 옵션(기본 off·예외격리·S6 전 1회 게이트).
+`--finalize` 는 적재 skip·후처리만(복구·멱등). Parquet 벌크만. `meta.validated=false` 불변.
 
 ⚠️ 재개(G4): 체크포인트(JSONL)가 **유일한 진실원천** — write 는 (ticker,year) 파일단위 atomic
 (per-ticker 아님)이라 중단 시 부분 ticker 가능, list_dataset_tickers 신뢰 불가. write 완료 후에만
@@ -22,9 +24,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import configure_logging
-from .db import connect, master_securities, update_stock_dates
+from .db import connect, export_stock_snapshot, master_securities, update_stock_dates
 from .eodhd import EodhdAuthError, EodhdRateLimitError, EodhdResponseError, EodhdSource
-from .storage import build_expected, load_trade_date_bounds, verify_parquet, write_daily_bars
+from .storage import (
+    VerificationError,
+    build_expected,
+    load_trade_date_bounds,
+    verify_parquet,
+    write_daily_bars,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -131,6 +139,35 @@ def fetch_with_retry(
             sleep_fn(_backoff_seconds(attempt))
 
 
+def _apply_dates_and_snapshot(conn: psycopg.Connection[TupleRow], base_dir: Path) -> int:
+    """후처리(run_bulk·finalize 공통): Parquet bounds → stock 날짜 backfill → 스냅샷 export.
+
+    ⚠️ commit 은 호출부(main/CLI) 소유 — 코어에 commit 넣으면 test rollback 격리가 깨져 라이브
+    PG 오염(critic C1). export 는 같은 conn 의 미커밋 backfill 을 read-your-own-writes 로 본다.
+    반환 = 스냅샷 종목 수.
+    """
+    update_stock_dates(conn, load_trade_date_bounds(base_dir))
+    return export_stock_snapshot(conn, base_dir)
+
+
+def _run_verify(base_dir: Path, expected: dict[str, TickerExpectation] | None) -> bool:
+    """--verify 무결성 검사(예외 격리) — 실패해도 적재·날짜는 영속(verify 는 보고용·차단 아님).
+
+    ⚠️ verify_parquet 은 대용량(5.1G)에서 ≥수백초·메모리 큼 → 기본 off, S6 전 1회 게이트로만.
+    ⚠️ expected 빈(재개·전부 skip) 시 missing/shortfall 게이트 no-op(중복·음수·OHLC 무결성만) —
+    S6 완전성은 master/snapshot 에서 expected 도출 필요(M1·범위 밖).
+    """
+    try:
+        report = verify_parquet(base_dir, expected=expected)
+    except VerificationError:
+        logger.error(
+            "Parquet 무결성 검증 실패(--verify) — 적재·날짜는 영속, 데이터 신뢰 전 조사 필요",
+            exc_info=True,
+        )
+        return False
+    return report.passed
+
+
 def run_bulk(
     source: EodhdSource,
     *,
@@ -140,11 +177,12 @@ def run_bulk(
     max_retries: int = 3,
     rate_sleep: float = 0.06,
     sleep_fn: Callable[[float], None] = time.sleep,
+    verify: bool = False,
 ) -> dict[str, int]:
-    """종목마스터 대상 다년 EOD → Parquet 벌크 + 날짜 backfill + verify 1회. 반환 = 커버리지 요약.
+    """종목마스터 대상 다년 EOD → Parquet 벌크 + 후처리(날짜 backfill·스냅샷). 반환 = 커버리지 요약.
 
-    재개(체크포인트 done/empty skip·failed 재시도). verify expected=**이번 run 성공 fetch 누적**
-    (C1 — 마스터 전체 아님). 마스터-vs-fetch 갭은 요약(coverage)으로 고지. 커밋은 호출부.
+    재개(체크포인트 done/empty skip·failed 재시도). 후처리=`_apply_dates_and_snapshot`.
+    verify=True 면 무결성 1회(예외격리). commit 은 호출부(C1).
     """
     securities = master_securities(conn)
     tickers = [t for t, _, _ in securities]
@@ -189,10 +227,8 @@ def run_bulk(
         if rate_sleep:
             sleep_fn(rate_sleep)
 
-    # verify 1회(per-ticker 아님·O(n²) 회피) — 이번 run 성공분 소실 봉인.
-    report = verify_parquet(base_dir, expected=expected)
-    # 날짜 backfill(Parquet min/max → stock).
-    update_stock_dates(conn, load_trade_date_bounds(base_dir))
+    # 후처리: 날짜 backfill → 스냅샷 export(commit 은 호출부·C1·verify 는 옵션).
+    n_snapshot = _apply_dates_and_snapshot(conn, base_dir)
 
     total = len(tickers)
     summary = {
@@ -201,36 +237,58 @@ def run_bulk(
         "empty": empty,
         "failed": failed,
         "skipped": skipped,
-        "verify_passed": int(report.passed),
+        "snapshot": n_snapshot,
     }
+    if verify:  # --verify 시에만 무결성 검사(off 면 verify_passed 키 없음·M1 계약)
+        summary["verify_passed"] = int(_run_verify(base_dir, expected))
     coverage = 100.0 * fetched / total if total else 0.0
     logger.info("벌크 적재 요약: %s · coverage(이번 run fetched/master)=%.1f%%", summary, coverage)
     return summary
 
 
-def _parse_limit(argv: list[str] | None) -> int | None:
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="stockpick.data.bulk")
     parser.add_argument("--limit", type=int, default=None, help="처리 ticker 수 제한(스모크/단계)")
-    limit: int | None = parser.parse_args(argv).limit
-    return limit
+    parser.add_argument(
+        "--finalize",
+        action="store_true",
+        help="적재 루프 skip — 날짜 backfill+스냅샷 export 만(복구·재동기·멱등)",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="후처리 후 무결성 검사 1회(대용량 ≥수백초·기본 off·S6 전 게이트용)",
+    )
+    return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python -m stockpick.data.bulk [--limit N]` — 마스터 대상 다년 EOD 벌크(진입점·commit).
+    """`python -m stockpick.data.bulk [--limit N | --finalize] [--verify]` — 진입점(commit 소유).
 
-    ⚠️ 전체 50,184 풀런은 수시간. `--limit` 로 스모크/단계 실행. 재개 가능(체크포인트).
+    기본: 마스터 대상 다년 EOD 벌크(수시간·재개 가능). `--finalize`: 적재 skip·날짜/스냅샷만(복구).
+    ⚠️ 풀백필은 API(uvicorn) 정지 후 격리 컨테이너 권장(full_series 동시 메모리 OOM 회피·CLAUDE.md).
     """
     configure_logging()  # G6 — httpx 토큰 로거 가드
-    limit = _parse_limit(argv)
+    ns = _parse_args(argv)
+    finalize: bool = bool(ns.finalize)
+    do_verify: bool = bool(ns.verify)
+    limit: int | None = ns.limit
     base_dir = Path(os.environ.get(_DATA_DIR_ENV, _DEFAULT_DATA_DIR))
-    source = EodhdSource()
     conn = connect()
     try:
-        summary = run_bulk(source, base_dir=base_dir, conn=conn, limit=limit)
-        conn.commit()
+        if finalize:  # 복구·재동기 — 적재 루프 없이 날짜/스냅샷만(현 29/50,184 → 전체)
+            if limit is not None:
+                logger.warning("--limit 은 --finalize 와 무관 — 무시(finalize 는 전체 후처리)")
+            summary: dict[str, int] = {"snapshot": _apply_dates_and_snapshot(conn, base_dir)}
+            if do_verify:
+                summary["verify_passed"] = int(_run_verify(base_dir, expected=None))
+        else:
+            source = EodhdSource()
+            summary = run_bulk(source, base_dir=base_dir, conn=conn, limit=limit, verify=do_verify)
+        conn.commit()  # ⚠️ commit 은 진입점만(run_bulk/_apply 코어는 commit 안 함·C1)
     finally:
         conn.close()
-    print(f"[bulk] 벌크 가격 적재: {summary}")  # noqa: T201 — 진입점 출력
+    print(f"[bulk] {'finalize' if finalize else '벌크 가격 적재'}: {summary}")  # noqa: T201
     return 0
 
 

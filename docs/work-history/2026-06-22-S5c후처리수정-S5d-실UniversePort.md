@@ -46,6 +46,8 @@ S5-c 가 종목마스터 50,184(폐지 포함) 대상 다년 EOD 를 Parquet 에
 
 **Task3(MasterUniverse·_select_universe)**: adapters.py 신규 `MasterUniverse`(스냅샷→시점 멤버십·`boundary=delisted_at+1day` 경계변환·degenerate/listed-None 제외·ticker_count·dropped 관측성)·`_select_universe`(스냅샷 유무 분기·폴백 WARNING)·ports.py UniversePort docstring 단일화(boundary=첫 거래불가일). 게이트 통과(universe 6 + engine 회귀). 리뷰 2종 반영: code-reviewer 경계 **end-to-end correct 검증**(D 포함·D+1 배제·청산가=마지막봉·주말 off-by-one 없음) + MEDIUM(docstring "동일 규약·입력의미 다름"·json isinstance narrowing·listed-None 집계 로그·FakeUniversePort 동치 테스트·degenerate caplog·미래 delisted 테스트).
 
+**Task4(bulk 후처리 재구조화·--finalize·배선)**: run_bulk 후처리 `verify→update→(main)commit` → `update_stock_dates→export_stock_snapshot`(verify 제거)·**commit 은 호출부(main)만**(C1)·`_apply_dates_and_snapshot`/`_run_verify` 헬퍼·verify `--verify` 옵션화(기본 off·예외격리)·`--finalize`(루프 skip·복구·멱등)·demo/api `_select_universe` 배선·`UniversePort.ticker_count` Protocol 확장(Fake 구현). 게이트 통과(ruff·format·mypy·전체 pytest). 리뷰 2종: convention **0위반**(C1 commit 경계 구조 검증) + code-reviewer **APPROVE**(C1·finalize 멱등·verify·배선 end-to-end correct) → Minor 4 반영(M1 verify resume missing-게이트 no-op docstring·M2 finalize+limit 무시 로그·M3 summary 키 `snapshot` 통일·M4 main --finalize commit 경계 entrypoint 테스트).
+
 - 검증 결과: (최종 Task5)
 - 변경 규모: (최종 Task5)
 - 커밋: (Task별 SHA — Task5 종합)

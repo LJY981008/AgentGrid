@@ -52,6 +52,10 @@ class UniversePort(Protocol):
         """
         ...
 
+    def ticker_count(self) -> int:
+        """유니버스 전체 멤버십 종목 수(시점 무관·demo top_n·리포트용·엔진 미사용)."""
+        ...
+
 
 @runtime_checkable
 class IdentityResolver(Protocol):

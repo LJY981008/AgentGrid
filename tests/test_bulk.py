@@ -16,7 +16,12 @@ import pytest
 from psycopg.rows import TupleRow
 
 from stockpick.data import db
-from stockpick.data.bulk import Checkpoint, fetch_with_retry, run_bulk
+from stockpick.data.bulk import (
+    Checkpoint,
+    _apply_dates_and_snapshot,
+    fetch_with_retry,
+    run_bulk,
+)
 from stockpick.data.eodhd import (
     EodhdAuthError,
     EodhdRateLimitError,
@@ -189,7 +194,9 @@ def test_run_bulk(conn: _Conn, tmp_path: Path) -> None:
     assert summary["master"] == 3
     assert summary["fetched"] == 2
     assert summary["empty"] == 1
-    assert summary["verify_passed"] == 1
+    assert summary["snapshot"] == 3  # stock 3개(AAA·BBB·DEAD) → 스냅샷 export
+    assert "verify_passed" not in summary  # verify off 기본(M1 계약 — 후처리에서 분리)
+    assert (tmp_path / "stock_snapshot.json").is_file()  # 후처리 스냅샷 생성
     assert set(list_dataset_tickers(tmp_path)) == {"AAA", "DEAD"}  # 0bar BBB 미적재
 
     with conn.cursor() as cur:
@@ -221,3 +228,51 @@ def test_run_bulk_limit(conn: _Conn, tmp_path: Path) -> None:
     )
     summary = run_bulk(source, base_dir=tmp_path, conn=conn, limit=1, sleep_fn=_noop_sleep)
     assert summary["fetched"] == 1  # --limit 1 — 첫 ticker만
+
+
+def _single_bar_source() -> EodhdSource:
+    handler = httpx.MockTransport(lambda _r: httpx.Response(200, json=[_eod("2020-01-02")]))
+    return EodhdSource(client=httpx.Client(transport=handler))
+
+
+def _upsert_active_aaa(conn: _Conn) -> None:
+    db.upsert_stocks(
+        conn, [_stock("AAA", exchange=Exchange.NASDAQ)], source="eodhd", ingested_at=_STAMP
+    )
+
+
+def test_finalize_apply_idempotent(conn: _Conn, tmp_path: Path) -> None:
+    # finalize 코어(_apply_dates_and_snapshot) 멱등 — 재호출 동일(복구 경로·commit 없음).
+    _upsert_active_aaa(conn)
+    run_bulk(_single_bar_source(), base_dir=tmp_path, conn=conn, sleep_fn=_noop_sleep)
+    n1 = _apply_dates_and_snapshot(conn, tmp_path)
+    n2 = _apply_dates_and_snapshot(conn, tmp_path)
+    assert n1 == n2 == 1  # stock 1개(AAA) — 멱등
+    assert (tmp_path / "stock_snapshot.json").is_file()
+
+
+def test_run_bulk_verify_flag(conn: _Conn, tmp_path: Path) -> None:
+    # --verify(verify=True) → summary 에 verify_passed 키 존재·통과.
+    _upsert_active_aaa(conn)
+    summary = run_bulk(
+        _single_bar_source(), base_dir=tmp_path, conn=conn, verify=True, sleep_fn=_noop_sleep
+    )
+    assert summary["verify_passed"] == 1  # --verify → 무결성 검사 실행·통과
+
+
+def test_main_finalize_commits_at_entrypoint(
+    conn: _Conn, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # main --finalize 배선 — commit 은 진입점만(C1)·snapshot 생성. commit/close 는 no-op 모킹
+    # (fixture rollback 격리 보존 — 실제 commit 시 라이브 PG 오염).
+    from stockpick.data import bulk
+
+    _upsert_active_aaa(conn)
+    commits = {"n": 0}
+    monkeypatch.setattr(conn, "commit", lambda: commits.__setitem__("n", commits["n"] + 1))
+    monkeypatch.setattr(conn, "close", lambda: None)
+    monkeypatch.setattr(bulk, "connect", lambda: conn)
+    monkeypatch.setenv("STOCKPICK_DATA_DIR", str(tmp_path))
+    assert bulk.main(["--finalize"]) == 0
+    assert commits["n"] == 1  # 진입점이 commit 소유(C1)
+    assert (tmp_path / "stock_snapshot.json").is_file()

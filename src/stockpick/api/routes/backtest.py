@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from ...backtest.adapters import ParquetPriceSeriesPort, PriceDerivedUniverse
+from ...backtest.adapters import ParquetPriceSeriesPort, _select_universe
 from ...backtest.benchmark import attach_benchmarks, equal_weight_universe
 from ...backtest.config import BacktestConfig
 from ...backtest.engine import run as run_backtest
@@ -83,7 +83,7 @@ def backtest(
         logger.info("backtest: Parquet 트리 비어있음 — 빈 백테스트 반환")
         return _empty_response(params)
 
-    universe = PriceDerivedUniverse(price_port)
+    universe = _select_universe(base_dir, price_port)
     config = BacktestConfig(
         strategy_name=_STRATEGIES[strategy].name,
         top_n=top_n,

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from ..data import configure_logging
 from . import engine
-from .adapters import ParquetPriceSeriesPort, PriceDerivedUniverse
+from .adapters import ParquetPriceSeriesPort, _select_universe
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
 from .identity import EdgarSnapshotResolver
@@ -42,7 +42,7 @@ def run_demo(base_dir: Path) -> int:
         print("  → 먼저 `python -m stockpick.data.ingest` 로 적재하세요.")  # noqa: T201
         return 0
 
-    universe = PriceDerivedUniverse(price_port)  # ⚠️ 가격기반·survivorship 한계(data_caveats 고지)
+    universe = _select_universe(base_dir, price_port)  # 스냅샷 있으면 MasterUniverse·없으면 폴백
     identity = EdgarSnapshotResolver(base_dir)  # EDGAR 저장본 cik(없으면 빈 맵→"")
     config = BacktestConfig(
         strategy_name="equal_weight_top_n",
