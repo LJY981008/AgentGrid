@@ -19,7 +19,7 @@ from ..rules.factors import momentum_universe
 from ..rules.ranking import rank_by_momentum
 from . import calendar, costs
 from .metrics import compute_metrics
-from .ports import momentum_window_days
+from .ports import MomentumScorePort, momentum_window_days
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -153,15 +153,29 @@ def _rank_at(
     members 와 동일 계열).
     """
     tradable = universe_port.constituents(as_of=t)
-    series = price_port.load_range(tickers=tradable, start=_window_start(config, t), end=t)
-    scores = momentum_universe(
-        series,
-        as_of=t,
-        lookback_days=config.lookback_days,
-        skip_recent_days=config.skip_recent_days,
-    )
-    # rank_by_momentum 은 점수난 ticker 전부 exchange 매핑을 요구 → series 의 거래소만 추림.
-    ticker_to_exchange = {k: ex for k, ex in exchanges.items() if k in series}
+    if isinstance(price_port, MomentumScorePort):
+        # SQL 부분 푸시다운(ADR-007) — 끝점 2점만 스캔(1억행 풀로드 회피).
+        # load_range+momentum_universe 와 bit-identical(windowed wn·Task2/5 봉인·윈도우 동일 출처).
+        scores = price_port.momentum_scores(
+            tickers=tradable,
+            as_of=t,
+            lookback_days=config.lookback_days,
+            skip_recent_days=config.skip_recent_days,
+        )
+    else:
+        # Fake/Parquet 폴백 — 랭킹 윈도우만 로드 후 메모리 momentum(MomentumScorePort 미구현 포트).
+        series = price_port.load_range(tickers=tradable, start=_window_start(config, t), end=t)
+        scores = momentum_universe(
+            series,
+            as_of=t,
+            lookback_days=config.lookback_days,
+            skip_recent_days=config.skip_recent_days,
+        )
+    # rank_by_momentum 은 score!=None ticker 의 exchange 매핑 누락 시 ValueError(None 은 체크 전
+    # skip → 제외 무방). 두 경로 scores 키=윈도우 데이터 종목 동일 → 동일 매핑(결과 불변).
+    ticker_to_exchange = {
+        k: ex for k, ex in exchanges.items() if k in scores and scores[k].score is not None
+    }
     ranked = rank_by_momentum(
         scores,
         ticker_to_exchange,

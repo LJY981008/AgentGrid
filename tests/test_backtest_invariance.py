@@ -69,12 +69,17 @@ def _scenario(
     tmp_path: Path,
 ) -> tuple[
     dict[str, list[PricePoint]],
-    BacktestConfig,
+    list[date],
+    dict[str, Exchange],
     FakeUniversePort,
     StubIdentityResolver,
     EqualWeightTopN,
 ]:
-    """폐지(A)·평탄(B)·갭(C) 합성 데이터 적재 + 공통 config/universe. Parquet 트리만 기록."""
+    """폐지(A)·평탄(B)·갭(C) 합성 적재 + 공통 universe. A,B=NASDAQ·C=NYSE(거래소 그룹핑 검증).
+
+    Parquet 트리만 기록(DuckDB 캐시는 호출부가 build_cache). Fake exchange 매핑이 실 파티션과
+    일치하게 exchanges 맵도 반환(group_by_exchange=True 시 그룹핑 키 동일 → 세 포트 동치 비교).
+    """
     days = _weekdays(date(2024, 1, 1), 70)
     de = _SCENARIO_DELIST
     series: dict[str, list[PricePoint]] = {
@@ -82,14 +87,28 @@ def _scenario(
         "B": [PricePoint(d, Decimal("100")) for d in days],
         "C": [PricePoint(d, Decimal(120 + i)) for i, d in enumerate(days) if d.day != 20],
     }
+    exchanges = {"A": Exchange.NASDAQ, "B": Exchange.NASDAQ, "C": Exchange.NYSE}
+    stamp = datetime(2026, 6, 17, tzinfo=UTC)
     write_daily_bars(
-        _bars_from_series(series),
+        _bars_from_series({"A": series["A"], "B": series["B"]}),
         exchange=Exchange.NASDAQ,
         base_dir=tmp_path,
         source="test",
-        ingested_at=datetime(2026, 6, 17, tzinfo=UTC),
+        ingested_at=stamp,
     )
-    cfg = BacktestConfig(
+    write_daily_bars(
+        _bars_from_series({"C": series["C"]}),
+        exchange=Exchange.NYSE,
+        base_dir=tmp_path,
+        source="test",
+        ingested_at=stamp,
+    )
+    uni = FakeUniversePort(listed={t: date(2023, 1, 1) for t in series}, delisted={"A": de})
+    return series, days, exchanges, uni, StubIdentityResolver({}), EqualWeightTopN()
+
+
+def _make_cfg(days: list[date], *, group_by_exchange: bool) -> BacktestConfig:
+    return BacktestConfig(
         strategy_name="equal_weight_top_n",
         top_n=2,
         lookback_days=20,  # _window_start 경계 강화(작은 lookback 미시험 회피·critic MEDIUM2)
@@ -97,18 +116,21 @@ def _scenario(
         rebalance_freq="monthly",
         cost_bps=Decimal("0"),
         delisting_recovery_rate=Decimal("0"),
-        group_by_exchange=False,
+        group_by_exchange=group_by_exchange,
         start=days[0],
         end=days[-1],
     )
-    uni = FakeUniversePort(listed={t: date(2023, 1, 1) for t in series}, delisted={"A": de})
-    return series, cfg, uni, StubIdentityResolver({}), EqualWeightTopN()
 
 
 def test_engine_parquet_load_range_matches_fake(tmp_path: Path) -> None:
-    series, cfg, uni, idn, strat = _scenario(tmp_path)
+    series, days, exchanges, uni, idn, strat = _scenario(tmp_path)
+    cfg = _make_cfg(days, group_by_exchange=False)
     r_fake = run(
-        cfg, price_port=FakePriceSeriesPort(series), universe_port=uni, identity=idn, strategy=strat
+        cfg,
+        price_port=FakePriceSeriesPort(series, exchanges),
+        universe_port=uni,
+        identity=idn,
+        strategy=strat,
     )
     r_parq = run(
         cfg,
@@ -129,38 +151,45 @@ def test_engine_parquet_load_range_matches_fake(tmp_path: Path) -> None:
 def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
     """DuckDBPriceSeriesPort 백테스트 == Parquet == Fake (Task5 BLOCKING·결과 bit-identical).
 
-    ⚠️ Task6(engine momentum_scores 분기)의 가드레일: **지금은** load_range 경로로 통과하고,
-    분기 후엔 momentum_scores(SQL 부분 푸시다운) 경로로도 동일 결과여야 통과한다. equity_curve·
-    전 지표·n_delisted·리밸 수가 셋 다 일치(폐지경계 A·갭 C·평탄 B 포함).
+    ⚠️ Task6(engine momentum_scores 분기)의 가드레일: DuckDB 는 momentum_scores(SQL 부분 푸시다운)
+    경로, Parquet/Fake 는 load_range+momentum_universe 경로 — 결과가 bit-identical 해야 한다.
+    **group_by_exchange False·True 양쪽** 검증(True 는 ticker_to_exchange 가 그룹핑 키라 매핑 변경에
+    가장 민감 — 폐지경계 A·갭 C·평탄 B·2거래소 포함).
     """
-    series, cfg, uni, idn, strat = _scenario(tmp_path)
+    series, days, exchanges, uni, idn, strat = _scenario(tmp_path)
     n = build_cache(tmp_path)  # Parquet → cache.duckdb(DuckDB 포트 입력)
     assert n == sum(len(pts) for pts in series.values())
 
-    r_fake = run(
-        cfg, price_port=FakePriceSeriesPort(series), universe_port=uni, identity=idn, strategy=strat
-    )
-    r_parq = run(
-        cfg,
-        price_port=ParquetPriceSeriesPort(tmp_path),
-        universe_port=uni,
-        identity=idn,
-        strategy=strat,
-    )
-    dport = DuckDBPriceSeriesPort(tmp_path)
-    try:
-        r_duck = run(cfg, price_port=dport, universe_port=uni, identity=idn, strategy=strat)
-    finally:
-        _close_price_port(dport)
+    for gbe in (False, True):
+        cfg = _make_cfg(days, group_by_exchange=gbe)
+        r_fake = run(
+            cfg,
+            price_port=FakePriceSeriesPort(series, exchanges),
+            universe_port=uni,
+            identity=idn,
+            strategy=strat,
+        )
+        r_parq = run(
+            cfg,
+            price_port=ParquetPriceSeriesPort(tmp_path),
+            universe_port=uni,
+            identity=idn,
+            strategy=strat,
+        )
+        dport = DuckDBPriceSeriesPort(tmp_path)
+        try:
+            r_duck = run(cfg, price_port=dport, universe_port=uni, identity=idn, strategy=strat)
+        finally:
+            _close_price_port(dport)
 
-    assert r_duck.equity_curve == r_parq.equity_curve == r_fake.equity_curve
-    assert r_duck.total_return == r_parq.total_return
-    assert r_duck.cagr == r_parq.cagr
-    assert r_duck.sharpe == r_parq.sharpe
-    assert r_duck.sortino == r_parq.sortino
-    assert r_duck.max_drawdown == r_parq.max_drawdown
-    assert r_duck.turnover == r_parq.turnover
-    assert r_duck.total_cost == r_parq.total_cost
-    assert r_duck.n_rebalances == r_parq.n_rebalances
-    assert r_duck.n_delisted_liquidations == r_parq.n_delisted_liquidations
-    assert r_duck.n_delisted_liquidations >= 1  # A 폐지청산(생존편향 가드 살아있음)
+        assert r_duck.equity_curve == r_parq.equity_curve == r_fake.equity_curve, f"gbe={gbe}"
+        assert r_duck.total_return == r_parq.total_return, f"gbe={gbe}"
+        assert r_duck.cagr == r_parq.cagr, f"gbe={gbe}"
+        assert r_duck.sharpe == r_parq.sharpe, f"gbe={gbe}"
+        assert r_duck.sortino == r_parq.sortino, f"gbe={gbe}"
+        assert r_duck.max_drawdown == r_parq.max_drawdown, f"gbe={gbe}"
+        assert r_duck.turnover == r_parq.turnover, f"gbe={gbe}"
+        assert r_duck.total_cost == r_parq.total_cost, f"gbe={gbe}"
+        assert r_duck.n_rebalances == r_parq.n_rebalances, f"gbe={gbe}"
+        assert r_duck.n_delisted_liquidations == r_parq.n_delisted_liquidations, f"gbe={gbe}"
+        assert r_duck.n_delisted_liquidations >= 1, f"gbe={gbe}"  # A 폐지청산(생존편향 가드)
