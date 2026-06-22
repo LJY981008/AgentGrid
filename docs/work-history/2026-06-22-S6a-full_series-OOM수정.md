@@ -44,7 +44,9 @@ S5-d 가 `MasterUniverse`(생존편향 유니버스)를 배선했으나 라이�
 
 **Task3(load_range)**: `_scan.load_range_series(base_dir, tickers, start, end)`(DuckDB `ticker = ANY($tickers) AND trade_date BETWEEN`·spike 검증·빈 tickers→{}) + `PriceSeriesPort.load_range` Protocol 확장·adapters(위임)·fakes(슬라이스). load_range·load_window 동일 SQL(BETWEEN)이라 **load_range 하나로 통합**(랭킹 윈도우 end=as_of=상한 가드). 게이트 PASS(ruff·format·mypy·backtest 35). 리뷰 2종: convention **0위반** + code-reviewer **APPROVE**(Fake↔_scan 동치 전 축 검증 — ticker 필터·빈 window 제외·BETWEEN inclusive·정렬·adjusted; MEDIUM 1=다중점 오름차순 단언 반영, LOW 3=중복날짜/import/double-walk 기존패턴·Task4/S6 이연).
 
-(Task4~5 완료 시 기입)
+**Task4(engine·benchmark 전환)**: `full_series()`·`load(as_of)` 전체(OOM) 제거 → `load_range`(보유종목 [entry,exit] 수익·tradable [_window_start,t] 랭킹 윈도우·tradable 푸시필터). `_window_start`=t-((lookback+skip)*2+30)일(거래일 5/7 마진 43%·code-reviewer 시뮬레이션 lookback 756까지 무발산). **결과불변 회귀**: 신규 `test_backtest_invariance.py` — 같은 합성데이터로 **실 DuckDB(ParquetPriceSeriesPort) == Fake 동치**(폐지청산·보유 중 갭·equity_curve/지표/n_delisted). 게이트 PASS. 리뷰 2종: convention **0위반** + code-reviewer **COMMENT**(CRITICAL/HIGH 0) → MEDIUM1(스테일 종목 발산 경고 engine 대칭)·LOW3(full_series entry>exit 잠재 룩어헤드 NEW 교정 주석)·MEDIUM2(invariance lookback 20·skip 3 경계 강화) 반영.
+
+(Task5 완료 시 기입)
 - 검증 결과:
 - 라이브 측정(peak mem·wall-clock):
 - 변경 규모:

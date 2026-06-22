@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -47,7 +48,6 @@ def run(
     strategy: Strategy,
 ) -> BacktestResult:
     """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터)."""
-    full = price_port.full_series()
     exchanges = price_port.ticker_exchanges()
     plan = calendar.holding_periods(
         price_port.trading_days(),
@@ -82,11 +82,16 @@ def run(
         turnover_total += turnover
         cost_total += cost_amount
 
-        # 보유수익(forward-return [entry_day, exit_day]) — 폐지 청산 포함
+        # 보유수익([entry,exit]·폐지청산). load_range 보유종목 × 구간만(full 전체 OOM 회피).
+        # 정상 종목 equity/지표 불변. ⚠️ 보유기간 봉 0(첫봉>exit): full=미래봉(ret=0·룩어헤드)·
+        # load_range=skip — equity 동일·NEW 가 룩어헤드 교정(critic C1·LOW3).
+        held = price_port.load_range(
+            tickers=set(key_to_ticker.values()), start=entry_day, end=exit_day
+        )
         pret, delisted, skipped = _holding_period_return(
             weights,
             key_to_ticker,
-            full,
+            held,
             entry_day,
             exit_day,
             universe_port,
@@ -138,10 +143,16 @@ def _rank_at(
     exchanges: Mapping[str, Exchange],
     t: date,
 ) -> list[TopEntry]:
-    """as_of=t 랭킹. survivorship: constituents(as_of=t) 교집합(가격파일 존재 아님). cik enrich."""
-    series = price_port.load(as_of=t)
+    """as_of=t 랭킹. survivorship: constituents(as_of=t) 교집합(가격파일 존재 아님). cik enrich.
+
+    load_range(tradable, [_window_start(t), t]) 로 거래가능 종목 × 랭킹 윈도우만 로드(load(as_of)
+    전 종목 t 이하 전체 OOM 회피). 룩어헤드 상한 ≤t 유지·tradable 푸시필터. 결과 불변(momentum
+    lookback+skip 거래일이 윈도우에 충분 포함). ⚠️ 장기 거래정지(윈도우에 봉 0)인 tradable 종목은
+    스테일 모멘텀 없이 랭킹 제외 — full load(as_of) 대비 발산 가능(드묾·의도된 스테일 배제·benchmark
+    members 와 동일 계열).
+    """
     tradable = universe_port.constituents(as_of=t)
-    series = {k: v for k, v in series.items() if k in tradable}
+    series = price_port.load_range(tickers=tradable, start=_window_start(config, t), end=t)
     scores = momentum_universe(
         series,
         as_of=t,
@@ -159,6 +170,17 @@ def _rank_at(
     )
     # cik 앵커 enrich(가능 시) — 생존편향 ticker 재사용 오조인 방지. 미해소면 "" 유지(caveat).
     return [replace(e, cik=identity.cik_for(e.ticker, on=t) or e.cik) for e in ranked]
+
+
+def _window_start(config: BacktestConfig, t: date) -> date:
+    """랭킹 윈도우 하한 — momentum lookback+skip 거래일을 충분히 덮는 캘린더 여유(×2 + 30일).
+
+    `load_range(tradable, start=_window_start(t), end=t)` 로 랭킹 입력을 좁혀 load(as_of) 전 종목
+    t 이하 전체(OOM) 회피. 여유(거래일≈캘린더×5/7 → ×2 면 lookback+skip 거래일 확실 포함)가 momentum
+    필요 구간을 덮어 결과 불변. 상장 초기 종목은 가용 전부(full load 와 동일 graceful).
+    """
+    span = (config.lookback_days + config.skip_recent_days) * 2 + 30
+    return t - timedelta(days=span)
 
 
 def _turnover(old: dict[str, Decimal], new: dict[str, Decimal]) -> Decimal:
