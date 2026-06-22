@@ -12,7 +12,14 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from stockpick.backtest.adapters import DuckDBPriceSeriesPort, ParquetPriceSeriesPort
+import pytest
+
+from stockpick.backtest.adapters import (
+    DuckDBPriceSeriesPort,
+    ParquetPriceSeriesPort,
+    _close_price_port,
+    _select_price_port,
+)
 from stockpick.backtest.ports import (
     MomentumScorePort,
     PriceSeriesPort,
@@ -164,6 +171,56 @@ def test_momentum_scores_matches_memory_path(tmp_path: Path) -> None:
         )
     finally:
         dport.close()
+
+
+def test_select_price_port_cache_present(tmp_path: Path) -> None:
+    """cache.duckdb 존재 → DuckDBPriceSeriesPort(가속)."""
+    _build(tmp_path)  # write + build_cache
+    port = _select_price_port(tmp_path)
+    try:
+        assert isinstance(port, DuckDBPriceSeriesPort)
+    finally:
+        _close_price_port(port)
+
+
+def test_select_price_port_cache_absent_fallback(tmp_path: Path) -> None:
+    """cache.duckdb 부재 → ParquetPriceSeriesPort 폴백(기능 회귀 0·속도만 미가속)."""
+    days = _weekdays(date(2024, 1, 1), 5)
+    write_daily_bars(  # Parquet 만 기록·build_cache 안 함
+        _bars("AAA", days, base=100, adj="1"),
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="test",
+        ingested_at=datetime(2026, 6, 22, tzinfo=UTC),
+    )
+    port = _select_price_port(tmp_path)
+    try:
+        assert isinstance(port, ParquetPriceSeriesPort)
+    finally:
+        _close_price_port(port)
+
+
+def test_select_price_port_corrupt_cache_fallback(tmp_path: Path) -> None:
+    """부패 cache.duckdb(연결 실패) → ParquetPriceSeriesPort 폴백(반쪽 파일이 막지 않게)."""
+    _build(tmp_path)
+    (tmp_path / "cache.duckdb").write_bytes(b"not a valid duckdb file")  # 부패 주입
+    port = _select_price_port(tmp_path)
+    try:
+        assert isinstance(port, ParquetPriceSeriesPort)
+    finally:
+        _close_price_port(port)
+
+
+def test_close_price_port(tmp_path: Path) -> None:
+    """_close_price_port: DuckDB 연결 해제(이후 사용 시 예외)·Parquet 포트는 no-op."""
+    import duckdb
+
+    _build(tmp_path)
+    dport = DuckDBPriceSeriesPort(tmp_path)
+    _close_price_port(dport)
+    with pytest.raises(duckdb.Error):  # 닫힌 연결 사용 → loud fail
+        dport.trading_days()
+    _close_price_port(ParquetPriceSeriesPort(tmp_path))  # no-op(예외 없음)
 
 
 def test_connection_reuse(tmp_path: Path) -> None:

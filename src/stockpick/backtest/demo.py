@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from ..data import configure_logging
 from . import engine
-from .adapters import ParquetPriceSeriesPort, _select_universe
+from .adapters import _close_price_port, _select_price_port, _select_universe
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
 from .identity import EdgarSnapshotResolver
@@ -35,37 +35,41 @@ logger = logging.getLogger(__name__)
 def run_demo(base_dir: Path) -> int:
     """무료 골격 백테스트 1회 실행·출력. 데이터 없으면 안내 후 0(no-op). 반환 = 종료코드."""
     configure_logging()
-    price_port = ParquetPriceSeriesPort(base_dir)
-    days = price_port.trading_days()
-    if not days:
-        print(f"[백테스트 데모] 수집 데이터 없음: {base_dir}/daily_bar")  # noqa: T201
-        print("  → 먼저 `python -m stockpick.data.ingest` 로 적재하세요.")  # noqa: T201
-        return 0
+    # cache.duckdb 있으면 DuckDBPriceSeriesPort(가속)·없으면 Parquet 폴백(결과 동일). 끝나면 close.
+    price_port = _select_price_port(base_dir)
+    try:
+        days = price_port.trading_days()
+        if not days:
+            print(f"[백테스트 데모] 수집 데이터 없음: {base_dir}/daily_bar")  # noqa: T201
+            print("  → 먼저 `python -m stockpick.data.ingest` 로 적재하세요.")  # noqa: T201
+            return 0
 
-    universe = _select_universe(base_dir, price_port)  # 스냅샷 있으면 MasterUniverse·없으면 폴백
-    identity = EdgarSnapshotResolver(base_dir)  # EDGAR 저장본 cik(없으면 빈 맵→"")
-    config = BacktestConfig(
-        strategy_name="equal_weight_top_n",
-        top_n=min(5, universe.ticker_count()),
-        lookback_days=126,
-        skip_recent_days=21,
-        rebalance_freq="monthly",
-        cost_bps=Decimal("10"),
-        delisting_recovery_rate=Decimal("0"),
-        group_by_exchange=False,
-        start=days[0],
-        end=days[-1],
-    )
-    result = engine.run(
-        config,
-        price_port=price_port,
-        universe_port=universe,
-        identity=identity,
-        strategy=EqualWeightTopN(),
-    )
-    bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
-    result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
-    _print_report(result, n_tickers=universe.ticker_count())
+        universe = _select_universe(base_dir, price_port)  # 스냅샷 있으면 Master·없으면 폴백
+        identity = EdgarSnapshotResolver(base_dir)  # EDGAR 저장본 cik(없으면 빈 맵→"")
+        config = BacktestConfig(
+            strategy_name="equal_weight_top_n",
+            top_n=min(5, universe.ticker_count()),
+            lookback_days=126,
+            skip_recent_days=21,
+            rebalance_freq="monthly",
+            cost_bps=Decimal("10"),
+            delisting_recovery_rate=Decimal("0"),
+            group_by_exchange=False,
+            start=days[0],
+            end=days[-1],
+        )
+        result = engine.run(
+            config,
+            price_port=price_port,
+            universe_port=universe,
+            identity=identity,
+            strategy=EqualWeightTopN(),
+        )
+        bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
+        result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
+        _print_report(result, n_tickers=universe.ticker_count())
+    finally:
+        _close_price_port(price_port)  # DuckDB read_only 연결 해제
     return 0
 
 

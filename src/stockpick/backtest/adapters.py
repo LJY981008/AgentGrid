@@ -289,3 +289,34 @@ def _select_universe(base_dir: Path, price_port: PriceSeriesPort) -> UniversePor
         "MasterUniverse 쓰려면 `bulk --finalize` 로 스냅샷 생성"
     )
     return PriceDerivedUniverse(price_port)
+
+
+def _select_price_port(base_dir: Path) -> PriceSeriesPort:
+    """cache.duckdb 있으면 DuckDBPriceSeriesPort(가속)·없거나 부패면 ParquetPriceSeriesPort 폴백.
+
+    ⚠️ 폴백은 **기능 회귀 0**(결과 동일·속도만 캐시 의존). 부재→WARNING(가속 안 됨·`bulk --finalize`
+    로 빌드 안내), 부패(연결 실패)→exception 로그 후 Parquet 폴백(반쪽 .duckdb 가 백테스트를 막지
+    않게). 호출부는 끝나면 `_close_price_port`(DuckDB 연결 해제·Parquet no-op).
+    """
+    if not duckdb_cache.cache_exists(base_dir):
+        logger.warning(
+            "가격포트=ParquetPriceSeriesPort 폴백 — cache.duckdb 부재(속도 미가속). "
+            "`bulk --finalize` 로 빌드하면 DuckDBPriceSeriesPort 가속"
+        )
+        return ParquetPriceSeriesPort(base_dir)
+
+    import duckdb
+
+    try:
+        port = DuckDBPriceSeriesPort(base_dir)
+    except (duckdb.Error, OSError):
+        logger.exception("cache.duckdb 연결 실패(부패 가능) — ParquetPriceSeriesPort 폴백")
+        return ParquetPriceSeriesPort(base_dir)
+    logger.info("가격포트=DuckDBPriceSeriesPort(cache.duckdb·라이브 가속·ADR-007)")
+    return port
+
+
+def _close_price_port(port: PriceSeriesPort) -> None:
+    """DuckDBPriceSeriesPort read_only 연결 해제(Parquet 포트는 no-op). 호출부 finally 에서 사용."""
+    if isinstance(port, DuckDBPriceSeriesPort):
+        port.close()

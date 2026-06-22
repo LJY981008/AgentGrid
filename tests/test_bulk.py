@@ -276,3 +276,43 @@ def test_main_finalize_commits_at_entrypoint(
     assert bulk.main(["--finalize"]) == 0
     assert commits["n"] == 1  # 진입점이 commit 소유(C1)
     assert (tmp_path / "stock_snapshot.json").is_file()
+
+
+def test_main_finalize_builds_duckdb_cache(
+    conn: _Conn, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # main 이 commit 직후 build_cache 호출(파생 cache.duckdb 생성·ADR-007·Task4). Parquet 봉을
+    # 먼저 기록해 build_cache 입력 마련(finalize 는 적재 안 함). commit/close no-op(rollback 격리).
+    from decimal import Decimal
+
+    from stockpick.data import bulk
+    from stockpick.data.duckdb_cache import cache_exists
+    from stockpick.data.storage import write_daily_bars
+    from stockpick.types import DailyBar
+
+    write_daily_bars(
+        [
+            DailyBar(
+                ticker="AAA",
+                trade_date=date(2024, 1, 2),
+                open=Decimal("1"),
+                high=Decimal("1"),
+                low=Decimal("1"),
+                close=Decimal("1"),
+                volume=1,
+                value=None,
+                adj_factor=Decimal("1"),
+            )
+        ],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="eodhd",
+        ingested_at=_STAMP,
+    )
+    _upsert_active_aaa(conn)
+    monkeypatch.setattr(conn, "commit", lambda: None)
+    monkeypatch.setattr(conn, "close", lambda: None)
+    monkeypatch.setattr(bulk, "connect", lambda: conn)
+    monkeypatch.setenv("STOCKPICK_DATA_DIR", str(tmp_path))
+    assert bulk.main(["--finalize"]) == 0
+    assert cache_exists(tmp_path)  # 파생 캐시 생성됨(Parquet→DuckDB 단방향)

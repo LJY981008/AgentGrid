@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from ...backtest.adapters import ParquetPriceSeriesPort, _select_universe
+from ...backtest.adapters import _close_price_port, _select_price_port, _select_universe
 from ...backtest.benchmark import attach_benchmarks, equal_weight_universe
 from ...backtest.config import BacktestConfig
 from ...backtest.engine import run as run_backtest
@@ -76,35 +76,39 @@ def backtest(
         delisting_recovery_rate=float(_RECOVERY_RATE),
     )
 
-    price_port = ParquetPriceSeriesPort(base_dir)
-    days = price_port.trading_days()
-    if not days:
-        # 데이터 없음 → 빈 곡선·0 지표, warning 유지(200 — 첫 실행 정상 상태, 에러 아님).
-        logger.info("backtest: Parquet 트리 비어있음 — 빈 백테스트 반환")
-        return _empty_response(params)
+    # cache.duckdb 있으면 DuckDBPriceSeriesPort(가속)·없으면 Parquet 폴백(결과 동일). 끝나면 close.
+    price_port = _select_price_port(base_dir)
+    try:
+        days = price_port.trading_days()
+        if not days:
+            # 데이터 없음 → 빈 곡선·0 지표, warning 유지(200 — 첫 실행 정상 상태, 에러 아님).
+            logger.info("backtest: Parquet 트리 비어있음 — 빈 백테스트 반환")
+            return _empty_response(params)
 
-    universe = _select_universe(base_dir, price_port)
-    config = BacktestConfig(
-        strategy_name=_STRATEGIES[strategy].name,
-        top_n=top_n,
-        lookback_days=_LOOKBACK_DAYS,
-        skip_recent_days=_SKIP_RECENT_DAYS,
-        rebalance_freq=rebalance_freq,
-        cost_bps=_COST_BPS,
-        delisting_recovery_rate=_RECOVERY_RATE,
-        group_by_exchange=False,
-        start=days[0],
-        end=days[-1],
-    )
-    result = run_backtest(
-        config,
-        price_port=price_port,
-        universe_port=universe,
-        identity=identity,  # EdgarSnapshotResolver(저장본 없으면 빈 맵→cik="" 폴백)
-        strategy=_STRATEGIES[strategy],
-    )
-    bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
-    result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
+        universe = _select_universe(base_dir, price_port)
+        config = BacktestConfig(
+            strategy_name=_STRATEGIES[strategy].name,
+            top_n=top_n,
+            lookback_days=_LOOKBACK_DAYS,
+            skip_recent_days=_SKIP_RECENT_DAYS,
+            rebalance_freq=rebalance_freq,
+            cost_bps=_COST_BPS,
+            delisting_recovery_rate=_RECOVERY_RATE,
+            group_by_exchange=False,
+            start=days[0],
+            end=days[-1],
+        )
+        result = run_backtest(
+            config,
+            price_port=price_port,
+            universe_port=universe,
+            identity=identity,  # EdgarSnapshotResolver(저장본 없으면 빈 맵→cik="" 폴백)
+            strategy=_STRATEGIES[strategy],
+        )
+        bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
+        result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
+    finally:
+        _close_price_port(price_port)  # DuckDB read_only 연결 해제(요청당 생성·누수 방지)
 
     return BacktestResponse(
         equity_curve=[EquityPoint(date=d, value=float(v)) for d, v in result.equity_curve],

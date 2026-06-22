@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING
 
 from . import configure_logging
 from .db import connect, export_stock_snapshot, master_securities, update_stock_dates
+from .duckdb_cache import build_cache
 from .eodhd import EodhdAuthError, EodhdRateLimitError, EodhdResponseError, EodhdSource
 from .storage import (
     VerificationError,
@@ -286,6 +287,10 @@ def main(argv: list[str] | None = None) -> int:
             source = EodhdSource()
             summary = run_bulk(source, base_dir=base_dir, conn=conn, limit=limit, verify=do_verify)
         conn.commit()  # ⚠️ commit 은 진입점만(run_bulk/_apply 코어는 commit 안 함·C1)
+        # 파생 캐시(cache.duckdb) 재생성 — commit **직후·close 전**(Parquet→DuckDB 단방향·ADR-007·
+        # PG 무관·멱등). 오케스트레이션 레벨(코어 _apply 순수·C1). commit 성공 시 항상 재빌드
+        # (이후 close 실패에도 cache stale 회피).
+        summary["cache_rows"] = build_cache(base_dir)
     finally:
         conn.close()
     print(f"[bulk] {'finalize' if finalize else '벌크 가격 적재'}: {summary}")  # noqa: T201
