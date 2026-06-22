@@ -46,15 +46,19 @@ S5-d 가 `MasterUniverse`(생존편향 유니버스)를 배선했으나 라이�
 
 **Task4(engine·benchmark 전환)**: `full_series()`·`load(as_of)` 전체(OOM) 제거 → `load_range`(보유종목 [entry,exit] 수익·tradable [_window_start,t] 랭킹 윈도우·tradable 푸시필터). `_window_start`=t-((lookback+skip)*2+30)일(거래일 5/7 마진 43%·code-reviewer 시뮬레이션 lookback 756까지 무발산). **결과불변 회귀**: 신규 `test_backtest_invariance.py` — 같은 합성데이터로 **실 DuckDB(ParquetPriceSeriesPort) == Fake 동치**(폐지청산·보유 중 갭·equity_curve/지표/n_delisted). 게이트 PASS. 리뷰 2종: convention **0위반** + code-reviewer **COMMENT**(CRITICAL/HIGH 0) → MEDIUM1(스테일 종목 발산 경고 engine 대칭)·LOW3(full_series entry>exit 잠재 룩어헤드 NEW 교정 주석)·MEDIUM2(invariance lookback 20·skip 3 경계 강화) 반영.
 
-(Task5 완료 시 기입)
-- 검증 결과:
-- 라이브 측정(peak mem·wall-clock):
-- 변경 규모:
-- 커밋:
+**Task5(라이브 측정)**: app 재기동·MasterUniverse 선택(snapshot 50,184)·`/api/backtest`(50,184·5.1G) 측정.
+- **OOM 회피 ✅**: 단일 호출 OOMKilled=false(생존). 첫 OOM(137)은 **측정자 이중 호출 겹침**(메모리 2배)이 원인 — 단일은 12g 안에서 생존(full_series 였으면 즉시 12g 초과). load_range 전환이 메모리 OOM 해소.
+- **메모리 빠듯**: peak 12g 경계 3회 스침(99.99%·GC 변동 2.8~12g). 안정 마진 작음.
+- **속도 미달 ❌**: `load_range` 1회 **30초**(active 18,205 × 10개월 = 338만 점)·리밸당 ~4회 × 360 = **수시간**(라이브 21분+ 미완 중단). 근본 = **Parquet ticker 가 파일명**(`exchange=/year=` 파티션 아님) → DuckDB ticker 프루닝 불가 → 매 load_range 가 window year 의 수만 파일 풀스캔.
+
+- **결론**: S6-a 는 **메모리 OOM 해결**(load_range·trading_days DuckDB·결과불변·Task1~4 커밋)이 deliverable. 라이브 풀 산출은 **속도(데이터 접근 구조)** 가 선결 → 사용자 확정 **DuckDB persistent + (ticker,trade_date) 인덱스**(신규 작업·S6-b[분할≥10=백테스트 10배] 선결).
+- 검증 결과: ruff·ruff format·mypy strict·pytest(78파일) 전부 PASS. 결과불변 회귀(실 DuckDB==Fake) PASS. alembic 0003 불변.
+- 라이브 측정: peak 12g(경계)·load_range 30초/회·풀런 21분+ 미완(속도 선결 확인).
+- 변경 규모: Task2~4 = `_scan`(load_trading_days·load_range_series)·`ports/adapters/fakes`(load_range)·`engine/benchmark`(전환)·`test_backtest_invariance`(신규).
+- 커밋: `bbe24e0`(T2)·`4e341a6`(T3)·`5160591`(T4)·이 커밋(T5).
 
 ## 비교/회고
 
-(완료 시 기입)
-- 의도 대비 달성도:
-- 계획과 달라진 것 + 이유:
-- 후속 작업: [ ] S6-b 신뢰성 게이트(분할≥10·폐지커버리지·민감도→validated·임계 데이터기반) [ ] full_series Protocol 제거 [ ] 증분 스케줄러
+- **의도 대비 달성도**: 메모리 OOM **100% 해결**(trading_days DuckDB·load_range·load 윈도우·결과불변 봉인). 단 **라이브 풀 산출은 속도로 미달** — Task5 측정이 드러냄(데이터 기반).
+- **계획과 달라진 것 + 이유**: ①critic C2(성능) 예측이 라이브에서 **현실화** — load_range 가 메모리는 풀었으나 **Parquet ticker 프루닝 불가(파일명·파티션 아님)로 매 load_range 30초 풀스캔** → 360리밸×4 = 수시간(비현실). ②critic C1 narrow(n_skipped 발산)·MEDIUM(스테일 종목)은 정상 종목엔 무영향(equity 불변 회귀 PASS). ③측정자 이중 호출로 첫 OOM 오인 → 단일 재측정으로 "OOM은 겹침이 원인·load_range 자체는 단일 생존" 확정. ④속도가 본질 병목임이 측정으로 확정 → DuckDB persistent 가 S6-b 선결로 승격(원래 범위 밖).
+- **후속 작업**: [ ] **DuckDB persistent + (ticker,trade_date) 인덱스**(속도 근본·라이브 백테스트 실용화·S6-b 선결·사용자 확정) [ ] S6-b 신뢰성 게이트(분할≥10·폐지커버리지·민감도→validated·임계 데이터기반) [ ] full_series Protocol 제거 [ ] 증분 스케줄러
