@@ -192,6 +192,48 @@ def momentum_universe(
     return scores
 
 
+def momentum_from_endpoints(
+    *,
+    end_point: PricePoint | None,
+    start_point: PricePoint | None,
+    end_idx: int,
+    start_idx: int,
+    lookback_days: int,
+) -> MomentumScore:
+    """SQL 부분 푸시다운 끝점 → MomentumScore (ADR-007·`momentum()` 산출 코어와 bit-identical).
+
+    `end_idx`/`start_idx` = **윈도우** eligible([lo,as_of]·ASC) **0-based idx**(DuckDB 가
+    윈도우 count(wn) 기준 산출 — `momentum(windowed)` 의 `end_idx=len-1-skip`·`max(0,end_idx-lb)`
+    와 동일). 산출식·None 조건·used_window_points 는 `momentum()`(factors.py) 과 동일:
+    end_idx<1(2점미만)·start.adjusted<=0 → None. ⚠️ 나눗셈은 Python Decimal(SQL float 승격 회피).
+    """
+    none_result = MomentumScore(
+        score=None,
+        end_date=None,
+        start_date=None,
+        requested_lookback_days=lookback_days,
+        used_window_points=0,
+    )
+    if end_point is None or start_point is None or end_idx < 1:
+        return none_result
+    if start_point.adjusted <= 0:
+        # 수정주가<=0(0/음수 나눗셈) — 조용한 왜곡 금지, None + WARNING(momentum() 코어와 일관).
+        logger.warning(
+            "모멘텀 산출 불가(start 수정주가<=0·pushdown): start_date=%s, adjusted=%s",
+            start_point.trade_date,
+            start_point.adjusted,
+        )
+        return none_result
+    score = end_point.adjusted / start_point.adjusted - Decimal(1)
+    return MomentumScore(
+        score=score,
+        end_date=end_point.trade_date,
+        start_date=start_point.trade_date,
+        requested_lookback_days=lookback_days,
+        used_window_points=end_idx - start_idx + 1,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class FinancialScore:
     """재무 팩터 — ROE(퀄리티)·P/B(밸류) + 산출 근거(투명성·재현성).

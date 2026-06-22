@@ -11,9 +11,14 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from datetime import date
+    from decimal import Decimal
     from pathlib import Path
 
     import duckdb
@@ -95,3 +100,104 @@ def connect_readonly(base_dir: Path) -> duckdb.DuckDBPyConnection:
     import duckdb
 
     return duckdb.connect(str(cache_path(base_dir)), read_only=True)
+
+
+@dataclass(frozen=True, slots=True)
+class MomentumEndpoints:
+    """momentum 부분 푸시다운 raw 끝점(ADR-007). **윈도우** eligible([lo,as_of]·ASC) 0-based idx.
+
+    data 층이라 PricePoint(rules) 미반환 — adjusted/date raw 만(backtest 가 조립·
+    momentum_from_endpoints 로 MomentumScore 산출). end/start 둘 중 None 이면 산출 불가(2점미만).
+    idx 는 엔진 windowed momentum(load_range·_window_start) 과 동치 — 윈도우 count(wn) 기준.
+    """
+
+    end_adjusted: Decimal | None
+    end_date: date | None
+    start_adjusted: Decimal | None
+    start_date: date | None
+    end_idx: int  # 윈도우 0-based(=wn-1-skip)
+    start_idx: int  # 윈도우 0-based(=max(0, end_idx-lookback))
+
+
+def momentum_endpoints(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    tickers: Iterable[str],
+    as_of: date,
+    lookback_days: int,
+    skip_recent_days: int,
+    window_days: int,
+) -> dict[str, MomentumEndpoints]:
+    """ticker별 momentum 끝점 — 엔진 windowed momentum(engine._rank_at) 과 **bit-identical**.
+
+    엔진 메모리 경로는 `load_range(tradable, _window_start(t), t)` 로 **윈도우만** 로드해
+    momentum_universe 에 넘긴다(window_days=(lookback+skip)*2+30·여유가 lookback+skip 거래일 덮음·
+    윈도우 봉 0 종목은 스테일 배제=결과 제외). 이 함수는 그 windowed momentum 을 SQL 로 재현 —
+    **윈도우가 곧 eligible 집합**이라 전체 tot 가 아니라 윈도우 count(wn) 기준으로 산출한다.
+
+    DESC rd: e1=skip+1(end)·e2=skip+lookback+1(start). graceful(wn<=e2)면 start=윈도우 최古(rd=wn).
+    bit-identical 핵심: `close*adj_factor` DECIMAL 곱·**나눗셈은 Python**(momentum_from_endpoints).
+    룩어헤드: `trade_date BETWEEN $lo AND $as_of`(상한=as_of). 윈도우 봉 0 ticker 는 결과에서 제외
+    (load_range.setdefault 와 동일 — 행 있는 ticker 만 생성).
+    """
+    tk = list(tickers)
+    if not tk:
+        return {}
+    lo = as_of - timedelta(days=window_days)
+    e1 = skip_recent_days + 1  # end DESC rd
+    e2 = skip_recent_days + lookback_days + 1  # start DESC rd(non-graceful)
+    sql = (
+        "WITH w AS (SELECT ticker, close*adj_factor adj, trade_date td, "  # noqa: S608 — daily_bar 리터럴·바인딩
+        "ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY trade_date DESC) rd, "
+        "COUNT(*) OVER (PARTITION BY ticker) wn FROM daily_bar "
+        "WHERE ticker = ANY($t) AND trade_date BETWEEN $lo AND $a) "
+        "SELECT ticker, adj, td, rd, wn FROM w WHERE rd IN ($e1, $e2) OR rd = wn"
+    )
+    rows = con.execute(sql, {"t": tk, "a": as_of, "lo": lo, "e1": e1, "e2": e2}).fetchall()
+    grouped = _group_window_rows(rows)
+    out: dict[str, MomentumEndpoints] = {}
+    for ticker, (rdmap, wn) in grouped.items():
+        end_idx = wn - 1 - skip_recent_days  # 윈도우 0-based(load_range eligible 끝)
+        start_idx = max(0, end_idx - lookback_days)
+        end = rdmap.get(e1)
+        if end_idx < 1 or end is None:  # 2점미만 — momentum(windowed) None 과 동치
+            out[ticker] = MomentumEndpoints(None, None, None, None, end_idx, start_idx)
+            continue
+        # graceful(wn<=e2·start_idx==0)면 윈도우 최古(rd=wn), 아니면 e2(둘 다 윈도우 내 존재 보장).
+        start = rdmap.get(wn) if wn <= e2 else rdmap.get(e2)
+        out[ticker] = MomentumEndpoints(
+            end[0],
+            end[1],
+            start[0] if start is not None else None,
+            start[1] if start is not None else None,
+            end_idx,
+            start_idx,
+        )
+    return out
+
+
+def _group_window_rows(
+    rows: list[tuple[object, ...]],
+) -> dict[str, tuple[dict[int, tuple[Decimal, date]], int]]:
+    """윈도우 SQL 행 → {ticker: ({rd: (adj, td)}, wn)} (타입 narrowing·실패 명확 보고).
+
+    wn=윈도우 count(파티션 상수 — 첫 행에서 캡처). rd 별 (adjusted, trade_date) 맵.
+    """
+    from datetime import date as date_cls
+    from decimal import Decimal as decimal_cls
+
+    grouped: dict[str, tuple[dict[int, tuple[Decimal, date]], int]] = {}
+    for row in rows:
+        ticker, adj, td, rd, wn = row
+        if not (
+            isinstance(ticker, str)
+            and isinstance(adj, decimal_cls)
+            and isinstance(td, date_cls)
+            and isinstance(rd, int)
+            and isinstance(wn, int)
+        ):
+            msg = f"예상치 못한 momentum 끝점 행 타입: {[type(x).__name__ for x in row]}"
+            raise TypeError(msg)
+        rdmap = grouped.setdefault(ticker, ({}, wn))[0]
+        rdmap[rd] = (adj, td)
+    return grouped
