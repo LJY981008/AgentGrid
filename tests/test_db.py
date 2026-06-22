@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -251,3 +252,44 @@ def test_update_stock_dates(conn: _Conn) -> None:
         rows = {r[0]: (r[1], r[2], r[3]) for r in cur.fetchall()}
     assert rows["ZZACT"] == (date(2010, 1, 4), None, None)  # active — delisted_at NULL 유지
     assert rows["ZZDEL2"] == (date(2001, 3, 1), date(2008, 9, 15), "eodhd_last_bar_estimate")
+
+
+def test_export_stock_snapshot(conn: _Conn, tmp_path: Path) -> None:
+    # active(SNAPA·미해소 cik)·delisted(SNAPD·해소 cik) → JSON. dates ISO·active delisted_at=null.
+    db.upsert_stocks(conn, [_stock("SNAPA")], source="eodhd", ingested_at=_STAMP)  # cik="" 미해소
+    db.upsert_stocks(
+        conn,
+        [_stock("SNAPD", cik="0000000778")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    db.update_stock_dates(
+        conn,
+        {
+            "SNAPA": (date(2020, 1, 2), date(2021, 1, 4)),
+            "SNAPD": (date(2008, 1, 2), date(2008, 9, 15)),
+        },
+    )
+    n = db.export_stock_snapshot(conn, tmp_path)
+    assert n == 2
+    payload = json.loads((tmp_path / "stock_snapshot.json").read_text(encoding="utf-8"))
+    assert datetime.fromisoformat(payload["generated_at"])  # generated_at = ISO 파싱 가능
+    rows = {s["ticker"]: s for s in payload["stocks"]}
+    assert rows["SNAPA"]["cik"] is None  # 미해소 cik=""→NULL→null(생존편향 식별 계약)
+    assert rows["SNAPA"]["listed_at"] == "2020-01-02"
+    assert rows["SNAPA"]["delisted_at"] is None  # active — null(빈문자열 아님)
+    assert rows["SNAPA"]["listing_status"] == "active"
+    assert rows["SNAPD"]["cik"] == "0000000778"
+    assert rows["SNAPD"]["listed_at"] == "2008-01-02"
+    assert rows["SNAPD"]["delisted_at"] == "2008-09-15"
+    assert rows["SNAPD"]["listing_status"] == "delisted"
+
+
+def test_export_stock_snapshot_empty(conn: _Conn, tmp_path: Path) -> None:
+    # 빈 stock(truncated) → 유효한 빈 스냅샷(0행·생존편향 빈 유니버스 회귀 가드).
+    n = db.export_stock_snapshot(conn, tmp_path)
+    assert n == 0
+    payload = json.loads((tmp_path / "stock_snapshot.json").read_text(encoding="utf-8"))
+    assert payload["stocks"] == []
+    assert "generated_at" in payload

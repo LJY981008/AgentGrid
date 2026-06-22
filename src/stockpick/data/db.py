@@ -18,9 +18,10 @@ str` 도메인 계약은 불변 — 경계 변환만). 미해소 다수가 NULL 
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 import psycopg
@@ -30,7 +31,6 @@ from ..types import Exchange
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from datetime import date
     from pathlib import Path
 
     from ..types import Stock
@@ -156,6 +156,50 @@ def update_stock_dates(
         cur.executemany(sql, params)
     logger.info("stock 날짜 backfill: %d ticker(listed_at·delisted_at[delisted])", len(date_map))
     return len(date_map)
+
+
+def export_stock_snapshot(conn: psycopg.Connection[TupleRow], base_dir: Path) -> int:
+    """stock 마스터 → `base_dir/stock_snapshot.json`(S5-d MasterUniverse 입력·atomic). 반환=종목 수.
+
+    `{"generated_at": ISO, "stocks": [{ticker, cik, name, exchange, listed_at, delisted_at,
+    listing_status}, ...]}`. dates ISO·None 보존(active delisted_at→`null`·`""` 빈문자열 아님 —
+    MasterUniverse `date.fromisoformat` 안전). temp(같은 디렉토리)→`os.replace` 원자성.
+    ⚠️ commit 은 호출부(main/CLI) 소유 — export 는 같은 `conn` 의 미커밋 backfill 을
+    read-your-own-writes 로 본다(중간 commit 금지: test rollback 격리 보존, critic C1).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT ticker, cik, name, exchange, listed_at, delisted_at, listing_status "
+            "FROM stock ORDER BY ticker"
+        )
+        rows = cur.fetchall()
+    stocks: list[dict[str, object]] = []
+    for row in rows:  # 명시 언팩 — fetchall 의 Any 흐름을 컬럼별로 끊는다(date 만 isoformat).
+        ticker, cik, name, exchange, listed_at, delisted_at, status = row
+        stocks.append(
+            {
+                "ticker": ticker,
+                "cik": cik,
+                "name": name,
+                "exchange": exchange,
+                "listed_at": listed_at.isoformat() if isinstance(listed_at, date) else None,
+                "delisted_at": delisted_at.isoformat() if isinstance(delisted_at, date) else None,
+                "listing_status": status,
+            }
+        )
+    payload = {"generated_at": datetime.now(UTC).isoformat(), "stocks": stocks}
+    base_dir.mkdir(parents=True, exist_ok=True)
+    target = base_dir / "stock_snapshot.json"
+    tmp = base_dir / ".stock_snapshot.json.tmp"
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, target)  # atomic — 독자는 부분 파일을 보지 않음
+    except OSError:
+        logger.error("스냅샷 파일 쓰기 실패: tmp=%s target=%s", tmp, target, exc_info=True)
+        tmp.unlink(missing_ok=True)  # 부분 tmp 정리(named volume 잔존 방지)
+        raise
+    logger.info("stock 스냅샷 export: %d 종목 → %s", len(stocks), str(target))
+    return len(stocks)
 
 
 def upsert_ticker_history(

@@ -40,11 +40,13 @@ S5-c 가 종목마스터 50,184(폐지 포함) 대상 다년 EOD 를 Parquet 에
 - `run_bulk`(bulk.py): 후처리 `verify_parquet → update_stock_dates → (main)commit`. `verify_parquet`(storage.py:398-461)·`load_trade_date_bounds`(557-582)·`update_stock_dates`(db.py:133-158). `PriceDerivedUniverse`·`_select_universe` 없음(adapters.py). 테스트 fixture = 트랜잭션 TRUNCATE→rollback 격리(test_bulk.py:130-142·test_db.py).
 - compose `app.mem_limit:12g`(이전 OOM 방어·41b0e6f). alembic head=0003(S5-d 마이그레이션 0).
 
-## After — 수행 후 실측 (완료 시 기입)
+## After — 수행 후 실측 (Task별 누적·최종 Task5 종합)
 
-- 검증 결과:
-- 변경 규모:
-- 커밋:
+**Task2(export_stock_snapshot)**: `db.export_stock_snapshot(conn, base_dir)` 신규 — stock 마스터 SELECT→`{generated_at, stocks:[...]}` JSON·dates ISO·None 보존(active delisted_at→null·미해소 cik→null)·temp(같은 디렉토리)→os.replace atomic·OSError 분류 로그+temp 정리·conn 재사용(commit 호출부). 게이트 통과(ruff·format·mypy·pytest 13). 리뷰 2종 반영: convention(W1 fetchall Any 명시 언팩·W2 IO 실패 분류 로그+tmp.unlink) + code-reviewer(0행 빈 스냅샷·미해소 cik=null·generated_at ISO 파싱 테스트 추가).
+
+- 검증 결과: (최종 Task5)
+- 변경 규모: (최종 Task5)
+- 커밋: (Task별 SHA — Task5 종합)
 
 ## 비교/회고
 
