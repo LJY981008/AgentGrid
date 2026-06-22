@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from stockpick.backtest.adapters import ParquetPriceSeriesPort
 from stockpick.backtest.demo import run_demo
 from stockpick.data.storage import write_daily_bars
 from stockpick.types import DailyBar, Exchange
@@ -67,3 +68,20 @@ def test_run_demo_with_synthetic_parquet(
     assert "백테스트 골격 결과" in out
     assert "검증 전" in out  # 미검증 경고 노출
     assert "EQUAL_WEIGHT_UNIVERSE" in out  # 벤치 비교 출력
+
+
+def test_parquet_trading_days_distinct_without_full_series(tmp_path: Path) -> None:
+    # S6-a: trading_days 는 DuckDB DISTINCT 집계 — full_series(전체 메모리·OOM) 미호출.
+    days = _weekdays(date(2024, 1, 1), 5)
+    ingested = datetime(2026, 6, 17, tzinfo=UTC)
+    bars = _bars("AAA", days, 100, 1) + _bars("BBB", days, 100, 0)  # 같은 거래일 공유
+    write_daily_bars(
+        bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="test", ingested_at=ingested
+    )
+    port = ParquetPriceSeriesPort(tmp_path)
+    assert port.trading_days() == days  # DISTINCT·오름차순(중복 거래일 1회)
+    assert port._full is None  # full_series 캐시 미적재 = trading_days 가 full_series 안 부름
+
+
+def test_parquet_trading_days_empty(tmp_path: Path) -> None:
+    assert ParquetPriceSeriesPort(tmp_path).trading_days() == []

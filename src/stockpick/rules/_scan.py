@@ -46,6 +46,10 @@ _SQL_SERIES_AS_OF: Final = (  # noqa: S608
 _SQL_SERIES_ALL: Final = (  # noqa: S608
     f"SELECT ticker, trade_date, close, adj_factor {_FROM} ORDER BY ticker, trade_date"
 )
+# 전체 거래일(DISTINCT·정렬) — trading_days() 가 full_series 전체 로드(50k×30년 OOM) 대신 이걸 쓴다.
+_SQL_TRADING_DAYS: Final = (  # noqa: S608
+    f"SELECT DISTINCT trade_date {_FROM} ORDER BY trade_date"
+)
 # ticker → exchange 매핑. exchange 는 Hive 파티션 키(디렉토리)라 read_parquet 가 컬럼으로 노출.
 # 한 ticker 가 여러 exchange 파티션에 있으면 거래소 이전 이력(드묾)이므로 max 로 단일화(데모
 # 단순화 — 시점별 거래소 이력은 M2+ ticker_history 책임). GROUP BY 로 (ticker, exchange) 쌍만.
@@ -209,6 +213,40 @@ def load_ticker_exchanges(base_dir: Path) -> dict[str, Exchange]:
             )
             raise ValueError(msg) from exc
     return mapping
+
+
+def load_trading_days(base_dir: Path) -> list[date]:
+    """Parquet 트리 → 전체 거래일(중복 제거·오름차순). `trading_days()`(calendar 입력)용.
+
+    ⚠️ full_series 전체 메모리 로드(50k×30년 ~378M point OOM) 회피 — DuckDB 가 DISTINCT trade_date
+    만 집계(메모리 O(거래일수 ~7,560)). 빈 트리면 빈 리스트(no-op). 모듈 경계: 읽기 전용 스캔.
+    """
+    from datetime import date as date_cls
+
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.warning("거래일 스캔 대상 Parquet 없음 — 빈 리스트: dataset=%s", dataset_root)
+        return []
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(_SQL_TRADING_DAYS, {"glob": glob}).fetchall()
+    finally:
+        con.close()
+
+    days: list[date] = []
+    for row in rows:
+        (trade_date,) = row
+        if not isinstance(trade_date, date_cls):
+            msg = f"예상치 못한 거래일 행 타입: trade_date={type(trade_date)}(실패 명확 보고)"
+            raise TypeError(msg)
+        days.append(trade_date)
+    logger.info("거래일 로드: %d일(DuckDB DISTINCT·full_series 비의존)", len(days))
+    return days
 
 
 def _iter_rows(rows: list[tuple[object, ...]]) -> list[tuple[str, date, Decimal, Decimal]]:

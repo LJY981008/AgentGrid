@@ -44,7 +44,8 @@ class ParquetPriceSeriesPort:
         return self._full
 
     def trading_days(self) -> list[date]:
-        return sorted({p.trade_date for pts in self.full_series().values() for p in pts})
+        # full_series 전체 메모리 로드(OOM) 대신 DuckDB DISTINCT 집계(_scan.load_trading_days).
+        return _scan.load_trading_days(self._base_dir)
 
     def ticker_exchanges(self) -> dict[str, Exchange]:
         return _scan.load_ticker_exchanges(self._base_dir)

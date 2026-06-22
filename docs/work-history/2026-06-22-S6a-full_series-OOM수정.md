@@ -40,7 +40,9 @@ S5-d 가 `MasterUniverse`(생존편향 유니버스)를 배선했으나 라이�
 
 ## After — 수행 후 실측 (Task별 누적·최종 Task5 종합)
 
-(완료 시 기입)
+**Task2(trading_days DuckDB)**: `_scan.load_trading_days(base_dir)`(DuckDB `SELECT DISTINCT trade_date {_FROM} ORDER BY`·full_series 비의존·메모리 O(거래일수~7,560)) 신규 + `adapters.ParquetPriceSeriesPort.trading_days` 전환. 게이트 PASS(ruff·format·mypy·backtest 15·**결과 불변**). 리뷰 2종: convention **0위반** + code-reviewer **APPROVE**(결과 불변 empirical 검증 — cross-partition 전역정렬·DISTINCT 1회·list[date]·empty 동치·`port._full is None` 회귀; LOW 3=기존 패턴 inherited·out of scope).
+
+(Task3~5 완료 시 기입)
 - 검증 결과:
 - 라이브 측정(peak mem·wall-clock):
 - 변경 규모:
