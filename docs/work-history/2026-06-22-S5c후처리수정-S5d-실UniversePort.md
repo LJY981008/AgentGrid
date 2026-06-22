@@ -2,7 +2,7 @@
 
 - **유형**: 플랜모드 승인
 - **관련 기획/이슈**: S5(다년·전체유니버스) 4분해 마지막(S5-d) + **풀백필 완주 후 발견한 S5-c 후처리 버그 수정**(선행). [[2026-06-18-S5c-벌크가격]] 후속·[[decisions/ADR-006-PG스키마-alembic-첫실사용]]. S6 신뢰성 게이트·`validated=true` 의 선결.
-- **시작 시점 커밋**: `fc6edfd` → **완료 커밋**: (완료 시 기입, Task5 마지막)
+- **시작 시점 커밋**: `fc6edfd` → **완료 커밋**: `0905a7e`(T1)·`c4882bf`(T2)·`d8e8460`(T3)·`9336bab`(T4)·T5(이 커밋)
 
 ## 의도/목적 — 왜 이 작업을 하나
 
@@ -48,12 +48,14 @@ S5-c 가 종목마스터 50,184(폐지 포함) 대상 다년 EOD 를 Parquet 에
 
 **Task4(bulk 후처리 재구조화·--finalize·배선)**: run_bulk 후처리 `verify→update→(main)commit` → `update_stock_dates→export_stock_snapshot`(verify 제거)·**commit 은 호출부(main)만**(C1)·`_apply_dates_and_snapshot`/`_run_verify` 헬퍼·verify `--verify` 옵션화(기본 off·예외격리)·`--finalize`(루프 skip·복구·멱등)·demo/api `_select_universe` 배선·`UniversePort.ticker_count` Protocol 확장(Fake 구현). 게이트 통과(ruff·format·mypy·전체 pytest). 리뷰 2종: convention **0위반**(C1 commit 경계 구조 검증) + code-reviewer **APPROVE**(C1·finalize 멱등·verify·배선 end-to-end correct) → Minor 4 반영(M1 verify resume missing-게이트 no-op docstring·M2 finalize+limit 무시 로그·M3 summary 키 `snapshot` 통일·M4 main --finalize commit 경계 entrypoint 테스트).
 
-- 검증 결과: (최종 Task5)
-- 변경 규모: (최종 Task5)
-- 커밋: (Task별 SHA — Task5 종합)
+**Task5(복구·라이브 검증·문서)**: app·web 정지 후 `bulk --finalize` 격리 실행 → PG `stock` listed_at **29→50,184**·delisted_at **15→31,868**·`stock_snapshot.json` **50,184**(게이트 PASS·Parquet-파생 일치). 문서 동기화(CLAUDE.md 구조표·PLAN_STATUS·RESUME). ⚠️ 라이브 `/api/backtest` 스모크 = `trading_days()→full_series()`(5.1G 전체메모리)에서 **app OOMKilled**(mem_limit 12g 작동·호스트/postgres 보호) → MasterUniverse 도달 전 → 라이브 풀 산출은 **S6 full_series 수정 후**(MasterUniverse 배선·경계는 단위 test 확정·validated=false 코드 상수).
+
+- 검증 결과: 게이트 전부 PASS(ruff·ruff format·mypy strict·**pytest exit 0**·alembic **0003 불변**). 복구 게이트 PASS(listed_at 50,184·delisted_at 31,868·snapshot 50,184). Task별 리뷰 2종(convention-reviewer + oh-my-claudecode:code-reviewer) 각 반영.
+- 변경 규모: `fc6edfd..HEAD`(Task1~4) = **12파일 +508/-36** + Task5 문서. 신규 `MasterUniverse`·`export_stock_snapshot`·`_apply_dates_and_snapshot`/`_run_verify`·`--finalize`·`test_backtest_universe.py`.
+- 커밋: `0905a7e`(T1)·`c4882bf`(T2)·`d8e8460`(T3)·`9336bab`(T4)·이 커밋(T5).
 
 ## 비교/회고
 
-- 의도 대비 달성도:
-- 계획과 달라진 것 + 이유:
-- 후속 작업: [ ] S6 신뢰성 게이트(+무결성 verify 1회·full_series 경량화) [ ] full_series 구조 수정(OOM 근본) [ ] 증분 스케줄러
+- 의도 대비 달성도: **S5-d(MasterUniverse·생존편향 유니버스)+S5-c 후처리 버그수정 100%**. 데이터 복구(PG 날짜 29→50,184)·MasterUniverse 경계(delisted_at+1)·배선·단위 검증 완료. ⚠️ 라이브 풀 백테스트만 full_series OOM으로 S6 이연(예상·범위밖).
+- 계획과 달라진 것 + 이유: ①풀백필 완주 검증 중 **S5-c 후처리 버그**(verify_parquet ≥400s가 update·commit 막아 날짜 29/50,184) 발견 → 원 S5-d 단독 플랜에 S5-c 수정 통합. ②critic REVISE **2C+3M 전부 선반영**(특히 C1 — commit 을 코어에 넣으면 test rollback 격리 깨져 라이브 PG 파괴, commit 호출부로). ③풀백필 중 app OOM 1회(상주 API full_series 동시) → `mem_limit:12g`+격리 컨테이너로 복구·완주. ④라이브 검증이 full_series OOM에 막힘 → **full_series 결함을 S6 선결로 실증·명확화**.
+- 후속 작업: [ ] **S6 신뢰성 게이트**(선결: full_series DuckDB 집계 전환·무결성 verify 1회 expected=master·verify_parquet 경량화) → `validated=true` [ ] **full_series 구조 수정**(전구간 메모리 로드 OOM 근본) [ ] 증분 스케줄러(bulk-last-day·분할/배당 소급재조정)
