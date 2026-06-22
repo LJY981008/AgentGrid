@@ -12,9 +12,12 @@
 
 **~~1. S5-d 실 UniversePort~~ ✅ 완료(2026-06-22)**: `MasterUniverse`(종목마스터→시점 멤버십·`delisted_at+1day` 경계변환·생존편향/룩어헤드-correct)·`export_stock_snapshot`·`_select_universe` 배선·run_bulk 후처리 재구조화(commit 호출부·C1)·`--finalize` 복구. critic REVISE 2C+3M 반영·Task별 리뷰 2종. 플랜 백업=`docs/work-history/2026-06-22-S5c후처리수정-S5d-실UniversePort.md`.
 
+**~~2. S6-a full_series OOM + 백테스트 라이브 실용화(DuckDB)~~ ✅ 완료(2026-06-22 ②·ADR-007)**: S6-a `full_series`→`load_range`(OOM 회피). 후속 `data/duckdb_cache.py`(Parquet→`cache.duckdb` 1억49만행·1.29GB) + **momentum 부분 푸시다운**(SQL 끝점·Python Decimal·bit-identical) + `DuckDBPriceSeriesPort`(`MomentumScorePort`)·`_select_price_port`·engine `isinstance` 분기. Task0~7·리뷰 2종(Task2 결과불변 BLOCKING 버그 tot→wn 차단). 측정: **ranking 32.3×**(43.3s→1.34s·≥10×)·실데이터 18,311종목 **score 불일치 0**·풀 백테스트 774리밸 **완주**(70분·peak 12,033MB·OOM 0). 플랜 백업=`docs/work-history/2026-06-22-백테스트-라이브실용화-DuckDB컬럼스토어.md`.
+
 **남은 순서**:
-1. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**(그 전까지 false 고정).
-   - ⛔ **선결(S5-d에서 실증)**: `full_series`(adapters.py·전구간 전체메모리 로드)가 50,184·5.1G에서 **OOM** → `/api/backtest` 라이브 풀 산출 불가. DuckDB 집계/스트리밍 전환 필수. `verify_parquet` ≥400s도 동일 계열(함께 경량화).
+1. **벤치 멤버십 SQL 푸시다운**(즉시·풀 백테스트 실용화 선결·Task7 finding): `equal_weight_universe`(benchmark.py:64)가 매 리밸 `load_range(tradable 18k×window)`로 **3.65M PricePoint 물질화**(10.94s·+2GB)를 *멤버십 set 산출*(0.004s 사용)에만 낭비 → 풀 백테스트 70분·peak 12g 의 지배 비용. **SQL `SELECT DISTINCT ticker WHERE ticker=ANY AND trade_date BETWEEN lo AND t`** 로 set 만 반환(membership 동치·결과불변 회귀 필수). + `connect_readonly` memory_limit(peak 여유). ranking 푸시다운(✅)으로 안 풀린 잔여 병목.
+2. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**(그 전까지 false 고정).
+   - ✅ ~~선결: full_series OOM~~ 해소(S6-a load_range + DuckDB 컬럼스토어). 풀 백테스트 라이브 완주 확인(70분·벤치 병목은 위 1번).
    - 무결성 verify 1회(`bulk --verify`) = S6 진입 필수 게이트(재개 시 missing 게이트 no-op → expected=master 도출 필요).
 2. **증분 스케줄러**(신규 운영 마일스톤 — 아래 설계 메모):
 

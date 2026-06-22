@@ -119,10 +119,10 @@ docker compose exec app pytest -q                   # 테스트
 | 경로 | 역할 |
 |---|---|
 | `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(단일 FROM·2단계 uv sync로 의존성/소스 레이어 분리·non-root·BuildKit 캐시) |
-| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume·`mem_limit:12g` OOM 방어) + `web`(node:22 Vite dev:5174→5173). ⚠️ 대용량 벌크는 app 격리 실행(위 Build 주석) |
+| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume[Parquet 1차원본+`cache.duckdb` 파생캐시 ADR-007]·`mem_limit:12g` OOM 방어) + `web`(node:22 Vite dev:5174→5173). ⚠️ 대용량 벌크는 app 격리 실행(위 Build 주석) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `migrations/` | alembic PG 마이그레이션(S5-a·ADR-006) — `env.py`(DATABASE_URL→psycopg3)·`versions/`. compose app 에 마운트. 직접 DDL 금지 |
-| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`export_stock_snapshot`(stock→JSON 스냅샷 S5-d)·`universe.py` 종목마스터 S5-b·`bulk.py` 다년 EOD 벌크 S5-c+**후처리 재구조화·`--finalize` 복구·commit 호출부 S5-d**)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay. **adapters `MasterUniverse`(종목마스터 기반 생존편향 유니버스·delisted_at+1 경계 S5-d)·`_select_universe`**) |
+| `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`export_stock_snapshot`(stock→JSON 스냅샷 S5-d)·`universe.py` 종목마스터 S5-b·`bulk.py` 다년 EOD 벌크 S5-c+**후처리 재구조화·`--finalize` 복구**(commit 직후 `build_cache`)·`duckdb_cache.py` **Parquet→`cache.duckdb` 단일 컬럼 파생캐시+momentum 부분 푸시다운(`momentum_endpoints` SQL 끝점·ADR-007)**)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay. **adapters `MasterUniverse`(생존편향 유니버스·delisted_at+1 경계 S5-d)·`DuckDBPriceSeriesPort`(`MomentumScorePort`·cache.duckdb 라이브 가속)·`_select_universe`·`_select_price_port`(cache→DuckDB·부재 Parquet 폴백)**·engine `momentum_scores` 분기) |
 | `src/stockpick/api/` | FastAPI HTTP 층(M3, 상위 모듈) — `models.py`(pydantic 계약)·`deps.py`(DI·테스트 override)·`routes/{health,dataset,ingest,ranking,learning}.py`. `python -m stockpick.api` 기동 |
 | `tests/` | pytest (픽스처·모킹 — 라이브 데이터 의존 금지) |
 | `webapp/` | PWA 대시보드 (M3 활성) — Vite8/React19/router7/TS, `src/{api,components,pages}`. 5화면(랭킹·데이터·유니버스·학습·백테스트 placeholder). 읽기위주·투자로직 프론트 중복 금지([webapp-conventions](.claude/rules/webapp-conventions.md)) |
