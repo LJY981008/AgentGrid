@@ -20,6 +20,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from stockpick.backtest.ports import momentum_window_days
 from stockpick.data.duckdb_cache import (
     MomentumEndpoints,
     build_cache,
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 AS_OF = date(2024, 4, 1)  # 월요일
 LOOKBACK = 20
 SKIP = 3
-WINDOW = (LOOKBACK + SKIP) * 2 + 30  # 76 — engine._window_start 와 동일 산식
+WINDOW = momentum_window_days(LOOKBACK, SKIP)  # 76 — engine._window_start 단일 출처
 LO = AS_OF - timedelta(days=WINDOW)  # load_range 하한과 동일 경계
 
 

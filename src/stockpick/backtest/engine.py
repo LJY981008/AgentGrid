@@ -19,6 +19,7 @@ from ..rules.factors import momentum_universe
 from ..rules.ranking import rank_by_momentum
 from . import calendar, costs
 from .metrics import compute_metrics
+from .ports import momentum_window_days
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -178,9 +179,9 @@ def _window_start(config: BacktestConfig, t: date) -> date:
     `load_range(tradable, start=_window_start(t), end=t)` 로 랭킹 입력을 좁혀 load(as_of) 전 종목
     t 이하 전체(OOM) 회피. 여유(거래일≈캘린더×5/7 → ×2 면 lookback+skip 거래일 확실 포함)가 momentum
     필요 구간을 덮어 결과 불변. 상장 초기 종목은 가용 전부(full load 와 동일 graceful).
+    ⚠️ 윈도우 산식은 `ports.momentum_window_days`(단일 출처) — DuckDB momentum_scores 와 동일 보장.
     """
-    span = (config.lookback_days + config.skip_recent_days) * 2 + 30
-    return t - timedelta(days=span)
+    return t - timedelta(days=momentum_window_days(config.lookback_days, config.skip_recent_days))
 
 
 def _turnover(old: dict[str, Decimal], new: dict[str, Decimal]) -> Decimal:

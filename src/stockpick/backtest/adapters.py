@@ -12,20 +12,62 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from ..rules import _scan
+from ..data import duckdb_cache
+from ..rules import _scan, factors
+from .ports import momentum_window_days
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from ..rules._scan import PricePoint
+    from ..rules.factors import MomentumScore
     from ..types import Exchange
     from .ports import PriceSeriesPort, UniversePort
 
 logger = logging.getLogger(__name__)
 
 _SNAPSHOT_NAME = "stock_snapshot.json"
+
+# cache.duckdb daily_bar 컬럼 = ticker,trade_date,close,adj_factor(exchange 없음·hive 파티션).
+# _scan 과 동일 정렬(ORDER BY ticker,trade_date)·adjusted=close*adj_factor Python 곱(Parquet 동치).
+_SQL_LOAD_RANGE = (
+    "SELECT ticker, trade_date, close, adj_factor FROM daily_bar "
+    "WHERE ticker = ANY($t) AND trade_date BETWEEN $s AND $e ORDER BY ticker, trade_date"
+)
+_SQL_LOAD_AS_OF = (
+    "SELECT ticker, trade_date, close, adj_factor FROM daily_bar "
+    "WHERE trade_date <= $a ORDER BY ticker, trade_date"
+)
+_SQL_LOAD_ALL = (
+    "SELECT ticker, trade_date, close, adj_factor FROM daily_bar ORDER BY ticker, trade_date"
+)
+_SQL_TRADING_DAYS = "SELECT DISTINCT trade_date FROM daily_bar ORDER BY trade_date"
+
+
+def _series_from_price_rows(rows: list[tuple[object, ...]]) -> dict[str, list[PricePoint]]:
+    """cache 행(ticker,trade_date,close,adj_factor) → {ticker:[PricePoint]} (타입 narrowing).
+
+    adjusted = close * adj_factor 를 **Python Decimal** 로 합성(_scan 과 동일 — Parquet 포트와
+    bit-identical). 예상 밖 타입이면 추측 변환 없이 실패(실패 명확 보고).
+    """
+    series: dict[str, list[PricePoint]] = {}
+    for row in rows:
+        ticker, trade_date, close, adj_factor = row
+        if not (
+            isinstance(ticker, str)
+            and isinstance(trade_date, date)
+            and isinstance(close, Decimal)
+            and isinstance(adj_factor, Decimal)
+        ):
+            msg = f"예상치 못한 가격 행 타입: {[type(x).__name__ for x in row]}"
+            raise TypeError(msg)
+        series.setdefault(ticker, []).append(
+            _scan.PricePoint(trade_date=trade_date, adjusted=close * adj_factor)
+        )
+    return series
 
 
 class ParquetPriceSeriesPort:
@@ -55,6 +97,100 @@ class ParquetPriceSeriesPort:
 
     def ticker_exchanges(self) -> dict[str, Exchange]:
         return _scan.load_ticker_exchanges(self._base_dir)
+
+
+class DuckDBPriceSeriesPort:
+    """cache.duckdb 단일 컬럼 table → PriceSeriesPort + MomentumScorePort(ADR-007·라이브 가속).
+
+    read_only 연결을 1회 열어 재사용(S6-a critic C2 — 매 호출 connect 금지). 핫패스 = load_range·
+    momentum_scores(끝점/구간만 SQL 스캔·1억행 풀로드 회피). 결과는 ParquetPriceSeriesPort·
+    momentum_universe(load_range) 와 **bit-identical**(adjusted=close*adj_factor Python 곱·windowed
+    wn 기준·Task5 회귀 봉인). ⚠️ `ticker_exchanges` 만 Parquet 위임 — exchange 는 hive 파티션 키라
+    cache table(build_cache SELECT)에 없다(메타·핫패스 아님). 호출부는 끝나면 `close()`.
+    """
+
+    def __init__(self, base_dir: Path) -> None:
+        self._base_dir = base_dir
+        self._con = duckdb_cache.connect_readonly(base_dir)
+
+    def close(self) -> None:
+        """read_only 연결 해제(팩토리/백테스트 종료 시 호출)."""
+        self._con.close()
+
+    def load(self, *, as_of: date) -> dict[str, list[PricePoint]]:
+        rows = self._con.execute(_SQL_LOAD_AS_OF, {"a": as_of}).fetchall()
+        return _series_from_price_rows(rows)
+
+    def full_series(self) -> dict[str, list[PricePoint]]:
+        # 전구간(대용량) — 소규모 폴백·테스트용(Protocol 규약). 핫패스는 load_range.
+        logger.warning("DuckDBPriceSeriesPort.full_series 전체 table 로드 — 핫패스면 load_range")
+        rows = self._con.execute(_SQL_LOAD_ALL).fetchall()
+        return _series_from_price_rows(rows)
+
+    def load_range(
+        self, *, tickers: set[str], start: date, end: date
+    ) -> dict[str, list[PricePoint]]:
+        if not tickers:
+            return {}
+        rows = self._con.execute(
+            _SQL_LOAD_RANGE, {"t": list(tickers), "s": start, "e": end}
+        ).fetchall()
+        return _series_from_price_rows(rows)
+
+    def trading_days(self) -> list[date]:
+        rows = self._con.execute(_SQL_TRADING_DAYS).fetchall()
+        out: list[date] = []
+        for row in rows:
+            (td,) = row
+            if not isinstance(td, date):
+                msg = f"예상치 못한 trade_date 타입: {type(td).__name__}"
+                raise TypeError(msg)
+            out.append(td)
+        return out
+
+    def ticker_exchanges(self) -> dict[str, Exchange]:
+        # exchange 는 cache table 에 없음(hive 파티션) → Parquet 위임. 메타·핫패스 아님.
+        return _scan.load_ticker_exchanges(self._base_dir)
+
+    def momentum_scores(
+        self,
+        *,
+        tickers: set[str],
+        as_of: date,
+        lookback_days: int,
+        skip_recent_days: int,
+    ) -> dict[str, MomentumScore]:
+        if not tickers:
+            return {}
+        window_days = momentum_window_days(lookback_days, skip_recent_days)
+        eps = duckdb_cache.momentum_endpoints(
+            self._con,
+            tickers=tickers,
+            as_of=as_of,
+            lookback_days=lookback_days,
+            skip_recent_days=skip_recent_days,
+            window_days=window_days,
+        )
+        out: dict[str, MomentumScore] = {}
+        for ticker, e in eps.items():
+            end_pt = (
+                _scan.PricePoint(trade_date=e.end_date, adjusted=e.end_adjusted)
+                if e.end_date is not None and e.end_adjusted is not None
+                else None
+            )
+            start_pt = (
+                _scan.PricePoint(trade_date=e.start_date, adjusted=e.start_adjusted)
+                if e.start_date is not None and e.start_adjusted is not None
+                else None
+            )
+            out[ticker] = factors.momentum_from_endpoints(
+                end_point=end_pt,
+                start_point=start_pt,
+                end_idx=e.end_idx,
+                start_idx=e.start_idx,
+                lookback_days=lookback_days,
+            )
+        return out
 
 
 class PriceDerivedUniverse:

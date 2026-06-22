@@ -13,7 +13,19 @@ if TYPE_CHECKING:
     from datetime import date
 
     from ..rules._scan import PricePoint
+    from ..rules.factors import MomentumScore
     from ..types import Exchange
+
+
+def momentum_window_days(lookback_days: int, skip_recent_days: int) -> int:
+    """momentum lookback+skip 거래일을 덮는 load 윈도우 캘린더일 = (lookback+skip)*2+30.
+
+    거래일≈캘린더×5/7 → ×2 면 lookback+skip 거래일 확실 포함·+30 여유. **단일 출처**:
+    engine._window_start(메모리 경로 load_range 하한)와 DuckDBPriceSeriesPort.momentum_scores
+    (SQL 윈도우)가 동일 윈도우를 쓰도록 강제한다 — 둘이 어긋나면 windowed momentum bit-identical
+    이 깨진다(BLOCKING·ADR-007). 상장 초기·sparse 종목은 가용 전부로 graceful 축소(양쪽 동일).
+    """
+    return (lookback_days + skip_recent_days) * 2 + 30
 
 
 @runtime_checkable
@@ -40,6 +52,30 @@ class PriceSeriesPort(Protocol):
 
     def ticker_exchanges(self) -> dict[str, Exchange]:
         """ticker → Exchange(랭킹 그룹핑·TopEntry.exchange 채움). 가격 저장소 파티션 키에서 도출."""
+        ...
+
+
+@runtime_checkable
+class MomentumScorePort(Protocol):
+    """momentum 점수를 저장소에서 직접 산출(SQL 부분 푸시다운·ADR-007). 옵트인 — PriceSeriesPort
+    와 별개 Protocol 이라 Fake/Parquet 은 미구현(엔진이 isinstance 로 분기해 메모리 경로 폴백).
+
+    DuckDBPriceSeriesPort 만 구현한다(`momentum_endpoints`+`momentum_from_endpoints`로 끝점 2점만
+    스캔·1억행 풀로드 회피). 결과는 `momentum_universe(load_range(tradable, _window_start(t), t))`
+    (메모리 경로)와 **bit-identical**(windowed wn 기준·룩어헤드 trade_date<=as_of).
+    """
+
+    def momentum_scores(
+        self,
+        *,
+        tickers: set[str],
+        as_of: date,
+        lookback_days: int,
+        skip_recent_days: int,
+    ) -> dict[str, MomentumScore]:
+        """tickers × as_of momentum 점수. 산출불가(2점미만)도 None 점수로 포함(momentum_universe
+        와 동일)·윈도우 봉 0 종목만 제외(load_range 봉 0 제외와 동일·스테일 배제). 빈 tickers→{}.
+        윈도우 = momentum_window_days(lookback,skip)(engine._window_start 와 동일 출처)."""
         ...
 
 
