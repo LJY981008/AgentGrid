@@ -49,6 +49,12 @@ rebalance=monthly·cost=baseline(10bps)·recovery=0·group_by_exchange=False**. 
 - **비용(±cost_bps) = 즉시**(G-6·`sensitivity_analysis`). 거래비용 가정에 룰이 종속이면 fragile.
 - **데이터 완전성(1%/0.5% 결측 임계) = 후속**(M1 원의도). per-ticker completeness 메타가 선결이라 이번 범위 밖.
 
-## 결과
+## 결과 (2026-06-23 풀 실행)
 
-(Task4 풀 실행 후 기입 — 각 G 결과·종합 판정·validated 결정. ⚠️ zero-adjusted(adj_factor=0)로 G-7 verify fail 시 데이터 품질 블로커로 정직히 노출.)
+**판정: `validated=false` — G-7 무결성 블로커.** `s6_gate_result.json`(passed=false·rule_signature `33359e84…`) 기록.
+
+- **G-7 무결성 FAIL(verdict 확정자)**: `verify_parquet`(전구간 5.1G·DuckDB) → **가격<=0 = 542,588행·OHLC위반 = 88,064행**(중복 0·adj_factor<=0 **0**). 실측 확인: `JUNP_old` 등 **`_old` 접미사(EODHD 리네임/폐지 티커)의 close=0 플레이스홀더** 506,556행(cache·close만)+open/high/low 0 → 542,588. **verify 정확·실제 나쁜 데이터**(verify 버그 아님). ⚠️ 예측은 zero-adjusted(adj_factor=0)였으나 실제는 **nonpositive price/OHLC**.
+- **G-1~G-6·G-8 = 미평가(단락)**: 데이터 무결성 실패 = 신뢰 불가 → 손상 데이터 백테스트는 garbage-in·무의미. `run_s6_gate` 가 `verify_passed=False` 면 백테스트 **미실행**(전 G AND 라 G-7 하나로 확정)·passed=false 기록. 정직(가짜 G 수치 안 냄)·12g OOM/8hr 동시 회피.
+- **momentum OOS 강건성은 미입증**: G-7 데이터 블로커로 G-1~G-6 측정 자체가 부적절. "momentum 실패"가 아니라 **"데이터 신뢰 불가로 평가 불가"** — validated=false 유지가 정답(정직 판정).
+- **부수 발견**: ① 백테스트 단계 12g OOM(단일 풀 11.9GB×3비용 누적 — 데이터 정제 후 게이트 재실행 시 mem>12g 선결·백로그). ② delisted_ratio=0.629(G-5a 임계 충족·MasterUniverse 정상).
+- **후속(범위 밖)**: 데이터 정제(`_old`/폐지 0-price 행 필터 또는 missing 처리·EODHD 적재 경로) → 정제 후 게이트 재실행(mem>12g) → momentum G-1~G-6 실제 판정.

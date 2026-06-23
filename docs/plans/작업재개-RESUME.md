@@ -18,12 +18,13 @@
 
 **~~4. 관측성 스택(Prometheus+Grafana)~~ ✅ 완료(2026-06-23·ADR-008)**: `PhaseProfile` 계측(stdlib·결과불변)+profile CLI(라이브 /metrics·**rss vs python peak 범인 가림**·Pushgateway round)+instrumentator+compose 4서비스(prometheus/grafana3001/pushgateway/profiler)+레이어 대시보드(L1신호등/L3파이프라인/L4무결성/호스트)+Local Snapshot 런북. 플랜 백업=`docs/work-history/2026-06-23-관측성-스택.md`·`observability/README.md`.
 
-**남은 순서**:
-1. **peak 11.7GB 범인 확정 후 메모리 최적화**: 관측성 profiler(rss vs python tracemalloc)로 Python/DuckDB 귀속 확정 → DuckDB면 `connect_readonly` memory_limit, Python이면 해당 경로. (이 작업이 관측성 스택 첫 실사용.)
-2. **추가 속도 최적화**(25.5분 더 단축 — S6-b 분할≥10=~10회=~4시간이라 선결): L3 대시보드 phase 분해로 남은 병목 식별 후.
-3. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**.
-   - 무결성 verify 1회(`bulk --verify`) = S6 진입 필수 게이트.
-4. **full_series Protocol 제거**(+M1: DuckDB 무스냅샷 `PriceDerivedUniverse.full_series` OOM 경로)·**zero-adjusted WARNING 집계화**(logging-rules 루프 spam).
+**~~5. S6-b 신뢰성 게이트~~ ✅ 구축 완료·판정=`validated=false`(2026-06-23 ②·ADR-009)**: `backtest/s6_gate.py`(G-1~G-8 **사전동결** 임계 모듈상수·`run_s6_gate`·`sensitivity_analysis`·`evaluate_criteria` 순수판정·`compute_rule_signature`/`load_s6_gate_verdict` validated flip·격리 CLI·G-7 fail 시 백테스트 단락). ranking/backtest validated 배선. Task0~5·Task별 리뷰 2종. **전구간 풀 실행 판정: G-7 무결성 FAIL**(가격<=0 **542,588행**·OHLC위반 **88,064행** = `_old`/폐지 0-price 플레이스홀더·verify 정확). momentum OOS 강건성 **미평가**(데이터 신뢰 불가·단락). **2 실버그 수정**: verify_parquet OOM(`_VERIFY_MEMORY_LIMIT` 4GB+spill)·백테스트 12g OOM(백로그). 플랜 백업=`docs/work-history/2026-06-23-S6b-신뢰성게이트.md`·`s6_gate_result.json`.
+
+**남은 순서** (S6-b 판정 후속 — validated=true 까지):
+1. ⭐ **데이터 정제(S6-b 완료 선결)**: `_old`/폐지 티커 **0-price 542,588행**(close/open/high/low<=0)·OHLC위반 88,064행. EODHD 적재 경로(`data/eodhd`·`bulk`)서 0-price 행을 **missing 처리/필터** 또는 정제. 정제 후 verify(G-7) PASS 해야 G-1~G-6 평가 가능.
+2. **백테스트 단계 메모리(게이트 재실행 선결)**: 게이트 walk_forward(3비용×10폴드 앵커드 expanding-IS)가 단일풀 11.9GB 누적으로 **12g OOM**. mem_limit>12g 격리(`docker run --memory`) 또는 백테스트 단계 메모리 최적화(peak 범인=관측성 백로그). 정제+이거 후 momentum **G-1~G-6 실판정** → validated 결정.
+3. **peak ~12GB 범인 확정**(관측성 백로그): rss≫python=native(memray --temporal). 위 2번과 동류 — DuckDB cgroup 무인지(verify 는 수정·백테스트 경로 남음).
+4. **full_series Protocol 제거**(+M1: DuckDB 무스냅샷 `PriceDerivedUniverse.full_series` OOM 경로)·**zero-adjusted/0-price WARNING 집계화**.
 5. **증분 스케줄러**(신규 운영 마일스톤 — 아래 설계 메모):
 
 ### 증분 스케줄러 설계 메모 (캡처 명세 실측 — `docs/apis/eodhd/`)
