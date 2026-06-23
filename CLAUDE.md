@@ -78,8 +78,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 베이스: `python:3.12-slim-trixie` + `ghcr.io/astral-sh/uv:0.11.21` 바이너리 주입, 2단계 sync(의존성/소스 레이어 분리), non-root. 상세 주석: `Dockerfile`.
 
 ```bash
-docker compose up -d                               # 풀스택: postgres + app(FastAPI uvicorn:8000) + web(Vite dev)
+docker compose up -d                               # 풀스택: postgres + app(FastAPI uvicorn:8000) + web(Vite dev) + 관측성(prometheus/grafana/pushgateway)
 #   브라우저 http://localhost:5174 (web 대시보드) · API 직접 http://localhost:8000 · postgres localhost:5433
+#   관측성(ADR-008): Grafana http://localhost:3001 · Prometheus :9090 · Pushgateway :9091
+# 백테스트 프로파일(peak/phase 측정·격리·on-demand) — ⚠️ app 정지 후(11.7GB+12g OOM 회피):
+docker compose stop app web && STOCKPICK_PROFILE_ROUND=before docker compose --profile profiling up profiler  # 라이브 /metrics scrape+round push
 #   ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측): postgres 5432→5433·web 5173→5174 (컨테이너 내부 불변)
 docker compose build app                           # 이미지 빌드(베이스 pull 네트워크 필요)
 
@@ -119,7 +122,8 @@ docker compose exec app pytest -q                   # 테스트
 | 경로 | 역할 |
 |---|---|
 | `Dockerfile` · `.dockerignore` | uv 기반 개발/실행 이미지(단일 FROM·2단계 uv sync로 의존성/소스 레이어 분리·non-root·BuildKit 캐시) |
-| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume[Parquet 1차원본+`cache.duckdb` 파생캐시 ADR-007]·`mem_limit:12g` OOM 방어) + `web`(node:22 Vite dev:5174→5173). ⚠️ 대용량 벌크는 app 격리 실행(위 Build 주석) |
+| `compose.yaml` | `postgres`(PG18 운영) + `app`(FastAPI uvicorn:8000·소스 바인드·parquet-data named volume[Parquet 1차원본+`cache.duckdb` 파생캐시 ADR-007]·`mem_limit:12g` OOM 방어) + `web`(node:22 Vite dev:5174→5173) + **관측성(ADR-008): `prometheus`(v3.12.0·:9090)·`pushgateway`(:9091)·`grafana`(13.0.2·3001→3000·익명 Admin·grafana-data 스냅샷 영속)·`profiler`(on-demand·`profiles:[profiling]`·백테스트 phase/peak 측정·라이브 /metrics:9100)**. ⚠️ 대용량 벌크·프로파일은 app 격리 실행(위 Build 주석) |
+| `observability/` | 관측성 설정(ADR-008) — `prometheus/prometheus.yml`(scrape app/pushgateway/profiler) · `grafana/provisioning`(datasource·dashboard provider as-code) · `grafana/dashboards`(레이어 대시보드 JSON: L1 신호등·L3 파이프라인·L4 무결성·인프라 호스트) |
 | `uv.lock` | 의존성 고정(재현성 핵심) — 커밋 대상 |
 | `migrations/` | alembic PG 마이그레이션(S5-a·ADR-006) — `env.py`(DATABASE_URL→psycopg3)·`versions/`. compose app 에 마운트. 직접 DDL 금지 |
 | `src/stockpick/` | 도메인 계약(`types.py` = 기획 §6, **FinancialFact** 포함) + `data/`(수집·저장·`db.py` PG repo·Parquet→PG 단방향 동기·`export_stock_snapshot`(stock→JSON 스냅샷 S5-d)·`universe.py` 종목마스터 S5-b·`bulk.py` 다년 EOD 벌크 S5-c+**후처리 재구조화·`--finalize` 복구**(commit 직후 `build_cache`)·`duckdb_cache.py` **Parquet→`cache.duckdb` 단일 컬럼 파생캐시+momentum 부분 푸시다운(`momentum_endpoints` SQL 끝점·ADR-007)**)·`rules/` 모듈 + `backtest/`(M2 엔진 — `config·calendar·costs·strategy·ports·adapters·fakes·metrics·engine·benchmark·validation·demo`. 리밸·forward-return·폐지청산·IS/OOS·decay. **adapters `MasterUniverse`(생존편향 유니버스·delisted_at+1 경계 S5-d)·`DuckDBPriceSeriesPort`(`MomentumScorePort`·cache.duckdb 라이브 가속)·`_select_universe`·`_select_price_port`(cache→DuckDB·부재 Parquet 폴백)**·engine `momentum_scores` 분기) |

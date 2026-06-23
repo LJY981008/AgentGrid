@@ -1,0 +1,22 @@
+# Prometheus scrape 설정 (관측성·ADR-008). compose 내부 서비스명:포트 대상.
+#   - app /metrics: FastAPI instrumentator(HTTP 지연·요청율·L1)
+#   - pushgateway: 백테스트 profiler round 요약(honor_labels=round 라벨 보존·필수)
+#   - profiler: 라이브 /metrics(RSS·phase 곡선·on-demand — 미기동 시 target down 정상)
+global:
+  scrape_interval: 15s
+  external_labels:
+    project: stockpick
+
+scrape_configs:
+  - job_name: stockpick-api
+    static_configs:
+      - targets: ["app:8000"]
+
+  - job_name: pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+
+  - job_name: profiler
+    static_configs:
+      - targets: ["profiler:9100"]

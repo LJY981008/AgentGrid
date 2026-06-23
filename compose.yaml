@@ -2,11 +2,12 @@
 #   docker compose up -d   → postgres(운영 서빙) + app(FastAPI:8000) + web(Vite dev:5173)
 #   브라우저: http://localhost:5174 (web)  ·  API 직접: http://localhost:8000
 # 벌크 백테스트 데이터는 Parquet 파일(DB 아님). PG 는 일일 갱신·운영 조회용.
-# Redis/RabbitMQ/모니터링은 도메인 전환으로 제거 — 필요해지면 그때 추가.
+# 관측성(ADR-008·2026-06-23): prometheus+grafana+pushgateway 상시 + profiler(on-demand·profiling 프로필).
+#   백테스트 perf·API 지연·호스트 메모리 모니터링 + 최적화 라운드 Grafana 스냅샷.
 #
-# ⚠️ 외부망 노출 차단: app·web·postgres 모두 127.0.0.1 바인딩 — 개인 1인 로컬·인증 없음.
-# ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측 2026-06-17):
-#     postgres 5432→5433, web 5173→5174. 컨테이너 내부 포트는 불변(앱·proxy 영향 없음).
+# ⚠️ 외부망 노출 차단: 전 서비스 127.0.0.1 바인딩 — 개인 1인 로컬·인증 없음.
+# ⚠️ 호스트 포트 리맵(타 프로젝트 AiCrawl 점유 실측): postgres 5432→5433·web 5173→5174·
+#     grafana 3000→3001(호스트 3000 점유 실측). prometheus 9090·pushgateway 9091. 컨테이너 내부 불변.
 name: stockpick
 
 services:
@@ -100,6 +101,86 @@ services:
       timeout: 3s
       retries: 10
 
+  # ── 관측성 스택(ADR-008) ──────────────────────────────────────────────
+  # prometheus: app /metrics(HTTP) + pushgateway(백테스트 perf round) + profiler(라이브 곡선) scrape.
+  prometheus:
+    image: prom/prometheus:v3.12.0  # ⚠️ latest=2.x(tech 실측·v3 명시 핀)
+    container_name: stockpick-prometheus
+    depends_on:
+      - app
+      - pushgateway
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus  # 시계열 영속(라이브 메트릭 히스토리)
+    ports:
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # pushgateway: 25분 배치(profiler)는 pull 로 못 잡음(종료 시 소멸) → round 요약 push 보존.
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    container_name: stockpick-pushgateway
+    ports:
+      - "127.0.0.1:9091:9091"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/-/healthy"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # grafana: 레이어 대시보드(provisioning as-code) + Local Snapshot(최적화 before/after·grafana.db 영속).
+  grafana:
+    image: grafana/grafana:13.0.2
+    container_name: stockpick-grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"  # 1인 로컬·인증 없음(app·web 동일 철학)
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"  # 스냅샷 생성 권한
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana  # ⭐ grafana.db SQLite — Local Snapshot before/after 영속
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      # ⚠️ 호스트 3000 점유(실측) → 3001 리맵. 컨테이너 내부 3000 불변.
+      - "127.0.0.1:3001:3000"
+
+  # profiler(on-demand·profiles:["profiling"]): 풀 백테스트 phase/peak 측정·라이브 /metrics(9100).
+  #   ⚠️ app 정지 후 격리 실행(11.7GB+12g OOM 회피·CLAUDE.md 벌크 규약):
+  #     docker compose stop app web
+  #     STOCKPICK_PROFILE_ROUND=before docker compose --profile profiling up profiler
+  #   prometheus 가 profiler:9100 scrape(라이브 RSS·phase 곡선)·종료 시 pushgateway round 푸시.
+  profiler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stockpick-profiler
+    profiles: ["profiling"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://stockpick:stockpick-local@postgres:5432/stockpick
+      PYTHONPATH: src
+      PUSHGATEWAY_URL: "pushgateway:9091"
+      STOCKPICK_PROFILE_ROUND: "${STOCKPICK_PROFILE_ROUND:-adhoc}"
+      STOCKPICK_PROFILE_METRICS_PORT: "9100"
+    volumes:
+      - ./src:/app/src
+      - parquet-data:/app/data  # cache.duckdb·Parquet·edgar·snapshot(read)
+    command: ["python", "-m", "stockpick.backtest.profile"]
+    mem_limit: 12g  # app 정지 후 격리이므로 단독 12g 점유
+
 volumes:
   postgres-data:
   parquet-data:  # 수집 Parquet 영속(app 소유·호스트 uid 무관)
+  prometheus-data:  # 관측성 시계열 영속
+  grafana-data:  # ⭐ Grafana 대시보드·Local Snapshot 영속(before/after 동결)

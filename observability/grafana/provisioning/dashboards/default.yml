@@ -1,0 +1,10 @@
+# Grafana dashboard provider (as-code·ADR-008). /var/lib/grafana/dashboards 의 JSON 자동 로드.
+#   레이어 대시보드(l1-overview·l3-pipeline·l4-integrity·infra-host·...)는 Task5에서 추가.
+apiVersion: 1
+providers:
+  - name: stockpick-layers
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
