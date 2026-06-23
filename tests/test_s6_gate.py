@@ -21,6 +21,7 @@ from stockpick.backtest.s6_gate import (
     _DELISTED_MIN,
     _N_FOLDS,
     S6GateResult,
+    _verify_gate,
     _worst_decay,
     canonical_gate_config,
     compute_rule_signature,
@@ -32,9 +33,13 @@ from stockpick.backtest.s6_gate import (
     walk_forward_by_cost,
     write_s6_gate_result,
 )
+from stockpick.backtest.s6_gate import main as s6_gate_main
 from stockpick.backtest.strategy import EqualWeightTopN
-from stockpick.backtest.validation import Fold
+from stockpick.backtest.validation import Fold, walk_forward
+from stockpick.data import storage
+from stockpick.data.storage import write_daily_bars
 from stockpick.rules._scan import PricePoint
+from stockpick.types import DailyBar, Exchange
 
 
 def _pass_kwargs() -> dict[str, object]:
@@ -483,3 +488,123 @@ def test_canonical_gate_config_signature_matches_ranking_signature() -> None:
         top_n=5, lookback_days=126, skip_recent_days=21, group_by_exchange=False
     )
     assert gate_sig == rank_sig
+
+
+# ── Task4: CLI 스모크(합성 데이터·전구간 8hr 전 배선 검증) ──
+
+
+def test_main_cli_smoke_writes_result_and_returns_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 합성 Parquet base_dir·--skip-verify·--n-folds 2 로 CLI 배선만 빠르게 확인(8hr 전 버그 차단).
+    # 스냅샷 부재 → PriceDerivedUniverse(delisted_ratio=0 → G-5 fail) → passed=False 정상.
+    base_dir = tmp_path / "parquet"
+    base_dir.mkdir(parents=True)
+    start = date(2025, 1, 1)
+    bars = [
+        DailyBar(
+            ticker="NVDA",
+            trade_date=start + timedelta(days=i),
+            open=Decimal(100 + i),
+            high=Decimal(105 + i),
+            low=Decimal(95 + i),
+            close=Decimal(100 + i),
+            volume=1000,
+            value=None,
+            adj_factor=Decimal("1"),
+        )
+        for i in range(60)
+    ]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=base_dir, source="synthetic")
+    monkeypatch.setenv("STOCKPICK_DATA_DIR", str(base_dir))
+
+    rc = s6_gate_main(["--skip-verify", "--n-folds", "2"])
+    assert rc == 0
+    result_file = base_dir / "s6_gate_result.json"
+    assert result_file.is_file()  # 판정 영속
+    import json as _json
+
+    payload = _json.loads(result_file.read_text(encoding="utf-8"))
+    assert payload["passed"] is False  # 합성·스냅샷부재·n_folds<10 → 미통과(정직)
+    assert "rule_signature" in payload
+
+
+def test_verify_gate_returns_report_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    # _verify_gate 가 verify_parquet.passed 를 그대로 전달(G-7 배선).
+    class _Report:
+        passed = True
+
+    monkeypatch.setattr(storage, "verify_parquet", lambda base_dir: _Report())
+    assert _verify_gate(Path("/x")) is True
+
+
+def test_verify_gate_returns_false_on_verification_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # verify_parquet 가 VerificationError 던지면 False(데이터 신뢰 불가·게이트 fail 흡수).
+    def _raise(base_dir: Path) -> object:
+        raise storage.VerificationError("무결성 위반")
+
+    monkeypatch.setattr(storage, "verify_parquet", _raise)
+    assert _verify_gate(Path("/x")) is False
+
+
+def test_walk_forward_yields_n_folds_when_data_sufficient() -> None:
+    # 8hr 전 봉인: 데이터 충분 시 n_folds=10 분할이 정확히 10 fold 생성(세그먼트 off-by-one 차단).
+    days = _weekdays(date(2018, 1, 1), 600)
+    a = [PricePoint(d, Decimal(100 + i)) for i, d in enumerate(days)]
+    port = FakePriceSeriesPort({"A": a})
+    uni = FakeUniversePort(listed={"A": date(2017, 1, 1)}, delisted={})
+    ident = StubIdentityResolver({"A": "C"})
+    folds = walk_forward(
+        _cfg(days, lookback_days=5),
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        n_folds=10,
+        purge_gap_days=5,
+    )
+    assert len(folds) == 10  # G-4(n_folds>=10) 가 풀데이터서 충족됨을 봉인
+
+
+def test_main_cli_master_universe_threads_delisted_ratio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 실제 실행 경로 봉인: stock_snapshot.json 존재 → MasterUniverse → delisted_ratio 결과에 전달.
+    base_dir = tmp_path / "parquet"
+    base_dir.mkdir(parents=True)
+    start = date(2025, 1, 1)
+    bars = [
+        DailyBar(
+            ticker="NVDA",
+            trade_date=start + timedelta(days=i),
+            open=Decimal(100 + i),
+            high=Decimal(105 + i),
+            low=Decimal(95 + i),
+            close=Decimal(100 + i),
+            volume=1000,
+            value=None,
+            adj_factor=Decimal("1"),
+        )
+        for i in range(60)
+    ]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=base_dir, source="synthetic")
+    # 2종목 중 1종목 폐지 → delisted_ratio=0.5(MasterUniverse 멤버십 기준).
+    import json as _json
+
+    (base_dir / "stock_snapshot.json").write_text(
+        _json.dumps(
+            {
+                "stocks": [
+                    {"ticker": "NVDA", "listed_at": "2025-01-01", "delisted_at": None},
+                    {"ticker": "DEAD", "listed_at": "2025-01-01", "delisted_at": "2025-02-01"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("STOCKPICK_DATA_DIR", str(base_dir))
+
+    rc = s6_gate_main(["--skip-verify", "--n-folds", "2"])
+    assert rc == 0
+    payload = _json.loads((base_dir / "s6_gate_result.json").read_text(encoding="utf-8"))
+    assert payload["delisted_ratio"] == 0.5  # MasterUniverse 폐지비율 전달 확인

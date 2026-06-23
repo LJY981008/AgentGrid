@@ -16,6 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .benchmark import equal_weight_universe
@@ -25,7 +26,6 @@ from .validation import walk_forward
 if TYPE_CHECKING:
     from datetime import date
     from decimal import Decimal
-    from pathlib import Path
 
     from .config import BacktestConfig
     from .ports import IdentityResolver, PriceSeriesPort, UniversePort
@@ -528,3 +528,129 @@ def canonical_gate_config(
         start=start,
         end=end,
     )
+
+
+def _verify_gate(base_dir: Path) -> bool:
+    """G-7 — verify_parquet 무결성(예외 격리). VerificationError/실패 → False(데이터 신뢰 불가).
+
+    ⚠️ 대용량(5.1G)서 ≥수백초. zero-adjusted(adj_factor=0) 다수면 여기서 fail = 데이터 품질 블로커
+    (정직히 validated=false). verify 실패는 게이트 fail 로 흡수(전체 중단보다 정직·bulk 와 동형).
+    """
+    from ..data.storage import VerificationError, verify_parquet
+
+    try:
+        report = verify_parquet(base_dir)
+    except VerificationError:
+        logger.error(
+            "G-7 무결성 verify 실패 — 데이터 신뢰 불가(zero-adjusted 등 조사)", exc_info=True
+        )
+        return False
+    return report.passed
+
+
+def _print_verdict(result: S6GateResult) -> None:
+    """판정 결과 사람용 출력(print — CLI 진입점 예외·logging-rules)."""
+    criteria = (
+        ("G-1 IS성과", result.g1_is_pass),
+        ("G-2 OOS방어", result.g2_decay_pass),
+        ("G-3 벤치초과", result.g3_excess_pass),
+        ("G-4 분할수", result.g4_nfolds_pass),
+        ("G-5 폐지커버", result.g5_delisted_pass),
+        ("G-6 비용민감", result.g6_cost_pass),
+        ("G-7 무결성", result.g7_verify_pass),
+        ("G-8 재현성", result.g8_reproducible),
+    )
+    print("[s6_gate] ===== S6-b 신뢰성 게이트 판정 =====")  # noqa: T201
+    for label, ok in criteria:
+        print(f"[s6_gate]   {'PASS' if ok else 'FAIL'}  {label}")  # noqa: T201
+    worst = min(result.oos_excesses) if result.oos_excesses else None
+    print(  # noqa: T201
+        f"[s6_gate] n_folds={result.n_folds} delisted_ratio={result.delisted_ratio:.3f} "
+        f"n_delisted={result.n_delisted_liquidations} worst_oos_excess={worst}"
+    )
+    print(f"[s6_gate] sensitivity={result.sensitivity}")  # noqa: T201
+    verdict = "PASSED → validated=true 가능" if result.passed else "FAILED → validated=false 유지"
+    print(f"[s6_gate] 종합: {verdict}")  # noqa: T201
+    if result.notes:
+        print(f"[s6_gate] notes: {result.notes}")  # noqa: T201
+
+
+def main(argv: list[str] | None = None) -> int:
+    """S6-b 게이트 CLI(격리·~8hr) — verify(G-7) → 전구간 게이트 → s6_gate_result.json → 판정 출력.
+
+    ⚠️ app 정지 후 일회성 컨테이너로 격리(상주 uvicorn 과 메모리 경쟁 OOM·CLAUDE.md 벌크 규약).
+    `python -m stockpick.backtest.s6_gate`. base_dir=STOCKPICK_DATA_DIR(기본 data/parquet).
+    """
+    import argparse
+
+    from ..data import configure_logging
+    from .adapters import (
+        MasterUniverse,
+        _close_price_port,
+        _select_price_port,
+        _select_universe,
+    )
+    from .identity import EdgarSnapshotResolver
+    from .strategy import EqualWeightTopN
+
+    configure_logging()
+    parser = argparse.ArgumentParser(prog="stockpick.backtest.s6_gate")
+    parser.add_argument(
+        "--n-folds",
+        type=int,
+        default=_N_FOLDS,
+        help="워크포워드 분할 수(G-4 는 >=10 강제·스모크용 축소 가능)",
+    )
+    parser.add_argument(
+        "--skip-verify", action="store_true", help="G-7 verify 생략(스모크용·verify_passed=False)"
+    )
+    args = parser.parse_args(argv)
+
+    base_dir = Path(os.environ.get("STOCKPICK_DATA_DIR", "data/parquet"))
+    logger.info("S6-b 게이트 시작: base_dir=%s, n_folds=%d", base_dir, args.n_folds)
+
+    # 이전 판정 즉시 무효화 — 8hr 실행이 중간 크래시해도 stale verdict(특히 passed:true)가
+    # 잔존해 검증으로 오인되는 일 방지(부재→load_verdict false·보수). 완주 시 끝에서 재기록.
+    stale = base_dir / _RESULT_NAME
+    if stale.is_file():
+        stale.unlink()
+        logger.info("이전 s6_gate_result.json 무효화(재실행·크래시 안전)")
+
+    verify_passed = False if args.skip_verify else _verify_gate(base_dir)
+
+    price_port = _select_price_port(base_dir)
+    try:
+        days = price_port.trading_days()
+        if not days:
+            print("[s6_gate] 데이터 없음 — 종료(먼저 수집·`bulk --finalize`)")  # noqa: T201
+            return 1
+        universe = _select_universe(base_dir, price_port)
+        if isinstance(universe, MasterUniverse):
+            delisted_ratio = universe.delisted_ratio()
+        else:
+            # 스냅샷 부재 → 생존편향 미방어 유니버스. G-5 fail 로 정직히 차단(조용한 통과 금지).
+            logger.warning(
+                "유니버스 MasterUniverse 아님(생존편향 미방어) — delisted_ratio=0(G-5 fail)"
+            )
+            delisted_ratio = 0.0
+        config = canonical_gate_config(start=days[0], end=days[-1])
+        result = run_s6_gate(
+            config,
+            price_port=price_port,
+            universe_port=universe,
+            identity=EdgarSnapshotResolver(base_dir),
+            strategy=EqualWeightTopN(),
+            delisted_ratio=delisted_ratio,
+            verify_passed=verify_passed,
+            n_folds=args.n_folds,
+        )
+    finally:
+        _close_price_port(price_port)
+
+    write_s6_gate_result(base_dir, result)
+    _print_verdict(result)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -301,6 +301,18 @@ class MasterUniverse:
         """유니버스 멤버십 종목 수(데모 top_n·리포트용)."""
         return len(self._membership)
 
+    def delisted_ratio(self) -> float:
+        """폐지 비율 = boundary(폐지경계) 있는 종목 / 전체 멤버십. S6-b G-5 커버리지 입력.
+
+        실제 백테스트하는 멤버십 기준(degenerate·무가격 제외 후)이라 정직한 생존편향 커버리지.
+        빈 유니버스→0.0(G-5 미달). 실측 ~63.5%(31,868/50,184).
+        """
+        total = len(self._membership)
+        if total == 0:
+            return 0.0
+        delisted = sum(1 for _, boundary in self._membership.values() if boundary is not None)
+        return delisted / total
+
 
 def _select_universe(base_dir: Path, price_port: PriceSeriesPort) -> UniversePort:
     """스냅샷 존재 시 MasterUniverse(생존편향-correct)·부재 시 PriceDerivedUniverse(골격 폴백).
