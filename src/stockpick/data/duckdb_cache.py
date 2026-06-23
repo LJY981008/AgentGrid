@@ -30,6 +30,10 @@ _TMP_NAME = ".cache.duckdb.tmp"
 _TABLE = "daily_bar"
 _DATASET = "daily_bar"
 _MEMORY_LIMIT = "4GB"  # 적재 OOM 방어(디스크 스필) — app mem_limit 12g 내 여유
+# 읽기 연결 버퍼풀 캡(ADR-008 후속) — memory_limit 미설정 시 DuckDB 기본=호스트RAM 80%라 다년
+# 백테스트 반복 window 쿼리서 버퍼풀이 ~12.8GB 까지 ballooning(profiler 실측: rss 12.8GB vs python
+# 0.36GB=native). 캡으로 peak 바운드(초과분 디스크 spill·결과 불변). env 로 튜닝.
+_READ_MEMORY_LIMIT = os.environ.get("STOCKPICK_DUCKDB_MEMORY_LIMIT", "6GB")
 
 
 def cache_path(base_dir: Path) -> Path:
@@ -96,10 +100,16 @@ def build_cache(base_dir: Path) -> int:
 
 
 def connect_readonly(base_dir: Path) -> duckdb.DuckDBPyConnection:
-    """cache.duckdb read_only 연결(다중 reader 허용·호출부 close 책임). 부재/부패 시 duckdb 예외."""
+    """cache.duckdb read_only 연결(다중 reader·호출부 close 책임). 부재/부패 시 duckdb 예외.
+
+    memory_limit(`_READ_MEMORY_LIMIT`) 캡 — 버퍼풀 ballooning 방지(peak 바운드·초과 디스크 spill·
+    결과 불변·ADR-008 후속). 다중 reader 환경에서 합산 메모리도 캡으로 예측 가능.
+    """
     import duckdb
 
-    return duckdb.connect(str(cache_path(base_dir)), read_only=True)
+    return duckdb.connect(
+        str(cache_path(base_dir)), read_only=True, config={"memory_limit": _READ_MEMORY_LIMIT}
+    )
 
 
 @dataclass(frozen=True, slots=True)
