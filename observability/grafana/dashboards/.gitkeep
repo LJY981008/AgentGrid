@@ -1,2 +1,0 @@
-# 레이어 대시보드 JSON(l1-overview·l3-pipeline·l4-integrity·infra-host)은 Task5에서 추가.
-# 이 디렉토리는 compose grafana 마운트 대상이라 존재해야 함(빈 디렉토리 placeholder).

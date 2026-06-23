@@ -1,0 +1,29 @@
+{
+  "uid": "stockpick-host",
+  "title": "인프라 — 호스트 리소스 (메모리)",
+  "tags": ["host", "infra", "stockpick"],
+  "schemaVersion": 39,
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "프로세스 RSS 곡선 (profiler·실행 중·peak 시점)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "process_resident_memory_bytes{job=\"profiler\"}", "legendFormat": "RSS" }],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 15 }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 12000000000 }] } } }
+    },
+    {
+      "id": 2,
+      "type": "barchart",
+      "title": "peak 메모리 3종 (range·GB) — 범인 가림: rss≫python=native(DuckDB)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_peak_bytes / 1e9", "legendFormat": "{{round}} / {{source}}", "instant": true }],
+      "fieldConfig": { "defaults": { "unit": "decgbytes" } },
+      "options": { "orientation": "horizontal", "legend": { "showLegend": true } }
+    }
+  ]
+}

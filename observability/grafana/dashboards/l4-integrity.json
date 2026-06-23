@@ -1,0 +1,36 @@
+{
+  "uid": "stockpick-l4",
+  "title": "L4 — 데이터 무결성",
+  "tags": ["layer-4", "integrity", "stockpick"],
+  "schemaVersion": 39,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "폐지 청산 건수 (생존편향 가드 발동·round별)",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_delisted_total", "legendFormat": "{{round}}" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } } },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "리밸 수 (round별)",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_rebalances_total", "legendFormat": "{{round}}" }],
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "금융 BLOCKING 가드 (불변)",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+      "options": { "mode": "markdown", "content": "**가드 상시 유효**(코드 강제):\n- 생존편향: 폐지 포함 유니버스(MasterUniverse)\n- 룩어헤드: trade_date ≤ as_of\n- 수정주가 통일\n- **validated=false** (S6-b 게이트 전)\n\n폐지 청산 ≥1 = 생존편향 가드 발동 증거." }
+    }
+  ]
+}

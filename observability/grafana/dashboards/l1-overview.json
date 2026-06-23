@@ -1,0 +1,63 @@
+{
+  "uid": "stockpick-l1",
+  "title": "L1 — 신호등 (Overview)",
+  "tags": ["layer-1", "overview", "stockpick"],
+  "schemaVersion": 39,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API 가용성 (stockpick-api up)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "up{job=\"stockpick-api\"}" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "최신 백테스트 wall (round별·초)",
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_total_seconds", "legendFormat": "{{round}}" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 600 }, { "color": "red", "value": 1500 }] } } },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "peak RSS (round별·GB)",
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_peak_bytes{source=\"rss\"} / 1e9", "legendFormat": "{{round}}" }],
+      "fieldConfig": { "defaults": { "unit": "decgbytes", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 8 }, { "color": "red", "value": 11 }] } } },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "폐지 청산 (생존편향 가드 발동)",
+      "gridPos": { "h": 5, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_delisted_total", "legendFormat": "{{round}}" }],
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "검증 상태",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 6 },
+      "options": { "mode": "markdown", "content": "⚠️ **meta.validated = false** (S6-b 신뢰성 게이트 전). 백테스트 수치는 미검증 — 알파 아님(§4.1). 관측성은 속도·메모리 최적화용." }
+    }
+  ]
+}

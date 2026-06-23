@@ -1,0 +1,48 @@
+{
+  "uid": "stockpick-l3",
+  "title": "L3 — 파이프라인 (백테스트 phase/perf)",
+  "tags": ["layer-3", "pipeline", "stockpick"],
+  "schemaVersion": 39,
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "phase별 누적 wall (round 비교·초)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_phase_seconds", "legendFormat": "{{round}} / {{phase}}", "format": "time_series", "instant": true }],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "orientation": "horizontal", "legend": { "showLegend": true } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "총 wall (round별·초)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_total_seconds", "legendFormat": "{{round}}" }],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "라이브 진행 리밸 (실행 중·profiler scrape)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_progress_rebalance", "legendFormat": "리밸 idx" }],
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "라이브 phase 누적 wall (실행 중·초)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "stockpick_backtest_phase_seconds_live", "legendFormat": "{{phase}}" }],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } } }
+    }
+  ]
+}
