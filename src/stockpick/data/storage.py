@@ -412,6 +412,7 @@ def verify_parquet(
         # temp_directory 디스크 spill(결과 불변·느려질 뿐). temp=base_dir(쓰기가능 볼륨).
         con.execute(f"SET memory_limit='{_VERIFY_MEMORY_LIMIT}'")
         con.execute("SET temp_directory=$tmp", {"tmp": str(base_dir)})
+        con.execute("PRAGMA disable_progress_bar")  # 로그/CI 진행바 스팸 억제(build_cache 동형)
         row_count = _scalar_int(con, _SQL_ROW_COUNT, params)
         ticker_count = _scalar_int(con, _SQL_TICKER_COUNT, params)
         min_date = _scalar_str(con, _SQL_MIN_DATE, params)
