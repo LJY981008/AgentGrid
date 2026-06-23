@@ -129,6 +129,14 @@ def test_health(client: TestClient) -> None:
     assert body["version"]  # 비어있지 않음("0.0.1" 또는 "unknown")
 
 
+def test_metrics_endpoint(client: TestClient) -> None:
+    """instrumentator /metrics — Prometheus 텍스트(HTTP 요청 지연 메트릭)·/api prefix 밖."""
+    client.get("/api/health")  # 요청 1회 → 메트릭 발생
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert "http_request" in r.text  # http_request_duration_seconds·http_requests_total 류
+
+
 # ---------------------------------------------------------------------------
 # dataset
 # ---------------------------------------------------------------------------

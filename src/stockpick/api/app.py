@@ -15,6 +15,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from ..data import configure_logging
 from .deps import get_cors_origins, get_learning_dir
@@ -52,6 +53,11 @@ def create_app() -> FastAPI:
     )
     for router in api_routers:
         app.include_router(router, prefix="/api")
+
+    # 라이브 API 관측(L1·관측성) — HTTP 요청 지연(http_request_duration_seconds)·상태코드 자동 노출.
+    # /metrics 는 /api prefix 밖(Prometheus scrape 관례)·스키마 비노출. 백테스트 perf 는 별개
+    # (profile CLI→Pushgateway). instrumentator 는 api(상위)만 — 하위 모듈 prometheus 무관.
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
     # 학습 이미지(112개) 정적 서빙. 디렉토리 부재(마운트 누락)면 마운트 생략 + 경고(앱은 기동).
     learning_dir = get_learning_dir()
