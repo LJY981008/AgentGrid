@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -21,10 +22,15 @@ from stockpick.backtest.s6_gate import (
     _N_FOLDS,
     S6GateResult,
     _worst_decay,
+    canonical_gate_config,
+    compute_rule_signature,
     evaluate_criteria,
+    load_s6_gate_verdict,
+    ranking_rule_signature,
     run_s6_gate,
     sensitivity_analysis,
     walk_forward_by_cost,
+    write_s6_gate_result,
 )
 from stockpick.backtest.strategy import EqualWeightTopN
 from stockpick.backtest.validation import Fold
@@ -369,3 +375,111 @@ def test_run_s6_gate_rejects_out_of_range_delisted_ratio() -> None:
             verify_passed=True,
             n_folds=2,
         )
+
+
+# ── Task3: validated flip 배선(compute_rule_signature·write/load_s6_gate_verdict) ──
+
+
+def _sig_kwargs() -> dict[str, object]:
+    return dict(
+        strategy_name="equal_weight_top_n",
+        top_n=5,
+        lookback_days=126,
+        skip_recent_days=21,
+        rebalance_freq="monthly",
+        delisting_recovery_rate=Decimal("0"),
+        group_by_exchange=False,
+    )
+
+
+def _gate_result(*, passed: bool, signature: str) -> S6GateResult:
+    return S6GateResult(
+        passed=passed,
+        rule_signature=signature,
+        n_folds=10,
+        g1_is_pass=True,
+        g2_decay_pass=True,
+        g3_excess_pass=True,
+        g4_nfolds_pass=True,
+        g5_delisted_pass=True,
+        g6_cost_pass=True,
+        g7_verify_pass=passed,
+        g8_reproducible=True,
+        fold_decays=(0.9,) * 10,
+        sensitivity={"5bps": 0.8, "10bps": 0.9, "15bps": 0.7},
+        delisted_ratio=0.5,
+        n_delisted_liquidations=3,
+        oos_excesses=(0.05,) * 10,
+        notes=(),
+    )
+
+
+def test_compute_rule_signature_stable_and_sensitive() -> None:
+    a = compute_rule_signature(**_sig_kwargs())  # type: ignore[arg-type]
+    b = compute_rule_signature(**_sig_kwargs())  # type: ignore[arg-type]
+    assert a == b  # 같은 룰 → 같은 키(결정적)
+    kw = _sig_kwargs()
+    kw["top_n"] = 6
+    assert compute_rule_signature(**kw) != a  # type: ignore[arg-type] # 룰 다르면 키 달라야
+
+
+def test_load_verdict_no_file_is_false(tmp_path: Path) -> None:
+    # 파일 부재(현 상태·게이트 미실행) → false(미검증을 검증으로 오인 금지).
+    assert load_s6_gate_verdict(tmp_path, "sig") is False
+
+
+def test_write_then_load_verdict_passed_matching_signature_true(tmp_path: Path) -> None:
+    write_s6_gate_result(tmp_path, _gate_result(passed=True, signature="SIG"))
+    assert load_s6_gate_verdict(tmp_path, "SIG") is True
+
+
+def test_load_verdict_signature_mismatch_is_false(tmp_path: Path) -> None:
+    # 통과했어도 다른 룰 요청이면 false(검증 범위 = 통과한 그 config 뿐).
+    write_s6_gate_result(tmp_path, _gate_result(passed=True, signature="SIG"))
+    assert load_s6_gate_verdict(tmp_path, "OTHER") is False
+
+
+def test_load_verdict_failed_gate_is_false(tmp_path: Path) -> None:
+    # signature 일치해도 게이트 실패면 false.
+    write_s6_gate_result(tmp_path, _gate_result(passed=False, signature="SIG"))
+    assert load_s6_gate_verdict(tmp_path, "SIG") is False
+
+
+def test_load_verdict_non_dict_json_is_false(tmp_path: Path) -> None:
+    # JSON 이 dict 아니면(리스트 등) false(isinstance 가드).
+    (tmp_path / "s6_gate_result.json").write_text("[]", encoding="utf-8")
+    assert load_s6_gate_verdict(tmp_path, "sig") is False
+
+
+def test_load_verdict_passed_truthy_string_is_false(tmp_path: Path) -> None:
+    # 손상 JSON "passed":"false"(문자열·truthy) 를 검증으로 오판하면 안 됨 — is True 라야 통과.
+    (tmp_path / "s6_gate_result.json").write_text(
+        '{"passed": "false", "rule_signature": "SIG"}', encoding="utf-8"
+    )
+    assert load_s6_gate_verdict(tmp_path, "SIG") is False
+
+
+def test_canonical_gate_config_signature_matches_ranking_signature() -> None:
+    # 정렬 봉인: 게이트가 canonical_gate_config(group=False)로 검증하면 그 룰 signature 가
+    # ranking_rule_signature(group=False)와 동일해야 flip 일관(정규값 발산=영원히 false 함정 차단).
+    cfg = canonical_gate_config(
+        start=date(2020, 1, 1),
+        end=date(2021, 1, 1),
+        top_n=5,
+        lookback_days=126,
+        skip_recent_days=21,
+        group_by_exchange=False,
+    )
+    gate_sig = compute_rule_signature(
+        strategy_name=cfg.strategy_name,
+        top_n=cfg.top_n,
+        lookback_days=cfg.lookback_days,
+        skip_recent_days=cfg.skip_recent_days,
+        rebalance_freq=cfg.rebalance_freq,
+        delisting_recovery_rate=cfg.delisting_recovery_rate,
+        group_by_exchange=cfg.group_by_exchange,
+    )
+    rank_sig = ranking_rule_signature(
+        top_n=5, lookback_days=126, skip_recent_days=21, group_by_exchange=False
+    )
+    assert gate_sig == rank_sig

@@ -25,6 +25,18 @@
 | G-7 | 무결성 verify | `bulk --verify` PASS(`VerificationReport.passed`) | S6 진입 선결 |
 | G-8 | 재현성 | config fingerprint 동일·bit-identical | DuckDB momentum 봉인(ADR-007 회귀) |
 
+## flip 정규(canonical) 룰 config
+
+`validated` flip 은 게이트가 검증한 **그 룰 config 에만** 적용된다(검증 누수 0). signature 는
+룰 정체성 7필드(strategy·top_n·lookback·skip·rebalance·recovery·group)만 해시 — **cost(G-6 가
+5/10/15 범위 검증)·start/end(백테스트 window)는 제외**(룰 정체성 아님). 게이트 CLI(Task4)는 반드시
+`canonical_gate_config()` 로 config 를 만들어 route 와 같은 키가 나오게 한다(정규값 발산=영원히
+false 함정 방지·`s6_gate.py` 단일 출처). 동결 정규 실행값: **strategy=equal_weight_top_n·
+rebalance=monthly·cost=baseline(10bps)·recovery=0·group_by_exchange=False**. 따라서 backtest
+기본 요청(group flat)과 ranking `group=all` 이 매칭, ranking 기본 `group=exchange`(True)는 정규와
+불일치라 보수적 false(원하면 게이트를 group_by_exchange=True 로 재실행). 부재·불일치·실패·파싱오류
+전부 false(§4.1 미검증 기본).
+
 ## 대안 (기각)
 
 - **데이터로 임계 고르기**(예: "decay 0.5 못 넘으면 0.4로 완화") — **기각**: 과적합·정직성 위반(M1 §6). 사전 동결의 핵심.

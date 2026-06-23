@@ -11,6 +11,7 @@ meta.validated is False + warning 존재를 못박는다(§4.1 — 미검증 룰
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import date, timedelta
 from decimal import Decimal
@@ -21,6 +22,7 @@ from fastapi.testclient import TestClient
 
 from stockpick.api import create_app
 from stockpick.api.deps import get_base_dir, get_learning_dir, get_source
+from stockpick.backtest.s6_gate import compute_rule_signature, ranking_rule_signature
 from stockpick.data.edgar import store_financials, store_ticker_cik
 from stockpick.data.eodhd import EodhdAuthError, EodhdRateLimitError
 from stockpick.data.storage import write_daily_bars
@@ -202,6 +204,75 @@ def test_ranking_empty_tree_keeps_warning(client: TestClient) -> None:
     assert body["meta"]["validated"] is False
     assert body["meta"]["warning"]
     assert body["meta"]["as_of"] is None
+
+
+def _write_gate_result(base_dir: Path, *, signature: str, passed: bool) -> None:
+    """flip 테스트용 s6_gate_result.json 직접 기록(verdict 는 passed+signature 만 읽음)."""
+    (base_dir / "s6_gate_result.json").write_text(
+        json.dumps({"passed": passed, "rule_signature": signature}), encoding="utf-8"
+    )
+
+
+def test_ranking_validated_true_when_gate_passed_and_signature_matches(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)
+    sig = ranking_rule_signature(
+        top_n=5, lookback_days=20, skip_recent_days=0, group_by_exchange=True
+    )
+    _write_gate_result(client.base_dir, signature=sig, passed=True)
+    r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["meta"]["validated"] is True  # 게이트 통과·signature 일치 → flip
+    assert "검증" in body["meta"]["warning"]  # 미검증 경고 대신 검증 메시지
+
+
+def test_ranking_validated_false_when_signature_mismatch(client: TestClient) -> None:
+    # 게이트 통과 파일이 있어도 다른 룰(top_n 불일치) 요청이면 false(검증 범위=통과한 그 config 뿐).
+    _write_synthetic(client.base_dir)
+    sig = ranking_rule_signature(
+        top_n=99, lookback_days=20, skip_recent_days=0, group_by_exchange=True
+    )
+    _write_gate_result(client.base_dir, signature=sig, passed=True)
+    r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
+    assert r.status_code == 200
+    assert r.json()["meta"]["validated"] is False
+
+
+def test_backtest_validated_true_when_gate_passed_and_signature_matches(
+    client: TestClient,
+) -> None:
+    _write_synthetic(client.base_dir)
+    sig = compute_rule_signature(
+        strategy_name="equal_weight_top_n",
+        top_n=5,
+        lookback_days=126,
+        skip_recent_days=21,
+        rebalance_freq="monthly",
+        delisting_recovery_rate=Decimal("0"),
+        group_by_exchange=False,
+    )
+    _write_gate_result(client.base_dir, signature=sig, passed=True)
+    r = client.get("/api/backtest")  # 기본 strategy=equal_weight·top_n=5·monthly
+    assert r.status_code == 200
+    assert r.json()["meta"]["validated"] is True
+
+
+def test_backtest_validated_false_when_gate_failed(client: TestClient) -> None:
+    # signature 일치해도 passed=false 면 false.
+    _write_synthetic(client.base_dir)
+    sig = compute_rule_signature(
+        strategy_name="equal_weight_top_n",
+        top_n=5,
+        lookback_days=126,
+        skip_recent_days=21,
+        rebalance_freq="monthly",
+        delisting_recovery_rate=Decimal("0"),
+        group_by_exchange=False,
+    )
+    _write_gate_result(client.base_dir, signature=sig, passed=False)
+    r = client.get("/api/backtest")
+    assert r.status_code == 200
+    assert r.json()["meta"]["validated"] is False
 
 
 @pytest.mark.parametrize(

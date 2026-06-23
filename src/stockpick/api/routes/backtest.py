@@ -25,6 +25,7 @@ from ...backtest.adapters import _close_price_port, _select_price_port, _select_
 from ...backtest.benchmark import attach_benchmarks, equal_weight_universe
 from ...backtest.config import BacktestConfig
 from ...backtest.engine import run as run_backtest
+from ...backtest.s6_gate import compute_rule_signature, load_s6_gate_verdict
 from ...backtest.strategy import EqualWeightTopN, ScoreWeightTopN, Strategy
 from ..deps import get_base_dir, get_identity_resolver
 from ..models import (
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _WARNING = "백테스트 골격 — 미검증(알파 아님). 무료 데이터·가격기반 유니버스 (stock-1st_plan §4.1)"
+_WARNING_VALIDATED = "S6-b 신뢰성 게이트 통과(OOS 강건성 검증) — 과거 성과는 미래 보장 아님"
 _STRATEGIES: dict[str, Strategy] = {
     "equal_weight": EqualWeightTopN(),
     "score_weight": ScoreWeightTopN(),
@@ -110,6 +112,20 @@ def backtest(
     finally:
         _close_price_port(price_port)  # DuckDB read_only 연결 해제(요청당 생성·누수 방지)
 
+    # validated flip(S6-b) — 이 룰이 게이트 통과·signature 일치할 때만 true(그 외 false 보수).
+    validated = load_s6_gate_verdict(
+        base_dir,
+        compute_rule_signature(
+            strategy_name=_STRATEGIES[strategy].name,
+            top_n=top_n,
+            lookback_days=_LOOKBACK_DAYS,
+            skip_recent_days=_SKIP_RECENT_DAYS,
+            rebalance_freq=rebalance_freq,
+            delisting_recovery_rate=_RECOVERY_RATE,
+            group_by_exchange=False,
+        ),
+    )
+
     return BacktestResponse(
         equity_curve=[EquityPoint(date=d, value=float(v)) for d, v in result.equity_curve],
         benchmark_curve=[EquityPoint(date=d, value=float(v)) for d, v in bench.equity_curve],
@@ -126,8 +142,8 @@ def backtest(
         ),
         benchmark_returns=result.benchmark_returns,
         meta=BacktestMeta(
-            validated=False,
-            warning=_WARNING,
+            validated=validated,
+            warning=_WARNING_VALIDATED if validated else _WARNING,
             params=params,
             data_caveats=list(result.data_caveats),
         ),

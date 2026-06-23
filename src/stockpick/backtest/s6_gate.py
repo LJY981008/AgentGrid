@@ -11,7 +11,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import os
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -20,7 +23,9 @@ from .engine import run
 from .validation import walk_forward
 
 if TYPE_CHECKING:
+    from datetime import date
     from decimal import Decimal
+    from pathlib import Path
 
     from .config import BacktestConfig
     from .ports import IdentityResolver, PriceSeriesPort, UniversePort
@@ -33,6 +38,8 @@ logger = logging.getLogger(__name__)
 _DECAY_MIN = 0.5  # G-2·G-6 OOS 방어율(decay=OOS/IS sharpe) 하한
 _N_FOLDS = 10  # G-4 최소 워크포워드 분할 수
 _DELISTED_MIN = 0.30  # G-5 유니버스 폐지 커버리지 하한(실측 63.5%)
+
+_RESULT_NAME = "s6_gate_result.json"  # 게이트 판정 영속(flip 단일 진실원천)
 
 
 def _default_cost_variants() -> tuple[Decimal, ...]:
@@ -147,7 +154,7 @@ class S6GateResult:
     """S6-b 게이트 판정 — 전 기준(G-1~G-8) AND. 하나라도 fail → validated=false 유지(정직 판정)."""
 
     passed: bool
-    rule_signature: str  # baseline config.fingerprint() — flip(Task3) signature 일치 기준
+    rule_signature: str  # compute_rule_signature(룰 7필드·cost/start/end 제외) — flip 일치 기준
     n_folds: int
     g1_is_pass: bool  # 전 fold IS sharpe>0(is_failed=False)
     g2_decay_pass: bool  # 전 fold decay_ratio>=_DECAY_MIN
@@ -339,10 +346,18 @@ def run_s6_gate(
         identity=identity,
         strategy=strategy,
     )
-    rule_signature = replace(config, cost_bps=baseline).fingerprint()
+    rule_sig = compute_rule_signature(
+        strategy_name=config.strategy_name,
+        top_n=config.top_n,
+        lookback_days=config.lookback_days,
+        skip_recent_days=config.skip_recent_days,
+        rebalance_freq=config.rebalance_freq,
+        delisting_recovery_rate=config.delisting_recovery_rate,
+        group_by_exchange=config.group_by_exchange,
+    )
 
     result = evaluate_criteria(
-        rule_signature=rule_signature,
+        rule_signature=rule_sig,
         fold_decays=fold_decays,
         fold_is_failed=fold_is_failed,
         n_folds=len(baseline_folds),
@@ -363,3 +378,153 @@ def run_s6_gate(
         result.notes,
     )
     return result
+
+
+# 게이트가 검증하는 룰의 정규 실행 파라미터 — ranking(실행 파라미터 미노출)이 signature 구성에 사용.
+# CLI(Task4)도 동일 값으로 config 를 만들어야 ranking 매칭 가능(불일치=보수적 false).
+_CANONICAL_STRATEGY_NAME = "equal_weight_top_n"
+_CANONICAL_REBALANCE_FREQ = "monthly"
+
+
+def _canonical_recovery_rate() -> Decimal:
+    from decimal import Decimal as D
+
+    return D("0")
+
+
+def compute_rule_signature(
+    *,
+    strategy_name: str,
+    top_n: int,
+    lookback_days: int,
+    skip_recent_days: int,
+    rebalance_freq: str,
+    delisting_recovery_rate: Decimal,
+    group_by_exchange: bool,
+) -> str:
+    """검증된 **룰 정체성** 해시 — gate 기록과 route 요청이 같은 룰이면 같은 키.
+
+    cost_bps(G-6 가 5/10/15 범위로 검증 — 룰 정체성 아님)·start/end(백테스트 window·룰 아님)는
+    **제외**. 이 7개 필드가 "어떤 룰을 검증했나"를 규정한다. recovery 는 Decimal→normalize 문자열.
+    """
+    payload = {
+        "strategy_name": strategy_name,
+        "top_n": top_n,
+        "lookback_days": lookback_days,
+        "skip_recent_days": skip_recent_days,
+        "rebalance_freq": rebalance_freq,
+        "delisting_recovery_rate": f"{delisting_recovery_rate.normalize():f}",
+        "group_by_exchange": group_by_exchange,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def write_s6_gate_result(base_dir: Path, result: S6GateResult) -> Path:
+    """게이트 판정을 base_dir/s6_gate_result.json 에 원자 기록(flip 단일 진실원천). 반환=경로.
+
+    원자: temp→os.replace(반쪽 부패 방지). 전 기준·측정값 직렬화(Task5 리포트·감사). flip 은
+    passed+rule_signature 만 읽지만, 정직한 판정 추적 위해 per-G·notes·민감도 전부 보존.
+    """
+    payload = {
+        "passed": result.passed,
+        "rule_signature": result.rule_signature,
+        "n_folds": result.n_folds,
+        "criteria": {
+            "G-1_is": result.g1_is_pass,
+            "G-2_decay": result.g2_decay_pass,
+            "G-3_excess": result.g3_excess_pass,
+            "G-4_nfolds": result.g4_nfolds_pass,
+            "G-5_delisted": result.g5_delisted_pass,
+            "G-6_cost": result.g6_cost_pass,
+            "G-7_verify": result.g7_verify_pass,
+            "G-8_reproducible": result.g8_reproducible,
+        },
+        "fold_decays": list(result.fold_decays),
+        "sensitivity": result.sensitivity,
+        "delisted_ratio": result.delisted_ratio,
+        "n_delisted_liquidations": result.n_delisted_liquidations,
+        "oos_excesses": list(result.oos_excesses),
+        "notes": list(result.notes),
+    }
+    path = base_dir / _RESULT_NAME
+    tmp = base_dir / (_RESULT_NAME + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, path)
+    logger.info("S6-b 게이트 결과 기록: passed=%s → %s", result.passed, path)
+    return path
+
+
+def load_s6_gate_verdict(base_dir: Path, request_signature: str) -> bool:
+    """validated 판정 — 파일 존재 AND signature 일치 AND passed=True 만 True. 그 외 전부 False.
+
+    보수(BLOCKING): 부재(게이트 미실행)·signature 불일치(검증 안 된 다른 룰)·passed=False·파싱오류
+    모두 False — 미검증을 검증으로 오인 금지(meta.validated=false 가 기본·§4.1).
+    """
+    path = base_dir / _RESULT_NAME
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.warning("s6_gate_result.json 읽기/파싱 실패 — validated=false(보수)")
+        return False
+    if not isinstance(payload, dict):
+        return False
+    # `is True` — 손상/수기편집 JSON 의 "false"(문자열)·1 등 truthy 오판 차단(검증 누수 0·보수).
+    return payload.get("passed") is True and payload.get("rule_signature") == request_signature
+
+
+def ranking_rule_signature(
+    *,
+    top_n: int,
+    lookback_days: int,
+    skip_recent_days: int,
+    group_by_exchange: bool,
+) -> str:
+    """ranking(실행 파라미터 미노출)용 룰 signature — strategy/rebalance/recovery 를 게이트 정규값
+    으로 채워 compute_rule_signature 에 위임. 게이트가 정규 실행으로 검증했고 모멘텀 파라미터
+    (lookback/skip/top_n/group)가 일치하면 매칭, 그 외엔 보수적 false(검증 안 된 실행).
+    """
+    return compute_rule_signature(
+        strategy_name=_CANONICAL_STRATEGY_NAME,
+        top_n=top_n,
+        lookback_days=lookback_days,
+        skip_recent_days=skip_recent_days,
+        rebalance_freq=_CANONICAL_REBALANCE_FREQ,
+        delisting_recovery_rate=_canonical_recovery_rate(),
+        group_by_exchange=group_by_exchange,
+    )
+
+
+def canonical_gate_config(
+    *,
+    start: date,
+    end: date,
+    top_n: int = 5,
+    lookback_days: int = 126,
+    skip_recent_days: int = 21,
+    group_by_exchange: bool = False,
+) -> BacktestConfig:
+    """게이트가 검증하는 **정규 룰 config** — 실행 파라미터를 동결값으로 채운 단일 출처.
+
+    strategy=equal_weight_top_n·rebalance=monthly·cost=baseline(10)·recovery=0·group_by_exchange=False.
+    CLI(Task4)는 반드시 이 팩토리로 config 를 만들어야 route 의 `compute_rule_signature`/
+    `ranking_rule_signature` 와 같은 키가 나와 flip 이 일관된다(정규값 발산=영원히 false 함정 방지).
+    ⚠️ group_by_exchange 기본 False(평면 랭킹) — ranking `group=all` 과 매칭. `group=exchange`(기본
+    True)는 정규 config 와 불일치라 보수적 false(원하면 게이트를 group_by_exchange=True 로 재실행).
+    """
+    from .config import BacktestConfig as _Config
+
+    return _Config(
+        strategy_name=_CANONICAL_STRATEGY_NAME,
+        top_n=top_n,
+        lookback_days=lookback_days,
+        skip_recent_days=skip_recent_days,
+        rebalance_freq=_CANONICAL_REBALANCE_FREQ,
+        cost_bps=_baseline_cost(),
+        delisting_recovery_rate=_canonical_recovery_rate(),
+        group_by_exchange=group_by_exchange,
+        start=start,
+        end=end,
+    )

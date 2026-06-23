@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
+from ...backtest.s6_gate import load_s6_gate_verdict, ranking_rule_signature
 from ...rules._financials import load_financial_facts
 from ...rules._scan import load_adjusted_series, load_close_as_of, load_ticker_exchanges
 from ...rules.factors import financial_factors, momentum_universe
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _WARNING = "백테스트 검증 전 — 알파 아님(stock-1st_plan §4.1)"
+_WARNING_VALIDATED = "S6-b 신뢰성 게이트 통과(OOS 강건성 검증) — 과거 성과는 미래 보장 아님"
 
 
 def _enrich_factors(base: dict[str, float], score: FinancialScore | None) -> dict[str, float]:
@@ -129,6 +131,18 @@ def ranking(
         price_by_cik=price_by_cik,
     )
 
+    # validated flip(S6-b) — 모멘텀 룰(lookback/skip/top_n/group)이 게이트 정규 실행으로 통과·
+    # signature 일치할 때만 true(그 외 false 보수). 게이트 미실행이면 항상 false(§4.1 기본).
+    validated = load_s6_gate_verdict(
+        base_dir,
+        ranking_rule_signature(
+            top_n=top_n,
+            lookback_days=lookback_days,
+            skip_recent_days=skip_recent_days,
+            group_by_exchange=group_by_exchange,
+        ),
+    )
+
     return RankingResponse(
         entries=[
             TopEntryModel(
@@ -143,8 +157,8 @@ def ranking(
             for e in entries
         ],
         meta=RankingMeta(
-            validated=False,
-            warning=_WARNING,
+            validated=validated,
+            warning=_WARNING_VALIDATED if validated else _WARNING,
             as_of=effective_as_of,
             params=params,
             unrankable_tickers=unrankable,
