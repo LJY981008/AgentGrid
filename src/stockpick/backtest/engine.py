@@ -20,6 +20,7 @@ from ..rules.ranking import rank_by_momentum
 from . import calendar, costs
 from .metrics import compute_metrics
 from .ports import MomentumScorePort, momentum_window_days
+from .profile_types import timed
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from .config import BacktestConfig
     from .metrics import BacktestResult
     from .ports import IdentityResolver, PriceSeriesPort, UniversePort
+    from .profile_types import PhaseTimer
     from .strategy import Strategy
 
 logger = logging.getLogger(__name__)
@@ -47,8 +49,13 @@ def run(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    profile: PhaseTimer | None = None,
 ) -> BacktestResult:
-    """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터)."""
+    """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터).
+
+    profile(선택) 주입 시 phase(rank/hold_load/hold_return)별 wall 을 누적 — **결과 불변**(계측만·
+    관측용). 미주입(기본 None)이면 계측 0(stdlib `timed` 가 즉시 yield). 모듈경계: prometheus 무관.
+    """
     exchanges = price_port.ticker_exchanges()
     plan = calendar.holding_periods(
         price_port.trading_days(),
@@ -71,7 +78,10 @@ def run(
         curve.append((plan.anchor, equity))
 
     for t, entry_day, exit_day in plan.periods:
-        ranked = _rank_at(config, price_port, universe_port, identity, exchanges, t)
+        if profile is not None:
+            profile.tick_rebalance()  # 라이브 진행 곡선(계측만·결과 무관)
+        with timed(profile, "rank"):
+            ranked = _rank_at(config, price_port, universe_port, identity, exchanges, t)
         weights = strategy.weights(ranked, as_of=t)
         key_to_ticker = {(e.cik or e.ticker): e.ticker for e in ranked}
 
@@ -86,18 +96,20 @@ def run(
         # 보유수익([entry,exit]·폐지청산). load_range 보유종목 × 구간만(full 전체 OOM 회피).
         # 정상 종목 equity/지표 불변. ⚠️ 보유기간 봉 0(첫봉>exit): full=미래봉(ret=0·룩어헤드)·
         # load_range=skip — equity 동일·NEW 가 룩어헤드 교정(critic C1·LOW3).
-        held = price_port.load_range(
-            tickers=set(key_to_ticker.values()), start=entry_day, end=exit_day
-        )
-        pret, delisted, skipped = _holding_period_return(
-            weights,
-            key_to_ticker,
-            held,
-            entry_day,
-            exit_day,
-            universe_port,
-            config.delisting_recovery_rate,
-        )
+        with timed(profile, "hold_load"):
+            held = price_port.load_range(
+                tickers=set(key_to_ticker.values()), start=entry_day, end=exit_day
+            )
+        with timed(profile, "hold_return"):
+            pret, delisted, skipped = _holding_period_return(
+                weights,
+                key_to_ticker,
+                held,
+                entry_day,
+                exit_day,
+                universe_port,
+                config.delisting_recovery_rate,
+            )
         n_delisted += delisted
         n_skipped += skipped
         equity *= Decimal(1) + pret
@@ -133,6 +145,7 @@ def run(
         benchmark_returns={},
         caveats=tuple(caveats),
         config_fingerprint=config.fingerprint(),
+        phase_profile=profile.snapshot() if profile is not None else None,
     )
 
 

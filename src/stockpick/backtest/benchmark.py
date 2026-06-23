@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from . import calendar
 from .engine import _holding_period_return, _window_start
 from .metrics import compute_metrics
+from .profile_types import timed
 
 if TYPE_CHECKING:
     from datetime import date
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from .config import BacktestConfig
     from .metrics import BacktestResult
     from .ports import PriceSeriesPort, UniversePort
+    from .profile_types import PhaseTimer
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ def equal_weight_universe(
     *,
     price_port: PriceSeriesPort,
     universe_port: UniversePort,
+    profile: PhaseTimer | None = None,
 ) -> BacktestResult:
     """매 리밸 as_of=t 거래가능 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계.
 
@@ -61,25 +64,29 @@ def equal_weight_universe(
         curve.append((plan.anchor, equity))
 
     for t, entry_day, exit_day in plan.periods:
+        if profile is not None:
+            profile.tick_rebalance()
         tradable = universe_port.constituents(as_of=t)
         # 멤버십만 필요(가격 미사용) — load_range PricePoint 물질화 회피·키집합 동치(Task7 finding).
-        members = price_port.tickers_with_data(
-            tickers=tradable, start=_window_start(config, t), end=t
-        )
+        with timed(profile, "members"):
+            members = price_port.tickers_with_data(
+                tickers=tradable, start=_window_start(config, t), end=t
+            )
         if members:
             w = Decimal(1) / Decimal(len(members))
             weights = {tk: w for tk in members}
             key_to_ticker = {tk: tk for tk in members}
-            held = price_port.load_range(tickers=members, start=entry_day, end=exit_day)
-            pret, delisted, _ = _holding_period_return(
-                weights,
-                key_to_ticker,
-                held,
-                entry_day,
-                exit_day,
-                universe_port,
-                config.delisting_recovery_rate,
-            )
+            with timed(profile, "bench_hold"):
+                held = price_port.load_range(tickers=members, start=entry_day, end=exit_day)
+                pret, delisted, _ = _holding_period_return(
+                    weights,
+                    key_to_ticker,
+                    held,
+                    entry_day,
+                    exit_day,
+                    universe_port,
+                    config.delisting_recovery_rate,
+                )
         else:
             pret, delisted = Decimal(0), 0
         n_delisted += delisted
@@ -99,6 +106,7 @@ def equal_weight_universe(
         benchmark_returns={},
         caveats=(_BENCH_CAVEAT,),
         config_fingerprint=config.fingerprint(),
+        phase_profile=profile.snapshot() if profile is not None else None,
     )
 
 

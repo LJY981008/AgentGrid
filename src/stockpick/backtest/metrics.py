@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import date
 
+    from .profile_types import PhaseProfile
+
 
 @dataclass(frozen=True, slots=True)
 class BacktestResult:
@@ -27,6 +29,7 @@ class BacktestResult:
     n_delisted_liquidations: int  # 폐지 청산 건수(생존편향 가드 발동 증거)
     benchmark_returns: dict[str, float]
     data_caveats: tuple[str, ...]  # 미검증 한계(cik미해소·합성폐지·1년치 등)
+    phase_profile: PhaseProfile | None = None  # phase 계측(profile 주입 시·결과 무관·관측용)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,7 @@ def compute_metrics(
     benchmark_returns: dict[str, float],
     caveats: tuple[str, ...],
     config_fingerprint: str,
+    phase_profile: PhaseProfile | None = None,
 ) -> BacktestResult:
     """자산곡선·기간수익 → 지표. 빈 곡선이면 0 안전값(조용한 추측 금지)."""
     if not equity_curve:
@@ -70,6 +74,7 @@ def compute_metrics(
             n_delisted,
             benchmark_returns,
             caveats,
+            phase_profile,
         )
     start_v = equity_curve[0][1]
     end_v = equity_curve[-1][1]
@@ -95,6 +100,7 @@ def compute_metrics(
         n_delisted,
         benchmark_returns,
         caveats,
+        phase_profile,
     )
 
 
