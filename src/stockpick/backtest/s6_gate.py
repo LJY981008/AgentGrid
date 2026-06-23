@@ -309,6 +309,39 @@ def run_s6_gate(
         msg = f"baseline 비용 {baseline} 가 변동 {variants} 에 없음 — G-1/G-2/G-3 평가 불가"
         raise ValueError(msg)
 
+    rule_sig = compute_rule_signature(
+        strategy_name=config.strategy_name,
+        top_n=config.top_n,
+        lookback_days=config.lookback_days,
+        skip_recent_days=config.skip_recent_days,
+        rebalance_freq=config.rebalance_freq,
+        delisting_recovery_rate=config.delisting_recovery_rate,
+        group_by_exchange=config.group_by_exchange,
+    )
+    if not verify_passed:
+        # G-7 무결성 실패 → 데이터 신뢰 불가. 손상 데이터 백테스트(G-1~G-6)는 garbage-in·무의미.
+        # 단락: 비싼 백테스트 미실행·passed=false 기록(전 G AND 라 G-7 하나로 확정·OOM/8hr 회피).
+        logger.error("G-7 무결성 실패 — 데이터 신뢰 불가·백테스트 미실행(validated=false 확정)")
+        result = evaluate_criteria(
+            rule_signature=rule_sig,
+            fold_decays=(),
+            fold_is_failed=(),
+            n_folds=0,
+            oos_excesses=(),
+            delisted_ratio=delisted_ratio,
+            n_delisted_liquidations=0,
+            sensitivity={},
+            verify_passed=False,
+            reproducible=False,
+        )
+        return replace(
+            result,
+            notes=(
+                *result.notes,
+                "G-7 무결성 실패 → 백테스트 미실행(데이터 신뢰 불가·garbage-in 방지)",
+            ),
+        )
+
     by_cost = walk_forward_by_cost(
         config,
         price_port=price_port,
@@ -345,15 +378,6 @@ def run_s6_gate(
         universe_port=universe_port,
         identity=identity,
         strategy=strategy,
-    )
-    rule_sig = compute_rule_signature(
-        strategy_name=config.strategy_name,
-        top_n=config.top_n,
-        lookback_days=config.lookback_days,
-        skip_recent_days=config.skip_recent_days,
-        rebalance_freq=config.rebalance_freq,
-        delisting_recovery_rate=config.delisting_recovery_rate,
-        group_by_exchange=config.group_by_exchange,
     )
 
     result = evaluate_criteria(

@@ -608,3 +608,27 @@ def test_main_cli_master_universe_threads_delisted_ratio(
     assert rc == 0
     payload = _json.loads((base_dir / "s6_gate_result.json").read_text(encoding="utf-8"))
     assert payload["delisted_ratio"] == 0.5  # MasterUniverse 폐지비율 전달 확인
+
+
+def test_run_s6_gate_short_circuits_when_verify_failed() -> None:
+    # G-7(verify) 실패 → 백테스트 미실행 단락(garbage-in 방지·OOM/8hr 회피). passed=false·g7=false.
+    port, uni, ident = _ports()
+    days = port.trading_days()
+    cfg = _cfg(days)
+    r = run_s6_gate(
+        cfg,
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        delisted_ratio=0.5,
+        verify_passed=False,  # 무결성 실패 주입
+        n_folds=2,
+        purge_gap_days=5,
+    )
+    assert r.passed is False
+    assert r.g7_verify_pass is False
+    assert r.n_folds == 0  # 백테스트 미실행(단락)
+    assert r.sensitivity == {}
+    assert r.rule_signature  # signature 는 기록(데이터 무관)
+    assert any("백테스트 미실행" in n for n in r.notes)
