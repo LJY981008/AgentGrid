@@ -37,6 +37,10 @@ rebalance=monthly·cost=baseline(10bps)·recovery=0·group_by_exchange=False**. 
 불일치라 보수적 false(원하면 게이트를 group_by_exchange=True 로 재실행). 부재·불일치·실패·파싱오류
 전부 false(§4.1 미검증 기본).
 
+### flip 알려진 한계 (validated=true 전환 전 처리·최종검증 발견·현재 G-7 FAIL 로 노출 0)
+- **ranking 기본 group=exchange(True) ≠ canonical group=False**: 게이트가 PASS 로 뒤집혀도 프론트 기본 랭킹(group=exchange)은 영원히 false(fail-safe·검증 누수 0이나 운영 함정). → 게이트 CLI 에 group_by_exchange=True 변형 실행 옵션 추가 또는 프론트 기본 룰 정렬을 명시.
+- **ranking↔equal_weight_top_n 암묵 동치**: `ranking_rule_signature` 가 momentum 랭킹을 게이트의 등가중 백테스트 signature 에 매칭(정규 실행값 채움). flip 가능 시점엔 "랭킹 종목선정 = 검증된 전략"이 실제 동일 룰인지 회귀 테스트로 봉인 필요(아니면 ranking 별도 signature 도메인). 현재 G-7 FAIL 로 안전 — money BLOCKING 선제 가드.
+
 ## 대안 (기각)
 
 - **데이터로 임계 고르기**(예: "decay 0.5 못 넘으면 0.4로 완화") — **기각**: 과적합·정직성 위반(M1 §6). 사전 동결의 핵심.
@@ -53,8 +57,8 @@ rebalance=monthly·cost=baseline(10bps)·recovery=0·group_by_exchange=False**. 
 
 **판정: `validated=false` — G-7 무결성 블로커.** `s6_gate_result.json`(passed=false·rule_signature `33359e84…`) 기록.
 
-- **G-7 무결성 FAIL(verdict 확정자)**: `verify_parquet`(전구간 5.1G·DuckDB) → **가격<=0 = 542,588행·OHLC위반 = 88,064행**(중복 0·adj_factor<=0 **0**). 실측 확인: `JUNP_old` 등 **`_old` 접미사(EODHD 리네임/폐지 티커)의 close=0 플레이스홀더** 506,556행(cache·close만)+open/high/low 0 → 542,588. **verify 정확·실제 나쁜 데이터**(verify 버그 아님). ⚠️ 예측은 zero-adjusted(adj_factor=0)였으나 실제는 **nonpositive price/OHLC**.
+- **G-7 무결성 FAIL(verdict 확정자)**: `verify_parquet`(전구간 5.1G·DuckDB) → **가격<=0 = 542,588행·OHLC위반 = 88,064행**(중복 0·adj_factor<=0 **0**). ⚠️ **근본원인 정정**(최종검증 실측): close=0 506,556행 중 `_old`(리네임/폐지) 티커는 **1,965행(0.39%·42티커)뿐**, **99.6%(504,591행·3,968티커)가 비-`_old` 일반 티커**(VHAI·SWAV·HYPRQ 등 산재·일부 epoch 날짜 1970-01-01). **원인 미상**(EODHD raw 0 적재 vs 적재/캐시 버그 규명 필요) — `_old` 플레이스홀더 가설은 오귀속(JUNP_old 표본 일반화 오류). **verify 정확·실제 나쁜 데이터**(verify 버그 아님). ⚠️ 예측은 zero-adjusted(adj_factor=0)였으나 실제는 **nonpositive price/OHLC**.
 - **G-1~G-6·G-8 = 미평가(단락)**: 데이터 무결성 실패 = 신뢰 불가 → 손상 데이터 백테스트는 garbage-in·무의미. `run_s6_gate` 가 `verify_passed=False` 면 백테스트 **미실행**(전 G AND 라 G-7 하나로 확정)·passed=false 기록. 정직(가짜 G 수치 안 냄)·12g OOM/8hr 동시 회피.
 - **momentum OOS 강건성은 미입증**: G-7 데이터 블로커로 G-1~G-6 측정 자체가 부적절. "momentum 실패"가 아니라 **"데이터 신뢰 불가로 평가 불가"** — validated=false 유지가 정답(정직 판정).
 - **부수 발견**: ① 백테스트 단계 12g OOM(단일 풀 11.9GB×3비용 누적 — 데이터 정제 후 게이트 재실행 시 mem>12g 선결·백로그). ② delisted_ratio=0.629(G-5a 임계 충족·MasterUniverse 정상).
-- **후속(범위 밖)**: 데이터 정제(`_old`/폐지 0-price 행 필터 또는 missing 처리·EODHD 적재 경로) → 정제 후 게이트 재실행(mem>12g) → momentum G-1~G-6 실제 판정.
+- **후속(범위 밖)**: 데이터 정제 — ⚠️ `_old` 필터 아님(0.39%만 제거). **비-`_old` 0-price 504,591행 원인 규명**(EODHD raw 0 적재인지 적재/캐시 버그인지·일부 epoch 날짜) + missing 처리·OHLC 위반 정제 → 정제 후 게이트 재실행(백테스트 12g OOM·mem>12g 선결) → momentum G-1~G-6 실제 판정.
