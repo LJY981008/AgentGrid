@@ -59,6 +59,10 @@ _FACTOR_SCALE: Final = 12
 
 _DATASET_NAME: Final = "daily_bar"
 _ZSTD: Final = "zstd"
+# verify DuckDB 버퍼 캡 — 미설정 시 DuckDB 기본=호스트RAM 80%(예: 31GB→~25GB)라 컨테이너 cgroup
+# (12g) 무시·100M행 GROUP BY(중복검출)서 OOM(실측 exit137·S6-b 격리). 캡+디스크 spill 로 바운드
+# (결과 불변·느려질 뿐). build_cache(4GB)와 동일 값. env 튜닝.
+_VERIFY_MEMORY_LIMIT = os.environ.get("STOCKPICK_VERIFY_MEMORY_LIMIT", "4GB")
 
 # 검증 SQL — 골격은 전부 코드 리터럴, 경로는 $glob 파라미터 바인딩(사용자 입력이 SQL 에 안 섞임).
 #   S608(f-string SQL injection)은 이 맥락에 해당 없음(리터럴 상수)이라 정당하게 무시.
@@ -404,6 +408,10 @@ def verify_parquet(
 
     con = duckdb.connect(database=":memory:")
     try:
+        # 버퍼 캡 — 미설정 DuckDB 기본(호스트RAM 80%)은 cgroup 무시 OOM(exit137 실측). 초과분은
+        # temp_directory 디스크 spill(결과 불변·느려질 뿐). temp=base_dir(쓰기가능 볼륨).
+        con.execute(f"SET memory_limit='{_VERIFY_MEMORY_LIMIT}'")
+        con.execute("SET temp_directory=$tmp", {"tmp": str(base_dir)})
         row_count = _scalar_int(con, _SQL_ROW_COUNT, params)
         ticker_count = _scalar_int(con, _SQL_TICKER_COUNT, params)
         min_date = _scalar_str(con, _SQL_MIN_DATE, params)
