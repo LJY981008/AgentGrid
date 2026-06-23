@@ -632,3 +632,28 @@ def test_run_s6_gate_short_circuits_when_verify_failed() -> None:
     assert r.sensitivity == {}
     assert r.rule_signature  # signature 는 기록(데이터 무관)
     assert any("백테스트 미실행" in n for n in r.notes)
+
+
+def test_run_s6_gate_does_not_call_backtest_when_verify_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 단락 비용-회피 계약 직접 봉인: verify_passed=False 면 walk_forward_by_cost 가 호출되면 안 됨.
+    import stockpick.backtest.s6_gate as s6mod
+
+    def _boom(*_a: object, **_k: object) -> object:
+        raise AssertionError("백테스트(walk_forward_by_cost) 호출됨 — 단락 실패")
+
+    monkeypatch.setattr(s6mod, "walk_forward_by_cost", _boom)
+    port, uni, ident = _ports()
+    days = port.trading_days()
+    r = run_s6_gate(
+        _cfg(days),
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        delisted_ratio=0.5,
+        verify_passed=False,
+        n_folds=2,
+    )
+    assert r.passed is False  # _boom 미발생 = 백테스트 미호출(단락 작동)
