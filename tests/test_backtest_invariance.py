@@ -16,6 +16,7 @@ from stockpick.backtest.adapters import (
     ParquetPriceSeriesPort,
     _close_price_port,
 )
+from stockpick.backtest.benchmark import equal_weight_universe
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
@@ -193,3 +194,24 @@ def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
         assert r_duck.n_rebalances == r_parq.n_rebalances, f"gbe={gbe}"
         assert r_duck.n_delisted_liquidations == r_parq.n_delisted_liquidations, f"gbe={gbe}"
         assert r_duck.n_delisted_liquidations >= 1, f"gbe={gbe}"  # A 폐지청산(생존편향 가드)
+
+        # 벤치(equal_weight_universe·tickers_with_data 멤버십) — 세 포트 bit-identical.
+        b_fake = equal_weight_universe(
+            cfg, price_port=FakePriceSeriesPort(series, exchanges), universe_port=uni
+        )
+        b_parq = equal_weight_universe(
+            cfg, price_port=ParquetPriceSeriesPort(tmp_path), universe_port=uni
+        )
+        bdport = DuckDBPriceSeriesPort(tmp_path)
+        try:
+            b_duck = equal_weight_universe(cfg, price_port=bdport, universe_port=uni)
+        finally:
+            _close_price_port(bdport)
+        assert b_duck.equity_curve == b_parq.equity_curve == b_fake.equity_curve, f"bench gbe={gbe}"
+        assert b_duck.total_return == b_parq.total_return == b_fake.total_return, f"bench gbe={gbe}"
+        assert b_duck.max_drawdown == b_parq.max_drawdown == b_fake.max_drawdown, f"bench gbe={gbe}"
+        assert (
+            b_duck.n_delisted_liquidations
+            == b_parq.n_delisted_liquidations
+            == b_fake.n_delisted_liquidations
+        ), f"bench gbe={gbe}"

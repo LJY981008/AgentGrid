@@ -119,6 +119,34 @@ def test_load_range_equivalence_parquet(tmp_path: Path) -> None:
         dport.close()
 
 
+def test_tickers_with_data_equals_load_range_keys(tmp_path: Path) -> None:
+    """tickers_with_data == load_range 키집합 — 멤버십 SQL DISTINCT 가 봉≥1 종목과 정확 동치.
+
+    벤치 멤버십 푸시다운(benchmark.py)의 결과불변 근거. DuckDB·Parquet 양쪽 + 경계 케이스.
+    """
+    days = _build(tmp_path)
+    dport = DuckDBPriceSeriesPort(tmp_path)
+    pport = ParquetPriceSeriesPort(tmp_path)
+    try:
+        all_tickers = {"AAA", "BBB", "CCC", "ZZZ"}  # ZZZ=미존재
+        cases: list[tuple[set[str], date, date]] = [
+            (all_tickers, days[0], days[-1]),  # 전구간
+            (all_tickers, days[5], days[20]),  # 내부 구간
+            ({"AAA"}, days[10], days[10]),  # 단일행
+            ({"AAA", "ZZZ"}, days[0], days[-1]),  # 미존재 섞임
+            (set(), days[0], days[-1]),  # 빈 → set()
+            (all_tickers, date(1990, 1, 1), date(1990, 1, 2)),  # 데이터 밖 구간 → set()
+        ]
+        for tickers, start, end in cases:
+            d_mem = dport.tickers_with_data(tickers=tickers, start=start, end=end)
+            p_mem = pport.tickers_with_data(tickers=tickers, start=start, end=end)
+            d_keys = set(dport.load_range(tickers=tickers, start=start, end=end))
+            p_keys = set(pport.load_range(tickers=tickers, start=start, end=end))
+            assert d_mem == p_mem == d_keys == p_keys, f"멤버십≠load_range키: {tickers}"
+    finally:
+        dport.close()
+
+
 def test_load_and_full_series_equivalence(tmp_path: Path) -> None:
     days = _build(tmp_path)
     dport = DuckDBPriceSeriesPort(tmp_path)

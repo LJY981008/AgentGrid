@@ -45,6 +45,12 @@ _SQL_LOAD_ALL = (
     "SELECT ticker, trade_date, close, adj_factor FROM daily_bar ORDER BY ticker, trade_date"
 )
 _SQL_TRADING_DAYS = "SELECT DISTINCT trade_date FROM daily_bar ORDER BY trade_date"
+# 멤버십만(load_range 동일 WHERE·봉≥1 종목)·DISTINCT ticker — PricePoint 미물질화.
+# close/adj_factor NOT NULL 명시(self-contained·load_range NULL→TypeError 와 동치·_scan 동일).
+_SQL_TICKERS_WITH_DATA = (
+    "SELECT DISTINCT ticker FROM daily_bar WHERE ticker = ANY($t) "
+    "AND trade_date BETWEEN $s AND $e AND close IS NOT NULL AND adj_factor IS NOT NULL"
+)
 
 
 def _series_from_price_rows(rows: list[tuple[object, ...]]) -> dict[str, list[PricePoint]]:
@@ -91,6 +97,10 @@ class ParquetPriceSeriesPort:
         # 종목집합 × [start,end] 만 로드(메모리 절감 — full_series 전체 OOM 회피). _scan 위임.
         return _scan.load_range_series(self._base_dir, tickers, start, end)
 
+    def tickers_with_data(self, *, tickers: set[str], start: date, end: date) -> set[str]:
+        # 멤버십만(DISTINCT ticker·load_range 동일 WHERE) — PricePoint 미물질화. _scan 위임.
+        return _scan.load_tickers_with_data(self._base_dir, tickers, start, end)
+
     def trading_days(self) -> list[date]:
         # full_series 전체 메모리 로드(OOM) 대신 DuckDB DISTINCT 집계(_scan.load_trading_days).
         return _scan.load_trading_days(self._base_dir)
@@ -136,6 +146,22 @@ class DuckDBPriceSeriesPort:
             _SQL_LOAD_RANGE, {"t": list(tickers), "s": start, "e": end}
         ).fetchall()
         return _series_from_price_rows(rows)
+
+    def tickers_with_data(self, *, tickers: set[str], start: date, end: date) -> set[str]:
+        # 멤버십만(DISTINCT ticker·load_range 동일 WHERE) — 3.65M PricePoint 물질화 회피.
+        if not tickers:
+            return set()
+        rows = self._con.execute(
+            _SQL_TICKERS_WITH_DATA, {"t": list(tickers), "s": start, "e": end}
+        ).fetchall()
+        out: set[str] = set()
+        for row in rows:
+            (ticker,) = row
+            if not isinstance(ticker, str):
+                msg = f"예상치 못한 ticker 타입: {type(ticker).__name__}"
+                raise TypeError(msg)
+            out.add(ticker)
+        return out
 
     def trading_days(self) -> list[date]:
         rows = self._con.execute(_SQL_TRADING_DAYS).fetchall()

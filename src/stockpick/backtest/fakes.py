@@ -44,6 +44,12 @@ class FakePriceSeriesPort:
                 out[t] = window
         return out
 
+    def tickers_with_data(self, *, tickers: set[str], start: date, end: date) -> set[str]:
+        # load_range 키 집합 동치(봉≥1) — PricePoint 미물질화(멤버십만).
+        return {
+            t for t in tickers if any(start <= p.trade_date <= end for p in self._series.get(t, []))
+        }
+
     def trading_days(self) -> list[date]:
         return sorted({p.trade_date for pts in self._series.values() for p in pts})
 

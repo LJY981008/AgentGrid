@@ -41,7 +41,8 @@ def equal_weight_universe(
 ) -> BacktestResult:
     """매 리밸 as_of=t 거래가능 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계.
 
-    load_range 로 거래가능 종목 × 윈도우/평가구간만 로드(full_series·load(as_of) 전체 OOM 회피).
+    멤버십은 `tickers_with_data`(DISTINCT ticker·가격 미물질화·Task7 최적화), 보유수익은 보유종목
+    × [entry,exit] 만 `load_range`(full_series·load(as_of) 전체 OOM 회피).
     ⚠️ members 판정은 [_window_start(t), t] 가격존재 — 갭 없는 정상 종목은 load(as_of) 전체와 동일
     (결과 불변), 장기 거래정지 종목은 발산 가능(C1 계열·드묾·실데이터 측정).
     """
@@ -61,13 +62,15 @@ def equal_weight_universe(
 
     for t, entry_day, exit_day in plan.periods:
         tradable = universe_port.constituents(as_of=t)
-        loaded = price_port.load_range(tickers=tradable, start=_window_start(config, t), end=t)
-        members = [tk for tk in tradable if loaded.get(tk)]
+        # 멤버십만 필요(가격 미사용) — load_range PricePoint 물질화 회피·키집합 동치(Task7 finding).
+        members = price_port.tickers_with_data(
+            tickers=tradable, start=_window_start(config, t), end=t
+        )
         if members:
             w = Decimal(1) / Decimal(len(members))
             weights = {tk: w for tk in members}
             key_to_ticker = {tk: tk for tk in members}
-            held = price_port.load_range(tickers=set(members), start=entry_day, end=exit_day)
+            held = price_port.load_range(tickers=members, start=entry_day, end=exit_day)
             pret, delisted, _ = _holding_period_return(
                 weights,
                 key_to_ticker,

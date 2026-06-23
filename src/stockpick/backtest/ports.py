@@ -46,6 +46,14 @@ class PriceSeriesPort(Protocol):
         쓸 때 `end=as_of` 면 trade_date<=as_of(룩어헤드 상한 유지). 빈 tickers→{}."""
         ...
 
+    def tickers_with_data(self, *, tickers: set[str], start: date, end: date) -> set[str]:
+        """tickers 중 [start, end] 구간에 봉이 1개 이상 있는 종목 집합(멤버십만·가격 미로드).
+
+        `load_range(tickers, start, end)` 의 **키 집합과 동치**(동일 WHERE — 봉≥1)이되 PricePoint
+        를 물질화하지 않는다(SQL `DISTINCT ticker`). 벤치 등 멤버십만 필요한 곳의 OOM/속도 최적화.
+        빈 tickers→빈 집합."""
+        ...
+
     def trading_days(self) -> list[date]:
         """데이터에 존재하는 정렬된 거래일 합집합(calendar 입력)."""
         ...

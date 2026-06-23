@@ -57,6 +57,15 @@ _SQL_SERIES_RANGE: Final = (  # noqa: S608
     f"WHERE ticker = ANY($tickers) AND trade_date BETWEEN $start AND $end "
     f"ORDER BY ticker, trade_date"
 )
+# 멤버십만(가격 미로드) — _SQL_SERIES_RANGE 와 동일 WHERE(봉≥1 종목)·DISTINCT ticker.
+# 벤치 등 "구간에 데이터 있는 종목 집합"만 필요한 곳이 PricePoint 물질화를 회피.
+# ⚠️ close/adj_factor NOT NULL 명시(self-contained) — load_range_series 는 NULL 행에서 _iter_rows
+# 가 TypeError 라 사실상 비포함, 그 effective 멤버십과 동치 유지(스키마상 NULL 불가나 cross-module
+# 불변 의존 제거). 클린데이터(양수 게이트) 결과 불변.
+_SQL_TICKERS_WITH_DATA: Final = (  # noqa: S608
+    f"SELECT DISTINCT ticker {_FROM} WHERE ticker = ANY($tickers) "
+    f"AND trade_date BETWEEN $start AND $end AND close IS NOT NULL AND adj_factor IS NOT NULL"
+)
 # ticker → exchange 매핑. exchange 는 Hive 파티션 키(디렉토리)라 read_parquet 가 컬럼으로 노출.
 # 한 ticker 가 여러 exchange 파티션에 있으면 거래소 이전 이력(드묾)이므로 max 로 단일화(데모
 # 단순화 — 시점별 거래소 이력은 M2+ ticker_history 책임). GROUP BY 로 (ticker, exchange) 쌍만.
@@ -301,6 +310,49 @@ def load_range_series(
         end,
     )
     return series
+
+
+def load_tickers_with_data(
+    base_dir: Path,
+    tickers: set[str],
+    start: date,
+    end: date,
+) -> set[str]:
+    """tickers 중 [start,end] 구간에 봉≥1 인 종목 집합(멤버십·가격 미로드).
+
+    `load_range_series` 의 **키 집합과 동치**(동일 WHERE)이되 PricePoint 를 만들지 않고
+    DISTINCT ticker 만 반환한다(벤치 멤버십 등의 OOM/속도 최적화). 빈 tickers·빈 트리→빈 집합.
+    """
+    if not tickers:
+        return set()
+    dataset_root = base_dir / _DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
+    if not files:
+        logger.warning("membership 스캔 대상 Parquet 없음 — 빈 집합: dataset=%s", dataset_root)
+        return set()
+
+    import duckdb
+
+    glob = f"{dataset_root}/**/*.parquet"
+    con = duckdb.connect(database=":memory:")
+    try:
+        rows = con.execute(
+            _SQL_TICKERS_WITH_DATA,
+            {"glob": glob, "tickers": list(tickers), "start": start, "end": end},
+        ).fetchall()
+    finally:
+        con.close()
+    out: set[str] = set()
+    for row in rows:
+        (ticker,) = row
+        if not isinstance(ticker, str):
+            msg = f"예상치 못한 ticker 타입: {type(ticker).__name__}"
+            raise TypeError(msg)
+        out.add(ticker)
+    logger.info(
+        "membership 로드: 요청=%d, 데이터있음=%d, 구간=[%s,%s]", len(tickers), len(out), start, end
+    )
+    return out
 
 
 def _iter_rows(rows: list[tuple[object, ...]]) -> list[tuple[str, date, Decimal, Decimal]]:
