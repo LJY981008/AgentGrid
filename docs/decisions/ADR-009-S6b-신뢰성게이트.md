@@ -18,7 +18,7 @@
 |---|---|---|---|
 | G-1 | IS 자체 성과 | 전 fold `is_failed=False`(IS sharpe>0) | IS조차 음수면 룰 실패(검증 의미 없음) |
 | G-2 | OOS 방어율 | 전 fold `decay_ratio ≥ 0.5`(`_DECAY_MIN`) | WF효율 >50% 수용·<30%=과적합(퀀트 관례)·전 fold=시간 안정성 |
-| G-3 | OOS 절대성과 | OOS 등가중 벤치 대비 초과 > 0 | 무비용 등가중(이론상한) 못 이기면 종목선택 무가치 |
+| G-3 | OOS 절대성과 | **전 fold** OOS 등가중 벤치 대비 초과 > 0 | 무비용 등가중(이론상한) 못 이기면 종목선택 무가치. ⚠️ 집계=전 fold(G-1·G-2 와 동일 보수성) — 평균은 한 fold 폭등이 음수 fold 를 가려 통과시킴(Task2 리뷰 반영·임계 ">0" 동결·집계만 정직 refinement·데이터 보기 전) |
 | G-4 | 분할 수 | n_folds ≥ 10(`_N_FOLDS`) | ~64년→fold당 ~6.5년·OOS 우연 1회 배제 |
 | G-5 | 폐지 커버리지 | delisted 비율 ≥ 30%(`_DELISTED_MIN`) AND `n_delisted_liquidations > 0` | 생존편향 가드 死문자 방지(실측 31,868=63.5%) |
 | G-6 | 비용 민감도 | cost_bps 5/10/15bps **세 시나리오 모두 G-2** | gap에 임계 안 둠(과적합 금지)·비용 종속이면 fragile |

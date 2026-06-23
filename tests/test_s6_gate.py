@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
+
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
@@ -14,13 +16,35 @@ from stockpick.backtest.fakes import (
 )
 from stockpick.backtest.metrics import GuardReport, compute_metrics
 from stockpick.backtest.s6_gate import (
+    _DECAY_MIN,
+    _DELISTED_MIN,
+    _N_FOLDS,
+    S6GateResult,
     _worst_decay,
+    evaluate_criteria,
+    run_s6_gate,
     sensitivity_analysis,
     walk_forward_by_cost,
 )
 from stockpick.backtest.strategy import EqualWeightTopN
 from stockpick.backtest.validation import Fold
 from stockpick.rules._scan import PricePoint
+
+
+def _pass_kwargs() -> dict[str, object]:
+    """evaluate_criteria 전 기준 통과 입력(각 테스트가 한 항목만 뒤집어 단일-FAIL 확인)."""
+    return dict(
+        rule_signature="sig",
+        fold_decays=(0.9,) * 10,
+        fold_is_failed=(False,) * 10,
+        n_folds=10,
+        oos_excesses=(0.05,) * 10,
+        delisted_ratio=0.5,
+        n_delisted_liquidations=3,
+        sensitivity={"5bps": 0.8, "10bps": 0.9, "15bps": 0.7},
+        verify_passed=True,
+        reproducible=True,
+    )
 
 
 def _weekdays(start: date, n: int) -> list[date]:
@@ -180,3 +204,168 @@ def test_worst_decay_partial_none_sinks_to_zero() -> None:
 def test_worst_decay_returns_true_min_when_all_valid() -> None:
     # 전 fold 유효 → 진짜 최솟값.
     assert _worst_decay([_fold(2.0), _fold(0.8), _fold(1.5)]) == 0.8
+
+
+# ── Task2: 게이트 판정 로직(evaluate_criteria) — 임계 동결·PASS·단일 FAIL ──
+
+
+def test_thresholds_are_frozen_module_constants() -> None:
+    # 사전 동결(ADR-009) — 데이터로 임계 고르기 금지. 상수 값이 바뀌면 이 테스트가 깨진다.
+    assert _DECAY_MIN == 0.5
+    assert _N_FOLDS == 10
+    assert _DELISTED_MIN == 0.30
+
+
+def test_evaluate_criteria_all_pass() -> None:
+    r = evaluate_criteria(**_pass_kwargs())  # type: ignore[arg-type]
+    assert isinstance(r, S6GateResult)
+    assert r.passed is True
+    assert r.rule_signature == "sig"
+
+
+def test_evaluate_criteria_g1_fail_when_any_fold_is_failed() -> None:
+    kw = _pass_kwargs()
+    kw["fold_is_failed"] = (False,) * 9 + (True,)  # IS<=0 fold 1개
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g1_is_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g2_fail_when_any_decay_below_min() -> None:
+    kw = _pass_kwargs()
+    kw["fold_decays"] = (0.9,) * 9 + (0.4,)  # decay<0.5 fold 1개
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g2_decay_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g2_fail_when_any_decay_none() -> None:
+    kw = _pass_kwargs()
+    kw["fold_decays"] = (0.9,) * 9 + (None,)  # 비율 무의미 fold → G-2 미달
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g2_decay_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g3_fail_when_any_fold_not_positive() -> None:
+    kw = _pass_kwargs()
+    kw["oos_excesses"] = (0.5,) * 9 + (0.0,)  # 한 fold 가 등가중 못 이김(>0 아님)
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g3_excess_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g3_fail_when_outlier_masks_negative_folds() -> None:
+    # 핵심: 한 fold 폭등(+5.0)이 음수 fold(-0.1)를 평균으로 가려선 안 됨 — 전 fold>0 라야 통과.
+    kw = _pass_kwargs()
+    kw["oos_excesses"] = (5.0,) + (-0.1,) * 9  # 평균은 양수지만 9개 fold 가 벤치 못 이김
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g3_excess_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g4_fail_when_too_few_folds() -> None:
+    kw = _pass_kwargs()
+    kw["n_folds"] = 9  # <10
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g4_nfolds_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g5_fail_when_delisted_ratio_low() -> None:
+    kw = _pass_kwargs()
+    kw["delisted_ratio"] = 0.29  # <30%
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g5_delisted_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g5_fail_when_no_liquidations() -> None:
+    kw = _pass_kwargs()
+    kw["n_delisted_liquidations"] = 0  # 생존편향 가드 死문자
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g5_delisted_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g6_fail_when_any_cost_below_min() -> None:
+    kw = _pass_kwargs()
+    kw["sensitivity"] = {"5bps": 0.8, "10bps": 0.9, "15bps": 0.4}  # 15bps서 취약
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g6_cost_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g7_fail_when_verify_failed() -> None:
+    kw = _pass_kwargs()
+    kw["verify_passed"] = False  # 무결성 verify 실패(zero-adjusted 등)
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g7_verify_pass is False
+    assert r.passed is False
+
+
+def test_evaluate_criteria_g8_fail_when_not_reproducible() -> None:
+    kw = _pass_kwargs()
+    kw["reproducible"] = False
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g8_reproducible is False
+    assert r.passed is False
+
+
+def test_run_s6_gate_wiring_fails_on_insufficient_folds() -> None:
+    # end-to-end 배선: n_folds=2(<_N_FOLDS) → G-4 fail → passed False. 결과불변·sensitivity 3키.
+    port, uni, ident = _ports()
+    days = port.trading_days()
+    cfg = _cfg(days)
+    r = run_s6_gate(
+        cfg,
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        delisted_ratio=0.5,
+        verify_passed=True,
+        n_folds=2,
+        purge_gap_days=5,
+    )
+    assert isinstance(r, S6GateResult)
+    assert r.g4_nfolds_pass is False
+    assert r.passed is False
+    assert set(r.sensitivity.keys()) == {"5bps", "10bps", "15bps"}
+    assert r.rule_signature  # 비어있지 않음
+    assert cfg.cost_bps == Decimal("0")  # 원 config 미변형
+
+
+def test_run_s6_gate_rejects_variants_without_baseline() -> None:
+    # baseline(10bps) 가 변동에 없으면 baseline fold 재사용 불가 → loud fail(조용한 추측 금지).
+    port, uni, ident = _ports()
+    days = port.trading_days()
+    with pytest.raises(ValueError, match="baseline"):
+        run_s6_gate(
+            _cfg(days),
+            price_port=port,
+            universe_port=uni,
+            identity=ident,
+            strategy=EqualWeightTopN(),
+            delisted_ratio=0.5,
+            verify_passed=True,
+            n_folds=2,
+            cost_bps_variants=(Decimal("5"), Decimal("15")),  # 10 없음
+        )
+
+
+def test_run_s6_gate_rejects_out_of_range_delisted_ratio() -> None:
+    # 외부 측정 경계 검증 — 비물리 비율은 G-5 왜곡 전에 loud fail.
+    port, uni, ident = _ports()
+    days = port.trading_days()
+    with pytest.raises(ValueError, match="delisted_ratio"):
+        run_s6_gate(
+            _cfg(days),
+            price_port=port,
+            universe_port=uni,
+            identity=ident,
+            strategy=EqualWeightTopN(),
+            delisted_ratio=1.5,  # >1
+            verify_passed=True,
+            n_folds=2,
+        )
