@@ -14,12 +14,17 @@
 
 **~~2. S6-a full_series OOM + 백테스트 라이브 실용화(DuckDB)~~ ✅ 완료(2026-06-22 ②·ADR-007)**: S6-a `full_series`→`load_range`(OOM 회피). 후속 `data/duckdb_cache.py`(Parquet→`cache.duckdb` 1억49만행·1.29GB) + **momentum 부분 푸시다운**(SQL 끝점·Python Decimal·bit-identical) + `DuckDBPriceSeriesPort`(`MomentumScorePort`)·`_select_price_port`·engine `isinstance` 분기. Task0~7·리뷰 2종(Task2 결과불변 BLOCKING 버그 tot→wn 차단). 측정: **ranking 32.3×**(43.3s→1.34s·≥10×)·실데이터 18,311종목 **score 불일치 0**·풀 백테스트 774리밸 **완주**(70분·peak 12,033MB·OOM 0). 플랜 백업=`docs/work-history/2026-06-22-백테스트-라이브실용화-DuckDB컬럼스토어.md`.
 
+**~~3. 벤치 멤버십 SQL 푸시다운~~ ✅ 완료(2026-06-23)**: `tickers_with_data`(DISTINCT ticker·load_range 키집합 동치·NULL 가드)로 3.65M PricePoint 물질화 제거. 풀 백테스트 **70→25.5분(2.7×)**·단일리밸 멤버십 10.5×·결과 bit-identical·리뷰 2종 APPROVE. 커밋 `fc4fbc6`/`8d54025`.
+
+**~~4. 관측성 스택(Prometheus+Grafana)~~ ✅ 완료(2026-06-23·ADR-008)**: `PhaseProfile` 계측(stdlib·결과불변)+profile CLI(라이브 /metrics·**rss vs python peak 범인 가림**·Pushgateway round)+instrumentator+compose 4서비스(prometheus/grafana3001/pushgateway/profiler)+레이어 대시보드(L1신호등/L3파이프라인/L4무결성/호스트)+Local Snapshot 런북. 플랜 백업=`docs/work-history/2026-06-23-관측성-스택.md`·`observability/README.md`.
+
 **남은 순서**:
-1. **벤치 멤버십 SQL 푸시다운**(즉시·풀 백테스트 실용화 선결·Task7 finding): `equal_weight_universe`(benchmark.py:64)가 매 리밸 `load_range(tradable 18k×window)`로 **3.65M PricePoint 물질화**(10.94s·+2GB)를 *멤버십 set 산출*(0.004s 사용)에만 낭비 → 풀 백테스트 70분·peak 12g 의 지배 비용. **SQL `SELECT DISTINCT ticker WHERE ticker=ANY AND trade_date BETWEEN lo AND t`** 로 set 만 반환(membership 동치·결과불변 회귀 필수). + `connect_readonly` memory_limit(peak 여유). ranking 푸시다운(✅)으로 안 풀린 잔여 병목.
-2. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**(그 전까지 false 고정).
-   - ✅ ~~선결: full_series OOM~~ 해소(S6-a load_range + DuckDB 컬럼스토어). 풀 백테스트 라이브 완주 확인(70분·벤치 병목은 위 1번).
-   - 무결성 verify 1회(`bulk --verify`) = S6 진입 필수 게이트(재개 시 missing 게이트 no-op → expected=master 도출 필요).
-2. **증분 스케줄러**(신규 운영 마일스톤 — 아래 설계 메모):
+1. **peak 11.7GB 범인 확정 후 메모리 최적화**: 관측성 profiler(rss vs python tracemalloc)로 Python/DuckDB 귀속 확정 → DuckDB면 `connect_readonly` memory_limit, Python이면 해당 경로. (이 작업이 관측성 스택 첫 실사용.)
+2. **추가 속도 최적화**(25.5분 더 단축 — S6-b 분할≥10=~10회=~4시간이라 선결): L3 대시보드 phase 분해로 남은 병목 식별 후.
+3. **S6 데이터 신뢰성 게이트**(별도 설계·다년 데이터 후): 분할 ≥10 교차검증·폐지 커버리지 하한·재현성·정밀도·1%/0.5% 민감도 → **`meta.validated=true` 전환**.
+   - 무결성 verify 1회(`bulk --verify`) = S6 진입 필수 게이트.
+4. **full_series Protocol 제거**(+M1: DuckDB 무스냅샷 `PriceDerivedUniverse.full_series` OOM 경로)·**zero-adjusted WARNING 집계화**(logging-rules 루프 spam).
+5. **증분 스케줄러**(신규 운영 마일스톤 — 아래 설계 메모):
 
 ### 증분 스케줄러 설계 메모 (캡처 명세 실측 — `docs/apis/eodhd/`)
 - **패턴**: 1회 풀백필(완료 후) → 일일 증분(last_bar+1 ~ today). EOD 표준.
