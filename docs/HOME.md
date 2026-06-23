@@ -25,6 +25,7 @@
 - [[decisions/ADR-006-PG스키마-alembic-첫실사용|ADR-006 PG 코어 스키마 + alembic 첫 실사용]] — 승인(2026-06-18). S5-a — stock(surrogate PK·cik""≡NULL 매핑)·ticker_history·daily_bar(연도 RANGE 파티션·CHECK=DuckDB 게이트 동형). 단방향 Parquet→PG(INSERT ON CONFLICT). ADR-001 첫 실사용
 - [[decisions/ADR-007-백테스트-DuckDB-persistent-캐시|ADR-007 백테스트 DuckDB persistent 캐시]] — 승인(2026-06-22). Parquet→cache.duckdb 단일 컬럼 스토어(578k glob 회피)+momentum 부분 푸시다운(SQL 끝점·Python Decimal·bit-identical). 라이브 ranking 32×. 완전 SQL 나눗셈(float)·평면 Parquet 기각
 - [[decisions/ADR-008-관측성-Prometheus-Grafana|ADR-008 관측성 Prometheus+Grafana]] — 승인(2026-06-23). 백테스트 phase/peak 계측(PhaseProfile stdlib·결과불변)+profile CLI(rss vs python peak 범인 가림)+Pushgateway+레이어 대시보드+Local Snapshot. Observer Protocol·라이브 동기 scrape·RSS Gauge 상시 기각
+- [[decisions/ADR-009-S6b-신뢰성게이트|ADR-009 S6-b 신뢰성 게이트]] — 승인(2026-06-23). momentum 룰 검증 기준 G-1~G-8 **사전 동결**(모듈 상수·전부 AND·decay≥0.5·n_folds≥10·delisted≥30%·비용 5/10/15bps). 정직 판정 도구(fail→validated=false 유지). 데이터로 임계 고르기·CPCV·지수벤치·통과목적 튜닝 기각
 
 ## 📡 API 명세 (apis/) — 환각 방지 권위 레퍼런스
 
