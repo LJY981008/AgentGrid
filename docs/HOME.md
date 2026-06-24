@@ -66,6 +66,7 @@
 - [[learning/02.fed-and-treasury/README|02 연준·국채]] — 수익률 곡선(10y-2y) 스프레드
 - [[learning/03.sec-filing-framework/README|03 SEC 공시 프레임워크]] — 공시 유형·항목
 - [[learning/04.financial-statements/README|04 재무제표 읽는 법]] — 재무상태표·손익·현금흐름·연차보고서
+- [[learning/05.backtest-validation-and-operating-model|05 백테스트 검증·운영 모델]] — 게이트 통과=수익 아님(필요조건)·도구(게이트) vs 룰(발전)·2단 룰반복 워크플로우(빠른체크/8hr게이트)·병렬화 단축
 
 ## 템플릿
 
