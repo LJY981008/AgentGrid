@@ -452,3 +452,40 @@ def test_fetch_daily_bars_drops_zero_close_and_clamps_ohlc() -> None:
     assert cf.open == Decimal("1319")  # carry-forward open → high(=실거래가)
     assert cf.high == Decimal("1319")
     assert cf.close == Decimal("1319")
+
+
+def test_fetch_daily_bars_drops_sentinel_bars() -> None:
+    # A1p2: EODHD $1M back-pad sentinel(raw close) + adjusted_close sentinel(→거대 adj_factor) drop.
+    rows: list[dict[str, object]] = [
+        {
+            "date": "2024-06-03",
+            "open": 50,
+            "high": 51,
+            "low": 49,
+            "close": 50,
+            "adjusted_close": 50,
+            "volume": 100,
+        },  # 정상
+        {
+            "date": "2024-06-04",
+            "open": 999999.9999,
+            "high": 999999.9999,
+            "low": 999999.9999,
+            "close": 999999.9999,
+            "adjusted_close": 999999.9999,
+            "volume": 0,
+        },  # L1 raw sentinel
+        {
+            "date": "2024-06-05",
+            "open": 0.1042,
+            "high": 0.1042,
+            "low": 0.1042,
+            "close": 0.1042,
+            "adjusted_close": 999999.9999,
+            "volume": 10,
+        },  # L3 거대 adj_factor
+    ]
+    src = _make_source(rows=rows)
+    bars = src.fetch_daily_bars("MRVL")
+    assert len(bars) == 1  # sentinel 2개 drop
+    assert bars[0].trade_date == date(2024, 6, 3)

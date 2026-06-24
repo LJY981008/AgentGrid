@@ -86,6 +86,7 @@ def equal_weight_universe(
                     exit_day,
                     universe_port,
                     config.delisting_recovery_rate,
+                    config.period_return_cap,
                 )
         else:
             pret, delisted = Decimal(0), 0

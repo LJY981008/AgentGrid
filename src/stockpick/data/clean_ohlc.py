@@ -15,16 +15,17 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .storage import normalize_ohlc
+from .storage import SENTINEL_WHERE_SQL, is_sentinel_bar, normalize_ohlc
 
 logger = logging.getLogger(__name__)
 
 _DATASET = "daily_bar"
-# 결함 술어 — verify_parquet 와 **정확히 동형**(nonpositive 4항 + OHLC ordering 5항). ⚠️ close<=0
-# 만으론 low<=0(ordering OK) 등 nonpositive 가 누락돼 영향 파일을 못 잡는다(verify 여전히 FAIL).
+# 결함 술어 — verify_parquet 와 **정확히 동형**: nonpositive 4항 + OHLC ordering 5항 + A1p2 상한
+# sentinel($1M·거대 adj_factor). close<=0 만으론 low<=0·sentinel 누락돼 영향 파일을 못 잡는다.
 _DEFECT_SQL = (
     "open<=0 OR high<=0 OR low<=0 OR close<=0 "
-    "OR high<low OR high<open OR high<close OR low>open OR low>close"
+    "OR high<low OR high<open OR high<close OR low>open OR low>close "
+    f"OR ({SENTINEL_WHERE_SQL})"
 )
 
 
@@ -74,6 +75,10 @@ def _clean_file(path: Path) -> tuple[int, int, bool]:
     out: dict[str, list[object]] = {name: [] for name in data_cols}
     dropped = clamped = 0
     for i in range(n):
+        # A1p2: 상한 garbage($1M sentinel·거대 adj_factor) per-bar drop(close 불변·verify 동형).
+        if is_sentinel_bar(cols["close"][i], cols["adj_factor"][i]):
+            dropped += 1
+            continue
         result = normalize_ohlc(cols["open"][i], cols["high"][i], cols["low"][i], cols["close"][i])
         if result is None:
             dropped += 1

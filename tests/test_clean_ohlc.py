@@ -93,3 +93,24 @@ def test_clean_parquet_ohlc_idempotent_on_clean_tree(tmp_path: Path) -> None:
     report = clean_parquet_ohlc(base)
     assert report.files_targeted == 0
     assert verify_parquet(base).passed
+
+
+def test_clean_parquet_drops_sentinel_bars(tmp_path: Path) -> None:
+    # A1p2: $1M sentinel 봉이 영향 파일로 선택되고 drop돼 verify(G-7) PASS.
+    base = tmp_path / "parquet"
+    base.mkdir()
+    c = Decimal("999999.9999")
+    bars = [
+        _bar("MRVL", date(2024, 1, 2), o="50", h="51", low="49", c="50"),  # 정상
+        _bar("MRVL", date(2024, 1, 3), o=str(c), h=str(c), low=str(c), c=str(c)),  # $1M sentinel
+    ]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=base, source="t")
+    with pytest.raises(VerificationError):
+        verify_parquet(base)
+    report = clean_parquet_ohlc(base)
+    assert report.files_targeted == 1
+    assert report.rows_dropped == 1
+    rep = verify_parquet(base)
+    assert rep.passed
+    assert rep.sentinel_count == 0
+    assert rep.row_count == 1

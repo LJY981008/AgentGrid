@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .benchmark import equal_weight_universe
+from .config import _DEFAULT_RETURN_CAP
 from .engine import run
 from .validation import walk_forward
 
@@ -317,6 +318,7 @@ def run_s6_gate(
         rebalance_freq=config.rebalance_freq,
         delisting_recovery_rate=config.delisting_recovery_rate,
         group_by_exchange=config.group_by_exchange,
+        period_return_cap=config.period_return_cap,  # 비정규 cap(env override) 게이트는 flip 불가
     )
     if not verify_passed:
         # G-7 무결성 실패 → 데이터 신뢰 불가. 손상 데이터 백테스트(G-1~G-6)는 garbage-in·무의미.
@@ -425,11 +427,14 @@ def compute_rule_signature(
     rebalance_freq: str,
     delisting_recovery_rate: Decimal,
     group_by_exchange: bool,
+    period_return_cap: Decimal = _DEFAULT_RETURN_CAP,
 ) -> str:
     """검증된 **룰 정체성** 해시 — gate 기록과 route 요청이 같은 룰이면 같은 키.
 
     cost_bps(G-6 가 5/10/15 범위로 검증 — 룰 정체성 아님)·start/end(백테스트 window·룰 아님)는
-    **제외**. 이 7개 필드가 "어떤 룰을 검증했나"를 규정한다. recovery 는 Decimal→normalize 문자열.
+    **제외**. 8개 필드가 "어떤 룰을 검증했나"를 규정한다. recovery 는 Decimal→normalize 문자열.
+    period_return_cap(L4 상한)은 수익 계산식을 바꾸므로 포함 — 기본값=정규 동결값. route/ranking 은
+    인자 생략 시 정규 cap 매칭, 비정규 cap 게이트는 signature 불일치라 flip 안 됨.
     """
     payload = {
         "strategy_name": strategy_name,
@@ -439,6 +444,7 @@ def compute_rule_signature(
         "rebalance_freq": rebalance_freq,
         "delisting_recovery_rate": f"{delisting_recovery_rate.normalize():f}",
         "group_by_exchange": group_by_exchange,
+        "period_return_cap": f"{period_return_cap.normalize():f}",
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()

@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+import pytest
+
 from stockpick.backtest.config import BacktestConfig
-from stockpick.backtest.engine import run
+from stockpick.backtest.engine import _holding_period_return, run
 from stockpick.backtest.fakes import (
     FakePriceSeriesPort,
     FakeUniversePort,
@@ -99,3 +101,69 @@ def test_empty_universe_flat_equity() -> None:
         strategy=EqualWeightTopN(),
     )
     assert res.total_return == Decimal("0")
+
+
+# --- A1p2 L4: per-ticker 수익률 상한 캡(sentinel 잔존·극소 진입가 폭발 방어·engine+bench 공유) ---
+
+
+def _hold1(
+    pts: list[PricePoint], *, recovery: str = "0", de: date | None = None, cap: str = "19.0"
+) -> Decimal:
+    entry, exit_ = pts[0].trade_date, pts[-1].trade_date
+    delisted: dict[str, date | None] = {} if de is None else {"A": de}
+    uni = FakeUniversePort(listed={"A": date(2000, 1, 1)}, delisted=delisted)
+    total, _d, _s = _holding_period_return(
+        {"A": Decimal("1")},
+        {"A": "A"},
+        {"A": pts},
+        entry,
+        exit_,
+        uni,
+        Decimal(recovery),
+        Decimal(cap),
+    )
+    return total
+
+
+def _pp(d: tuple[int, int, int], price: str) -> PricePoint:
+    return PricePoint(date(*d), Decimal(price))
+
+
+def test_holding_return_caps_upper_explosion() -> None:
+    # exit_p sentinel 잔존(혹은 극소 진입가) → 199999배 → +19 캡(G-3 폭발 차단).
+    assert _hold1([_pp((2024, 1, 2), "5"), _pp((2024, 1, 31), "1000000")]) == Decimal("19.0")
+
+
+def test_holding_return_no_floor_preserves_real_loss() -> None:
+    # ⚠️ 하한 floor 없음 — 정상 종목 실손실(-99.9995%)을 마스킹하지 않음(정직). ret>=-1 보장.
+    expected = Decimal("5") / Decimal("1000000") - Decimal("1")
+    assert _hold1([_pp((2024, 1, 2), "1000000"), _pp((2024, 1, 31), "5")]) == expected
+
+
+def test_holding_return_preserves_gme_16x() -> None:
+    # 실재 16.2x 급등(GME) → cap +19 안쪽 → 무변경(실수익 보존).
+    assert _hold1([_pp((2024, 1, 2), "10"), _pp((2024, 1, 31), "162")]) == Decimal("15.2")
+
+
+def test_holding_return_delisting_recovery0_stays_total_loss() -> None:
+    # ⚠️ 폐지 청산(recovery=0)은 -100% 가 정답(상한캡은 손실에 무영향).
+    # de(01-16) ∈ (entry 01-02, exit 01-31] → 폐지경로. last_p=de 직전(01-15=90).
+    de = date(2024, 1, 16)
+    pts = [_pp((2024, 1, 2), "100"), _pp((2024, 1, 15), "90"), _pp((2024, 1, 31), "50")]
+    assert _hold1(pts, recovery="0", de=de) == Decimal("-1")
+
+
+def test_period_return_cap_in_fingerprint() -> None:
+    # cap 은 재현성 입력 — fingerprint 에 반영(다르면 다른 해시).
+    days = _weekdays(date(2024, 1, 1), 10)
+    assert (
+        _cfg(days, period_return_cap=Decimal("19.0")).fingerprint()
+        != _cfg(days, period_return_cap=Decimal("5.0")).fingerprint()
+    )
+
+
+def test_period_return_cap_must_be_positive() -> None:
+    # cap<=0 은 모든 수익을 음수로 뭉갬 → 명시 실패(조용한 오설정 금지).
+    days = _weekdays(date(2024, 1, 1), 10)
+    with pytest.raises(ValueError, match="period_return_cap"):
+        _cfg(days, period_return_cap=Decimal("0"))

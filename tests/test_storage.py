@@ -18,9 +18,11 @@ import pyarrow.parquet as pq
 import pytest
 
 from stockpick.data.storage import (
+    SENTINEL_WHERE_SQL,
     PrecisionError,
     VerificationError,
     build_expected,
+    is_sentinel_bar,
     load_trade_date_bounds,
     verify_parquet,
     write_daily_bars,
@@ -484,3 +486,131 @@ def test_normalize_ohlc_output_always_verify_clean() -> None:
         r = normalize_ohlc(Decimal(o), Decimal(h), Decimal(low), Decimal(c))
         assert r is not None  # close>0 cases
         assert not _viol(*r), f"정규화 출력이 verify 위반: {(o, h, low, c)}→{r}"
+
+
+# ── A1p2 상한 garbage: is_sentinel_bar (EODHD $1M sentinel·거대 adj_factor) ──
+
+
+def test_sentinel_bar_l1_raw_close_band() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    # L1: raw close ∈ [999999,1000001] = EODHD $1M back-pad sentinel(MRVL 등 legit 티커 침투)
+    assert is_sentinel_bar(Decimal("999999.9999"), Decimal("1")) is True
+    assert is_sentinel_bar(Decimal("1000000.5"), Decimal("1")) is True
+    assert is_sentinel_bar(Decimal("999999"), Decimal("1")) is True
+
+
+def test_sentinel_bar_l2_adjusted_pin() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    # L2: adjusted(close×adj)=$1M pin (ATDS: 페니 close × adjusted_close sentinel 유래 adj_factor)
+    assert is_sentinel_bar(Decimal("0.1042"), Decimal("9596928.981765834933")) is True
+
+
+def test_sentinel_bar_l3_huge_adj_factor() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    # L3: adj_factor>=100000 = ATDS류 uniform garbage
+    assert is_sentinel_bar(Decimal("0.0001"), Decimal("9999999999")) is True
+    assert is_sentinel_bar(Decimal("0.5"), Decimal("100000")) is True
+
+
+def test_sentinel_bar_protects_brk_a() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    # BRK-A $809,350(진짜 최고가주) — 세 술어 모두 미해당(legit 무손실)
+    assert is_sentinel_bar(Decimal("809350"), Decimal("1")) is False
+
+
+def test_sentinel_bar_protects_legit_reverse_split() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    # XSPA류 legit 거듭역분할: adj_factor 12000(<100000)·adjusted=$120(not $1M) → 보호
+    assert is_sentinel_bar(Decimal("0.01"), Decimal("12000")) is False
+    # legit 역분할 천장 근처 29081 도 보호
+    assert is_sentinel_bar(Decimal("0.01"), Decimal("29081")) is False
+
+
+def test_sentinel_bar_normal_bar() -> None:
+    from stockpick.data.storage import is_sentinel_bar
+
+    assert is_sentinel_bar(Decimal("100"), Decimal("1")) is False
+    assert is_sentinel_bar(Decimal("0.5"), Decimal("2.5")) is False
+
+
+def test_verify_fails_on_sentinel_bar(tmp_path: Path) -> None:
+    # A1p2: $1M sentinel 봉(positive·OHLC 일관이라 기존 게이트 통과)을 verify(G-7) 가 잡아야.
+    from stockpick.types import DailyBar, Exchange
+
+    def _sbar(d: date, close: str) -> DailyBar:
+        c = Decimal(close)
+        return DailyBar(
+            ticker="MRVL",
+            trade_date=d,
+            open=c,
+            high=c,
+            low=c,
+            close=c,
+            volume=100,
+            value=None,
+            adj_factor=Decimal("1"),
+        )
+
+    bars = [
+        _sbar(date(2024, 1, 2), "50"),
+        _sbar(date(2024, 1, 3), "999999.9999"),  # $1M sentinel
+    ]
+    write_daily_bars(bars, exchange=Exchange.NASDAQ, base_dir=tmp_path, source="t")
+    with pytest.raises(VerificationError):
+        verify_parquet(tmp_path)
+
+
+def test_verify_passes_clean_after_no_sentinel(tmp_path: Path) -> None:
+    from stockpick.types import DailyBar, Exchange
+
+    c = Decimal("50")
+    write_daily_bars(
+        [
+            DailyBar(
+                ticker="MRVL",
+                trade_date=date(2024, 1, 2),
+                open=c,
+                high=c,
+                low=c,
+                close=c,
+                volume=100,
+                value=None,
+                adj_factor=Decimal("1"),
+            )
+        ],
+        exchange=Exchange.NASDAQ,
+        base_dir=tmp_path,
+        source="t",
+    )
+    rep = verify_parquet(tmp_path)
+    assert rep.passed
+    assert rep.sentinel_count == 0
+
+
+def test_sentinel_l2_sql_python_homomorphic_at_half_cent(tmp_path: Path) -> None:
+    """L2 동형성: DuckDB round()(half-away-from-zero) 와 python quantize(ROUND_HALF_UP) 일치.
+
+    리뷰 지적 — 기본 banker's(HALF_EVEN)면 반센트 경계($1M 핀)에서 SQL/python 분기 가능.
+    close 는 $1M 밖(L1 미발동)·adj_factor<10^5(L3 미발동)으로 L2 만 격리. SQL 술어 결과 == python.
+    """
+    import duckdb
+
+    # close*adj_factor = 1000000.005 (정확히 반센트) — L1/L3 비해당, L2 경계만 테스트
+    bar = _bar("BND", date(2024, 1, 2), close="250", adj_factor="4000.00002")
+    write_daily_bars([bar], exchange=Exchange.NASDAQ, base_dir=tmp_path, source="eodhd")
+    files = sorted((tmp_path / "daily_bar").rglob("*.parquet"))
+    # SENTINEL_WHERE_SQL·파일경로 모두 테스트내 상수(외부 주입 아님) → S608 무시
+    query = f"SELECT count(*) FROM read_parquet('{files[0]}') WHERE {SENTINEL_WHERE_SQL}"  # noqa: S608
+    con = duckdb.connect(":memory:")
+    try:
+        sql_hit = con.execute(query).fetchone()
+        assert sql_hit is not None
+    finally:
+        con.close()
+    py_hit = is_sentinel_bar(Decimal("250"), Decimal("4000.00002"))
+    assert (sql_hit[0] > 0) == py_hit  # SQL·python 동일 판정(분기 없음)

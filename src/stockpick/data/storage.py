@@ -24,7 +24,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -158,6 +158,7 @@ class VerificationReport:
     nonpositive_adj_factor_count: int
     nonpositive_price_count: int
     ohlc_violation_count: int
+    sentinel_count: int = 0  # A1p2 상한 garbage($1M sentinel·거대 adj_factor)·is_sentinel_bar 동형
     expected_checked: bool = False
     missing_tickers: tuple[str, ...] = ()
     shortfall_tickers: tuple[tuple[str, int, int], ...] = ()  # (ticker, expected, actual)
@@ -171,6 +172,7 @@ class VerificationReport:
             and self.nonpositive_adj_factor_count == 0
             and self.nonpositive_price_count == 0
             and self.ohlc_violation_count == 0
+            and self.sentinel_count == 0
             and not self.missing_tickers
             and not self.shortfall_tickers
         )
@@ -342,6 +344,42 @@ def write_daily_bars(
     return dataset_root
 
 
+# A1p2 상한 garbage 임계 — env-tunable·검증 동결 기본값(워크플로우 쿼리 실측). ⚠️ 게이트 통과되게
+# 튜닝 금지(과적합 BLOCKING) — override 는 verify(G-7) 게이트로 추적. 기본값 변경=데이터 신뢰 변경.
+_SENTINEL_PRICE: Final = Decimal(os.environ.get("STOCKPICK_SENTINEL_PRICE", "1000000"))  # EODHD $1M
+_SENTINEL_BAND: Final = Decimal(os.environ.get("STOCKPICK_SENTINEL_BAND", "1"))  # L1 raw ±band
+# L3 거대 adj_factor — legit 역분할 천장(실측 29,081)의 3.4배 위. ≥10,000은 legit 오제거라 기각.
+_MAX_ADJ_FACTOR: Final = Decimal(os.environ.get("STOCKPICK_MAX_ADJ_FACTOR", "100000"))
+
+# sentinel WHERE 술어 — is_sentinel_bar 와 동형(L1·L2·L3)·상수만. verify(G-7)·clean_ohlc 단일 출처.
+SENTINEL_WHERE_SQL: Final = (
+    f"abs(close - {_SENTINEL_PRICE}) <= {_SENTINEL_BAND} "
+    f"OR round(close * adj_factor, 2) = {_SENTINEL_PRICE} "
+    f"OR adj_factor >= {_MAX_ADJ_FACTOR}"
+)
+_SQL_SENTINEL: Final = f"SELECT count(*) {_FROM} WHERE {SENTINEL_WHERE_SQL}"  # noqa: S608
+
+
+def is_sentinel_bar(close: Decimal, adj_factor: Decimal) -> bool:
+    """A1p2: EODHD 상한 garbage 봉(per-bar) 판별 — ingest·정제 migration·verify(G-7) 단일 출처.
+
+    EODHD 가 상장이전/결측을 $1M max-value sentinel 로 back-pad(legit 티커도 침투) → 등가중 벤치
+    복리 발산(G-3 e80). ⚠️ **per-bar 만**(per-ticker drop = LUV/MRVL legit 삭제=생존편향 BLOCKING).
+      L1 raw close sentinel: close ∈ [_SENTINEL_PRICE±band]
+      L2 adjusted $1M pin:   round(close×adj_factor, 2) == _SENTINEL_PRICE
+      L3 거대 adj_factor:    adj_factor >= _MAX_ADJ_FACTOR (ATDS류 uniform·legit 역분할 보호)
+    BRK-A($809,350) 등 legit 고가주는 셋 다 미해당(검증).
+    """
+    if abs(close - _SENTINEL_PRICE) <= _SENTINEL_BAND:  # L1
+        return True
+    cents = Decimal("0.01")
+    # ROUND_HALF_UP — DuckDB round()=half-away-from-zero 와 동형(SQL 술어와 분기 방지·반센트 경계).
+    adj_cents = (close * adj_factor).quantize(cents, rounding=ROUND_HALF_UP)
+    if adj_cents == _SENTINEL_PRICE.quantize(cents, rounding=ROUND_HALF_UP):  # L2
+        return True
+    return adj_factor >= _MAX_ADJ_FACTOR  # L3
+
+
 def normalize_ohlc(
     open_: Decimal, high: Decimal, low: Decimal, close: Decimal
 ) -> tuple[Decimal, Decimal, Decimal, Decimal] | None:
@@ -446,6 +484,7 @@ def verify_parquet(
         nonpositive_adj = _scalar_int(con, _SQL_NONPOSITIVE_ADJ, params)
         nonpositive_price = _scalar_int(con, _SQL_NONPOSITIVE_PRICE, params)
         ohlc_violation = _scalar_int(con, _SQL_OHLC_VIOLATION, params)
+        sentinel = _scalar_int(con, _SQL_SENTINEL, params)
         actual_counts = _ticker_row_counts(con, _SQL_TICKER_ROW_COUNTS, params)
     finally:
         con.close()
@@ -461,6 +500,7 @@ def verify_parquet(
         nonpositive_adj_factor_count=nonpositive_adj,
         nonpositive_price_count=nonpositive_price,
         ohlc_violation_count=ohlc_violation,
+        sentinel_count=sentinel,
         expected_checked=expected is not None,
         missing_tickers=missing,
         shortfall_tickers=shortfall,
@@ -468,7 +508,7 @@ def verify_parquet(
     )
     logger.info(
         "Parquet 검증: rows=%d, tickers=%d, period=%s~%s, dup=%d, adj<=0=%d, price<=0=%d, ohlc=%d, "
-        "expected_checked=%s, missing=%d, shortfall=%d, orphan=%d, passed=%s",
+        "sentinel=%d, expected_checked=%s, missing=%d, shortfall=%d, orphan=%d, passed=%s",
         report.row_count,
         report.ticker_count,
         report.min_date,
@@ -477,6 +517,7 @@ def verify_parquet(
         report.nonpositive_adj_factor_count,
         report.nonpositive_price_count,
         report.ohlc_violation_count,
+        report.sentinel_count,
         report.expected_checked,
         len(report.missing_tickers),
         len(report.shortfall_tickers),
@@ -532,7 +573,7 @@ def _raise_verification_error(report: VerificationReport) -> None:
         "Parquet 무결성 게이트 실패(금융 BLOCKING): "
         f"중복={report.duplicate_count}, adj_factor<=0={report.nonpositive_adj_factor_count}, "
         f"가격<=0={report.nonpositive_price_count}, OHLC위반={report.ohlc_violation_count}, "
-        f"누락(소실)={missing}, 행수미달={shortfall}. "
+        f"sentinel={report.sentinel_count}, 누락(소실)={missing}, 행수미달={shortfall}. "
         "기대 종목이 조용히 누락되면 생존편향 누수이므로 적재 데이터를 신뢰할 수 없습니다."
     )
 

@@ -109,6 +109,7 @@ def run(
                 exit_day,
                 universe_port,
                 config.delisting_recovery_rate,
+                config.period_return_cap,
             )
         n_delisted += delisted
         n_skipped += skipped
@@ -225,10 +226,14 @@ def _holding_period_return(
     exit_day: date,
     universe_port: UniversePort,
     recovery_rate: Decimal,
+    return_cap: Decimal,
 ) -> tuple[Decimal, int, int]:
     """가중 보유수익 + (폐지청산 건수, 진입가 결측 skip 건수).
 
     폐지(entry<de<=exit)면 recovery_rate 청산.
+    A1p2 L4: per-ticker ret 을 **상한 cap 만** 클램프. ret=exit/entry-1 은 entry>0·exit>=0 이라
+    수학적으로 ret>=-1(하한은 폭발 불가) — 폭발은 전부 상한(극소 진입가·sentinel exit). 하한 floor
+    는 폭발 방어 0이고 정상 손실만 마스킹=낙관편향이라 두지 않음(정직·리뷰 반영).
     """
     total = Decimal(0)
     delisted = 0
@@ -249,7 +254,7 @@ def _holding_period_return(
         else:
             exit_p = _price_on_or_before(pts, exit_day) or entry_p
             ret = exit_p / entry_p - Decimal(1)
-        total += w * ret
+        total += w * min(ret, return_cap)  # 상한만 — 하한은 구조적 -1(폭발 불가)
     return total, delisted, skipped
 
 

@@ -40,7 +40,7 @@ import httpx
 
 from ..types import DailyBar, Exchange, Stock
 from ._adjust import compute_adj_factor
-from .storage import normalize_ohlc
+from .storage import is_sentinel_bar, normalize_ohlc
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -440,6 +440,9 @@ class EodhdSource:
         adj_factor = compute_adj_factor(
             adjusted_close, close, source=_SOURCE_LABEL, ticker=ticker, trade_date=trade_date
         )
+        # A1p2: EODHD 상한 garbage($1M sentinel·거대 adj_factor) 봉 drop(per-bar·verify 동형).
+        if is_sentinel_bar(close, adj_factor):
+            return None
 
         return DailyBar(
             ticker=ticker,

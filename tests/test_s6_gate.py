@@ -657,3 +657,21 @@ def test_run_s6_gate_does_not_call_backtest_when_verify_failed(
         n_folds=2,
     )
     assert r.passed is False  # _boom 미발생 = 백테스트 미호출(단락 작동)
+
+
+def test_rule_signature_includes_period_return_cap() -> None:
+    # A1p2 L4: cap 은 수익 계산식을 바꾸므로 rule_signature 에 포함 — 비정규 cap 게이트는 flip 불가.
+    base = dict(
+        strategy_name="equal_weight_top_n",
+        top_n=5,
+        lookback_days=126,
+        skip_recent_days=21,
+        rebalance_freq="monthly",
+        delisting_recovery_rate=Decimal("0"),
+        group_by_exchange=False,
+    )
+    sig_default = compute_rule_signature(**base)  # type: ignore[arg-type]
+    sig_canon = compute_rule_signature(**base, period_return_cap=Decimal("19.0"))  # type: ignore[arg-type]
+    sig_other = compute_rule_signature(**base, period_return_cap=Decimal("5.0"))  # type: ignore[arg-type]
+    assert sig_default == sig_canon  # 기본값=정규 동결값(인자 생략=정규 매칭)
+    assert sig_canon != sig_other  # 비정규 cap → 다른 룰 정체성

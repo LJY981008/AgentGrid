@@ -13,3 +13,4 @@
 - [adj_factor 방향·정밀도 함정](gotcha-adj-factor-direction.md) — 공유 헬퍼 adjusted/raw quantize 12자리. EODHD 명세 caveat 역수 함정(돈 걸림)
 - [rules 모듈 첫 구현(모멘텀)](impl-rules-momentum.md) — 룩어헤드 2중 가드·스캔/계산 분리·sabotage 검증·데이터셋 컨테이너 전용·ruff E501 한글 함정
 - [FastAPI API 층(M3)](impl-fastapi-api.md) — DI 테스트·키비노출·path-traversal·계약 wire-shape(거래소별 rank·validated=false)·fastapi 0.137/mypy/B008 함정
+- [EODHD garbage 수익률 폭발(S6-b G-3)](gotcha-eodhd-garbage-explosion.md) — e80 근원=tiny분모×sentinel분자·데이터drop 불충분·legit천장 GME 16.2x·캡 K=[-0.95,+19.0]
