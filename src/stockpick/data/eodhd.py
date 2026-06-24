@@ -40,6 +40,7 @@ import httpx
 
 from ..types import DailyBar, Exchange, Stock
 from ._adjust import compute_adj_factor
+from .storage import normalize_ohlc
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -427,6 +428,13 @@ class EodhdSource:
         if open_ is None or high is None or low is None or close is None or volume is None:
             logger.warning("EODHD 행 OHLCV 결측 — 누락: ticker=%s, date=%s", ticker, trade_date)
             return None
+
+        # A-1: EODHD 0-OHLCV(비거래일)·OHLC carry-forward 결함 정규화(verify 동형·단일 출처).
+        # close<=0 → drop(이슈①·비거래일), 순서위반 → close anchor 보정(이슈②). 정상 봉 멱등.
+        normalized = normalize_ohlc(open_, high, low, close)
+        if normalized is None:
+            return None  # close<=0 — 비거래일/0봉(가격 없음)·원래 누락이 맞음
+        open_, high, low, close = normalized
 
         adjusted_close = _to_decimal(row.get("adjusted_close"))
         adj_factor = compute_adj_factor(

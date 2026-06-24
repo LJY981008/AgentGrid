@@ -408,3 +408,79 @@ def test_build_expected_counts_rows_per_ticker() -> None:
     )
     assert exp["A"].row_count == 2
     assert exp["B"].row_count == 1
+
+
+# ── A-1 데이터 정제: normalize_ohlc (EODHD 0-price·OHLC carry-forward 보정) ──
+
+
+def _viol(o: Decimal, h: Decimal, low: Decimal, c: Decimal) -> bool:
+    # verify_parquet 와 동형: nonpositive OR ordering 위반
+    return o <= 0 or h <= 0 or low <= 0 or c <= 0 or h < low or h < o or h < c or low > o or low > c
+
+
+def test_normalize_ohlc_drops_nonpositive_close() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    assert normalize_ohlc(Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0")) is None
+    assert normalize_ohlc(Decimal("5"), Decimal("5"), Decimal("5"), Decimal("0")) is None
+    assert normalize_ohlc(Decimal("5"), Decimal("5"), Decimal("5"), Decimal("-1")) is None
+
+
+def test_normalize_ohlc_clamps_carry_forward_open() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    # open=전일종가 carry-forward(1353) > high=low=close(1319) → open clamp to 1319
+    r = normalize_ohlc(Decimal("1353"), Decimal("1319"), Decimal("1319"), Decimal("1319"))
+    assert r == (Decimal("1319"), Decimal("1319"), Decimal("1319"), Decimal("1319"))
+
+
+def test_normalize_ohlc_expands_high_for_close_above_high() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    # close(635) > high(633) → high 확장 to 635(실거래가 포함)·open 보존
+    r = normalize_ohlc(Decimal("630"), Decimal("633"), Decimal("630"), Decimal("635"))
+    assert r == (Decimal("630"), Decimal("635"), Decimal("630"), Decimal("635"))
+
+
+def test_normalize_ohlc_expands_low_for_close_below_low() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    r = normalize_ohlc(Decimal("100"), Decimal("110"), Decimal("120"), Decimal("105"))
+    # positives=[105,110,120]→hi=120,lo=105; open=clamp(100,105,120)=105
+    assert r == (Decimal("105"), Decimal("120"), Decimal("105"), Decimal("105"))
+
+
+def test_normalize_ohlc_idempotent_on_valid_bar() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    r = normalize_ohlc(Decimal("10"), Decimal("12"), Decimal("9"), Decimal("11"))
+    assert r == (Decimal("10"), Decimal("12"), Decimal("9"), Decimal("11"))
+
+
+def test_normalize_ohlc_handles_partial_nonpositive_with_valid_close() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    # low=0(부분 결측)·close>0 → low 를 양수(positives 제외 후 close/high 기반)로
+    r = normalize_ohlc(Decimal("5"), Decimal("6"), Decimal("0"), Decimal("5"))
+    assert r == (Decimal("5"), Decimal("6"), Decimal("5"), Decimal("5"))
+    # 전부 0 except close
+    r2 = normalize_ohlc(Decimal("0"), Decimal("0"), Decimal("0"), Decimal("5"))
+    assert r2 == (Decimal("5"), Decimal("5"), Decimal("5"), Decimal("5"))
+
+
+def test_normalize_ohlc_output_always_verify_clean() -> None:
+    from stockpick.data.storage import normalize_ohlc
+
+    cases = [
+        (1353, 1319, 1319, 1319),
+        (630, 633, 630, 635),
+        (100, 110, 120, 105),
+        (10, 12, 9, 11),
+        (5, 6, 0, 5),
+        (0, 0, 0, 5),
+        (10, 100, 110, 105),  # high<low inversion·close between
+    ]
+    for o, h, low, c in cases:
+        r = normalize_ohlc(Decimal(o), Decimal(h), Decimal(low), Decimal(c))
+        assert r is not None  # close>0 cases
+        assert not _viol(*r), f"정규화 출력이 verify 위반: {(o, h, low, c)}→{r}"

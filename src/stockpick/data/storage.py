@@ -342,6 +342,31 @@ def write_daily_bars(
     return dataset_root
 
 
+def normalize_ohlc(
+    open_: Decimal, high: Decimal, low: Decimal, close: Decimal
+) -> tuple[Decimal, Decimal, Decimal, Decimal] | None:
+    """EODHD OHLC 결함 정규화(A-1) — `verify_parquet`(nonpositive+ordering) PASS 보장·close 불변.
+
+    이슈①: close<=0(비거래일·0-OHLCV padding·EODHD 영속) → None(drop — 가격 없음·원래 누락).
+    이슈②: open=전일종가 carry-forward·close>high 등 순서 위반 → **close(실거래가)를 anchor** 로
+    high/low 를 close 포함하도록만 확장(없던 가격 invent 안 함)·open 을 [low,high] 로 clamp(아티팩트
+    제거). 정상 봉엔 **멱등**(불변). ingest(`_row_to_bar`)·정제 migration 의 단일 출처(동형 보장).
+
+    반환 (open, high, low, close) — 전부 >0·high>=open/low/close·low<=open/close 보장.
+    """
+    if close <= 0:
+        return None
+    positives = [close]
+    if high > 0:
+        positives.append(high)
+    if low > 0:
+        positives.append(low)
+    hi = max(positives)
+    lo = min(positives)
+    op = close if open_ <= 0 else min(max(open_, lo), hi)
+    return (op, hi, lo, close)
+
+
 def verify_parquet(
     base_dir: Path,
     *,

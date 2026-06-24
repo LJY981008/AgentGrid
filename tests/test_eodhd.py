@@ -411,3 +411,44 @@ def test_fetch_common_stock_universe_warns_empty_active(
         active, _ = src.fetch_common_stock_universe(include_delisted=False)
     assert active == []
     assert any("활성 0개" in rec.message for rec in caplog.records)
+
+
+def test_fetch_daily_bars_drops_zero_close_and_clamps_ohlc() -> None:
+    # A-1: EODHD 0-OHLCV(비거래일) drop·carry-forward(open>high) open clamp(ingest guard 배선).
+    rows: list[dict[str, object]] = [
+        {
+            "date": "2024-06-03",
+            "open": 192.9,
+            "high": 194.5,
+            "low": 192.0,
+            "close": 194.03,
+            "adjusted_close": 194.03,
+            "volume": 100,
+        },  # 정상
+        {
+            "date": "2024-06-04",
+            "open": 0,
+            "high": 0,
+            "low": 0,
+            "close": 0,
+            "adjusted_close": 0,
+            "volume": 0,
+        },  # 0봉(비거래일) → drop
+        {
+            "date": "2024-06-05",
+            "open": 1353,
+            "high": 1319,
+            "low": 1319,
+            "close": 1319,
+            "adjusted_close": 1319,
+            "volume": 10,
+        },  # carry-forward open>high → clamp
+    ]
+    src = _make_source(rows=rows)
+    bars = src.fetch_daily_bars("X")
+    assert len(bars) == 2  # 0봉 1개 drop
+    assert date(2024, 6, 4) not in {b.trade_date for b in bars}
+    cf = next(b for b in bars if b.trade_date == date(2024, 6, 5))
+    assert cf.open == Decimal("1319")  # carry-forward open → high(=실거래가)
+    assert cf.high == Decimal("1319")
+    assert cf.close == Decimal("1319")
