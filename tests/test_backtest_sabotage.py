@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from stockpick.backtest.benchmark import equal_weight_universe
 from stockpick.backtest.config import BacktestConfig
-from stockpick.backtest.engine import run
+from stockpick.backtest.engine import _rank_at, run
 from stockpick.backtest.fakes import (
     FakeLiquidityPort,
     FakePriceSeriesPort,
@@ -128,8 +129,6 @@ def test_survivorship_excluding_delisted_changes_metrics() -> None:
 def test_rank_at_ignores_future_data() -> None:
     # 직접 룩어헤드 봉인: 동일 데이터 + as_of(t) **이후** B 가격 폭등 → as_of=t 랭킹 불변.
     # load(as_of=t)를 full_series()로 바꾸는 누설 회귀가 들어오면 이 단언이 깨진다.
-    from stockpick.backtest.engine import _rank_at
-
     days = _weekdays(date(2024, 1, 1), 40)
     t = days[20]
     # ≤t 구간: A 가 B 보다 가파른 상승 → as_of=t 모멘텀 A > B (정상 랭킹 [A, B]).
@@ -148,3 +147,30 @@ def test_rank_at_ignores_future_data() -> None:
     r_spiked = _rank_at(cfg, spiked, uni, ident, spiked.ticker_exchanges(), t, _NOLIQ)
     assert [e.ticker for e in r_base] == [e.ticker for e in r_spiked]
     assert [e.ticker for e in r_base] == ["A", "B"]  # 정상: A 가 #1(미래 무관)
+
+
+def test_liquidity_filter_symmetric_engine_and_bench() -> None:
+    # ADR-010 대칭 봉인: 동일 liquidity_port 가 engine(_rank_at 후보)·bench(멤버) 양쪽서 같은 종목을
+    # 제외해야 G-3 초과가 인공적이지 않다. 비대칭 회귀(한쪽만 필터)면 이 단언이 깨진다.
+    days = _weekdays(date(2024, 1, 1), 70)
+    t = days[40]
+    a = [PricePoint(d, Decimal(100 + i)) for i, d in enumerate(days)]  # 평탄~완만
+    b = [PricePoint(d, Decimal(100 + 3 * i)) for i, d in enumerate(days)]  # 급상승(필터없으면 선택)
+    port = FakePriceSeriesPort({"A": a, "B": b})
+    uni = FakeUniversePort(listed={"A": date(2023, 1, 1), "B": date(2023, 1, 1)}, delisted={})
+    ident = StubIdentityResolver({})
+    cfg = _cfg(days[0], days[-1], top_n=2)
+    liq = FakeLiquidityPort({"A"})  # B 비유동
+
+    # engine: 후보에서 B 제외
+    ranked = _rank_at(cfg, port, uni, ident, port.ticker_exchanges(), t, liq)
+    assert {e.ticker for e in ranked} == {"A"}
+
+    # bench: B 제외 = 유니버스를 A 로만 줄인 벤치(필터 off)와 동치 → 멤버에서도 B 빠짐(대칭).
+    bench_liq = equal_weight_universe(cfg, price_port=port, universe_port=uni, liquidity_port=liq)
+    uni_a = FakeUniversePort(listed={"A": date(2023, 1, 1)}, delisted={})
+    bench_a = equal_weight_universe(
+        cfg, price_port=port, universe_port=uni_a, liquidity_port=_NOLIQ
+    )
+    assert bench_liq.total_return == bench_a.total_return
+    assert bench_liq.equity_curve == bench_a.equity_curve

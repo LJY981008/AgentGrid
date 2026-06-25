@@ -35,7 +35,7 @@ from stockpick.backtest.s6_gate import (
     write_s6_gate_result,
 )
 from stockpick.backtest.s6_gate import main as s6_gate_main
-from stockpick.backtest.strategy import EqualWeightTopN
+from stockpick.backtest.strategy import EqualWeightTopN, TopDecileEqualWeight
 from stockpick.backtest.validation import Fold, walk_forward
 from stockpick.data import storage
 from stockpick.data.storage import write_daily_bars
@@ -745,3 +745,61 @@ def test_rule_signature_includes_period_return_cap() -> None:
     sig_other = compute_rule_signature(**base, period_return_cap=Decimal("5.0"))  # type: ignore[arg-type]
     assert sig_default == sig_canon  # 기본값=정규 동결값(ADR-010 cap=1.0·인자 생략=정규 매칭)
     assert sig_canon != sig_other  # 비정규 cap → 다른 룰 정체성
+
+
+# ── Phase 2-9: decile 게이트 wiring smoke(canonical 경로 8hr 전 배선 봉인) ──
+
+
+def test_decile_gate_wiring_smoke() -> None:
+    # B1/배선 봉인: decile config(portfolio_pct)+TopDecileEqualWeight+liquidity 로 run_s6_gate 가
+    # 끝까지 돌고 fold 생성·rule_signature 가 config 신필드(decile/유동성)와 일치. canonical 경로와
+    # 동일 코드(축소 lookback)라 8hr 전 wiring 버그(빈 fold·signature 발산)를 분 단위로 차단.
+    days = _weekdays(date(2018, 1, 1), 400)
+    n = 30
+    series = {
+        f"T{i:02d}": [PricePoint(d, Decimal(100 + i + j)) for j, d in enumerate(days)]
+        for i in range(n)
+    }
+    port = FakePriceSeriesPort(series)
+    uni = FakeUniversePort(listed={tk: date(2017, 1, 1) for tk in series}, delisted={})
+    ident = StubIdentityResolver({})
+    cfg = _cfg(
+        days,
+        strategy_name="top_decile_equal_weight",
+        lookback_days=10,
+        skip_recent_days=2,
+        cost_bps=Decimal("10"),
+        portfolio_pct=Decimal("0.1"),
+        decile_min_holdings=5,
+    )
+    strat = TopDecileEqualWeight(pct=Decimal("0.1"), min_holdings=5)
+    r = run_s6_gate(
+        cfg,
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=strat,
+        liquidity_port=_NOLIQ,
+        delisted_ratio=0.5,
+        verify_passed=True,
+        n_folds=2,
+        purge_gap_days=12,
+    )
+    assert isinstance(r, S6GateResult)
+    assert r.n_folds > 0  # decile 경로가 실제 fold 생성(빈 폴드면 배선 미작동)
+    # signature 가 decile/유동성 신필드 반영(compute_rule_signature 동일 구성).
+    assert r.rule_signature == compute_rule_signature(
+        strategy_name=cfg.strategy_name,
+        top_n=cfg.top_n,
+        lookback_days=cfg.lookback_days,
+        skip_recent_days=cfg.skip_recent_days,
+        rebalance_freq=cfg.rebalance_freq,
+        delisting_recovery_rate=cfg.delisting_recovery_rate,
+        group_by_exchange=cfg.group_by_exchange,
+        period_return_cap=cfg.period_return_cap,
+        portfolio_pct=cfg.portfolio_pct,
+        decile_min_holdings=cfg.decile_min_holdings,
+        min_price_floor=cfg.min_price_floor,
+        min_adv_dollar=cfg.min_adv_dollar,
+        adv_window_days=cfg.adv_window_days,
+    )
