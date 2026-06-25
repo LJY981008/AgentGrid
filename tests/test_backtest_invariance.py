@@ -12,9 +12,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from stockpick.backtest.adapters import (
+    DuckDBLiquidityPort,
     DuckDBPriceSeriesPort,
     ParquetPriceSeriesPort,
     _close_price_port,
+    _reset_ports,
 )
 from stockpick.backtest.benchmark import equal_weight_universe
 from stockpick.backtest.config import BacktestConfig
@@ -238,3 +240,64 @@ def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
             == b_parq.n_delisted_liquidations
             == b_fake.n_delisted_liquidations
         ), f"bench gbe={gbe}"
+
+
+# ── MEM-fix: 연결 reset(close+reconnect+malloc_trim)는 결과 불변(누적 메모리만 해제) ──
+
+
+def test_duckdb_price_port_reset_is_result_invariant(tmp_path: Path) -> None:
+    # reset = 같은 read-only cache 재연결 → 같은 쿼리 같은 결과(연결 버퍼만 해제·결과 불변).
+    series, days, _exch, _uni, _idn, _strat = _scenario(tmp_path)
+    build_cache(tmp_path)
+    port = DuckDBPriceSeriesPort(tmp_path)
+    try:
+        td = port.trading_days()
+        lr = port.load_range(tickers={"A", "B"}, start=days[0], end=days[-1])
+        ms = port.momentum_scores(
+            tickers={"A", "B"}, as_of=days[-1], lookback_days=5, skip_recent_days=0
+        )
+        port.reset()
+        assert port.trading_days() == td
+        assert port.load_range(tickers={"A", "B"}, start=days[0], end=days[-1]) == lr
+        assert (
+            port.momentum_scores(
+                tickers={"A", "B"}, as_of=days[-1], lookback_days=5, skip_recent_days=0
+            )
+            == ms
+        )
+    finally:
+        _close_price_port(port)
+
+
+def test_duckdb_liquidity_port_reset_is_result_invariant(tmp_path: Path) -> None:
+    series, days, *_rest = _scenario(tmp_path)
+    build_cache(tmp_path)
+    port = DuckDBLiquidityPort(tmp_path, min_price=Decimal("1"), min_adv=Decimal("1"), window=3)
+    try:
+        before = port.liquid_tickers(as_of=days[-1], candidates={"A", "B", "C"})
+        port.reset()
+        after = port.liquid_tickers(as_of=days[-1], candidates={"A", "B", "C"})
+        assert after == before
+    finally:
+        port.close()
+
+
+def test_reset_ports_noop_on_fake() -> None:
+    # Fake 포트는 reset 없음 → _reset_ports 가 isinstance 분기로 no-op(예외 없음).
+    _reset_ports(FakePriceSeriesPort({}), FakeLiquidityPort(None))
+
+
+def test_reset_ports_resets_duckdb_queries_still_work(tmp_path: Path) -> None:
+    series, days, *_rest = _scenario(tmp_path)
+    build_cache(tmp_path)
+    price = DuckDBPriceSeriesPort(tmp_path)
+    liq = DuckDBLiquidityPort(tmp_path, min_price=Decimal("1"), min_adv=Decimal("1"), window=3)
+    try:
+        _reset_ports(price, liq)  # 둘 다 reset + malloc_trim
+        assert price.trading_days()  # 연결 살아있음
+        assert isinstance(liq.liquid_tickers(as_of=days[-1], candidates={"A", "B"}), set)
+    finally:
+        _close_price_port(price)
+        liq.close()
+
+

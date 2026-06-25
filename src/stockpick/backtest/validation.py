@@ -14,6 +14,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from .adapters import _reset_ports
 from .engine import run
 from .metrics import GuardReport
 
@@ -138,6 +139,8 @@ def walk_forward(
             strategy=strategy,
             liquidity_port=liquidity_port,
         )
+        # MEM-fix: 긴 IS run 누적 버퍼/단편화를 OOS 전 해제(DuckDB 포트만·Fake no-op·결과 불변).
+        _reset_ports(price_port, liquidity_port)
         oos_res = run(
             oos_cfg,
             price_port=price_port,
@@ -146,6 +149,7 @@ def walk_forward(
             strategy=strategy,
             liquidity_port=liquidity_port,
         )
+        _reset_ports(price_port, liquidity_port)  # fold 경계 — 다음 fold/비용 변동 전 누적 0
         guard = decay_ratio(
             is_sharpe=is_res.sharpe, oos_sharpe=oos_res.sharpe, purge_gap_days=purge
         )

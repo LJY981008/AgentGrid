@@ -19,6 +19,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .adapters import _reset_ports
 from .benchmark import equal_weight_universe
 from .config import (
     _DEFAULT_ADV_WINDOW_DAYS,
@@ -395,6 +396,7 @@ def run_s6_gate(
             liquidity_port=liquidity_port,
         )
         excesses.append(float(f.oos_result.total_return - bench.total_return))
+        _reset_ports(price_port, liquidity_port)  # MEM-fix: 벤치 누적 버퍼 해제(fold 마다)
 
     # G-5b: 누적 폐지청산(생존편향 가드 발동 증거).
     cum_delisted = sum(f.oos_result.n_delisted_liquidations for f in baseline_folds)

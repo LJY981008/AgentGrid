@@ -127,6 +127,16 @@ class DuckDBPriceSeriesPort:
         """read_only 연결 해제(팩토리/백테스트 종료 시 호출)."""
         self._con.close()
 
+    def reset(self) -> None:
+        """연결 재생성(close+reconnect) — 누적 버퍼풀 해제(MEM-fix). 결과 불변(같은 cache 재연결).
+
+        ⚠️ 재사용 연결은 쿼리마다 버퍼풀에 페이지를 캐시·DuckDB 내부 메모리라 malloc_trim 무효(실측:
+        연결 close 시에만 1.6GB→0.1GB 해제). walk_forward 가 run 사이 호출해 12+ 백테스트 누적 OOM
+        차단(`_reset_ports`). 같은 base_dir 재연결이라 trading_days/load_range/momentum_scores 불변.
+        """
+        self._con.close()
+        self._con = duckdb_cache.connect_readonly(self._base_dir)
+
     def load(self, *, as_of: date) -> dict[str, list[PricePoint]]:
         rows = self._con.execute(_SQL_LOAD_AS_OF, {"a": as_of}).fetchall()
         return _series_from_price_rows(rows)
@@ -324,6 +334,7 @@ class DuckDBLiquidityPort:
     def __init__(
         self, base_dir: Path, *, min_price: Decimal, min_adv: Decimal, window: int
     ) -> None:
+        self._base_dir = base_dir
         self._con = duckdb_cache.connect_readonly(base_dir)
         self._min_price = min_price
         self._min_adv = min_adv
@@ -331,6 +342,11 @@ class DuckDBLiquidityPort:
 
     def close(self) -> None:
         self._con.close()
+
+    def reset(self) -> None:
+        """연결 재생성(MEM-fix) — 누적 버퍼풀 해제. 결과 불변(같은 cache·임계 유지)."""
+        self._con.close()
+        self._con = duckdb_cache.connect_readonly(self._base_dir)
 
     def liquid_tickers(self, *, as_of: date, candidates: set[str]) -> set[str]:
         return duckdb_cache.query_liquid_tickers(
@@ -424,3 +440,34 @@ def _close_price_port(port: PriceSeriesPort) -> None:
     """DuckDBPriceSeriesPort read_only 연결 해제(Parquet 포트는 no-op). 호출부 finally 에서 사용."""
     if isinstance(port, DuckDBPriceSeriesPort):
         port.close()
+
+
+def _malloc_trim() -> None:
+    """glibc 프리메모리를 OS 로 반환(load_range Decimal 단편화 누적 해소). 비-glibc/실패 = no-op.
+
+    연결 reset 직후 호출 — DuckDB 버퍼는 close 로, python 프리메모리는 trim 으로 회수(둘 다 필요·
+    실측: 단일 1패스 7GB peak 중 ~5GB 가 python 단편화·연결버퍼 합산). 진단 도구 아님(운영 경로).
+    """
+    import ctypes
+    import ctypes.util
+
+    try:
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
+        libc.malloc_trim(0)
+    except (OSError, AttributeError):
+        logger.debug("malloc_trim 미지원(비-glibc) — no-op")
+
+
+def _reset_ports(price_port: PriceSeriesPort, liquidity_port: LiquidityPort) -> None:
+    """walk_forward 가 run() 사이 호출 — DuckDB 연결 버퍼풀 + python 프리메모리 누적 해제(OOM 차단).
+
+    MEM-fix(실측·debugging-discipline): 12+ 백테스트를 같은 read_only 연결로 돌리면 버퍼풀이 누적
+    (close 시에만 해제·malloc_trim 무효). run 사이 reset 으로 각 run peak(~7GB·단일 1패스 12g 완주
+    입증)로 바운드 → 누적 OOM 제거. DuckDB 포트만 reset(Fake/Parquet 은 no-op·결과 불변). 호출부는
+    run() 반환 직후(반환값은 이미 물질화돼 reset 안전).
+    """
+    if isinstance(price_port, DuckDBPriceSeriesPort):
+        price_port.reset()
+    if isinstance(liquidity_port, DuckDBLiquidityPort):
+        liquidity_port.reset()
+    _malloc_trim()
