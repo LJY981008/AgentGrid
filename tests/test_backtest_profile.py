@@ -15,6 +15,7 @@ from stockpick.backtest.benchmark import equal_weight_universe
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
@@ -22,6 +23,8 @@ from stockpick.backtest.fakes import (
 from stockpick.backtest.profile_types import PhaseTimer
 from stockpick.backtest.strategy import EqualWeightTopN
 from stockpick.rules._scan import PricePoint
+
+_NOLIQ = FakeLiquidityPort(None)  # 필터 off — 계측 결과불변 봉인(양쪽 동일 주입)
 
 
 def _weekdays(start: date, n: int) -> list[date]:
@@ -67,7 +70,12 @@ def test_run_profile_result_invariant() -> None:
     """엔진: profile=None vs PhaseTimer() — phase_profile 외 전 필드 bit-identical(BLOCKING)."""
     series, cfg, uni, idn, strat = _scenario()
     r_none = run(
-        cfg, price_port=FakePriceSeriesPort(series), universe_port=uni, identity=idn, strategy=strat
+        cfg,
+        price_port=FakePriceSeriesPort(series),
+        universe_port=uni,
+        identity=idn,
+        strategy=strat,
+        liquidity_port=_NOLIQ,
     )
     timer = PhaseTimer()
     r_prof = run(
@@ -76,6 +84,7 @@ def test_run_profile_result_invariant() -> None:
         universe_port=uni,
         identity=idn,
         strategy=strat,
+        liquidity_port=_NOLIQ,
         profile=timer,
     )
     assert replace(r_prof, phase_profile=None) == r_none  # 계측이 결과 안 바꿈
@@ -91,10 +100,16 @@ def test_run_profile_result_invariant() -> None:
 def test_bench_profile_result_invariant() -> None:
     """벤치: profile=None vs PhaseTimer() — bit-identical + members/bench_hold phase 키."""
     series, cfg, uni, _idn, _strat = _scenario()
-    b_none = equal_weight_universe(cfg, price_port=FakePriceSeriesPort(series), universe_port=uni)
+    b_none = equal_weight_universe(
+        cfg, price_port=FakePriceSeriesPort(series), universe_port=uni, liquidity_port=_NOLIQ
+    )
     timer = PhaseTimer()
     b_prof = equal_weight_universe(
-        cfg, price_port=FakePriceSeriesPort(series), universe_port=uni, profile=timer
+        cfg,
+        price_port=FakePriceSeriesPort(series),
+        universe_port=uni,
+        liquidity_port=_NOLIQ,
+        profile=timer,
     )
     assert replace(b_prof, phase_profile=None) == b_none
     pp = b_prof.phase_profile

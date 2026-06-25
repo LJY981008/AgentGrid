@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from decimal import Decimal
 
     from .config import BacktestConfig
-    from .ports import IdentityResolver, PriceSeriesPort, UniversePort
+    from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
     from .strategy import Strategy
     from .validation import Fold
 
@@ -78,6 +78,7 @@ def walk_forward_by_cost(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
     cost_bps_variants: tuple[Decimal, ...] | None = None,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
@@ -86,7 +87,7 @@ def walk_forward_by_cost(
 
     run_s6_gate(Task2) 가 baseline 비용 fold 를 재사용(G-1/G-2/G-3)하고 전 비용을 G-6 에 쓰므로
     fold 를 그대로 반환(decay 만 반환하면 재계산 낭비). 비용은 회전분에만 작용(turnover×bps)이라
-    각 비용이 독립 백테스트.
+    각 비용이 독립 백테스트. liquidity_port(ADR-010)는 전 비용 변동에 동일 주입(필터 일관).
     """
     variants = cost_bps_variants if cost_bps_variants is not None else _default_cost_variants()
     logger.info("비용 민감도 워크포워드 시작: variants=%s, n_folds=%d", variants, n_folds)
@@ -97,6 +98,7 @@ def walk_forward_by_cost(
             universe_port=universe_port,
             identity=identity,
             strategy=strategy,
+            liquidity_port=liquidity_port,
             n_folds=n_folds,
             purge_gap_days=purge_gap_days,
         )
@@ -117,6 +119,7 @@ def sensitivity_analysis(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
     cost_bps_variants: tuple[Decimal, ...] | None = None,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
@@ -132,6 +135,7 @@ def sensitivity_analysis(
         universe_port=universe_port,
         identity=identity,
         strategy=strategy,
+        liquidity_port=liquidity_port,
         cost_bps_variants=cost_bps_variants,
         n_folds=n_folds,
         purge_gap_days=purge_gap_days,
@@ -259,6 +263,7 @@ def _reproducible(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
 ) -> bool:
     """G-8 — baseline fold 중 OOS 최단 구간 재실행해 bit-identical 확인(결정성). fold 없으면 False.
 
@@ -276,6 +281,7 @@ def _reproducible(
         universe_port=universe_port,
         identity=identity,
         strategy=strategy,
+        liquidity_port=liquidity_port,
     )
     return rerun == f.oos_result
 
@@ -287,6 +293,7 @@ def run_s6_gate(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
     delisted_ratio: float,
     verify_passed: bool,
     n_folds: int = _N_FOLDS,
@@ -350,6 +357,7 @@ def run_s6_gate(
         universe_port=universe_port,
         identity=identity,
         strategy=strategy,
+        liquidity_port=liquidity_port,
         cost_bps_variants=variants,
         n_folds=n_folds,
         purge_gap_days=purge_gap_days,
@@ -365,6 +373,7 @@ def run_s6_gate(
             replace(config, cost_bps=baseline, start=f.oos_start, end=f.oos_end),
             price_port=price_port,
             universe_port=universe_port,
+            liquidity_port=liquidity_port,
         )
         excesses.append(float(f.oos_result.total_return - bench.total_return))
 
@@ -380,6 +389,7 @@ def run_s6_gate(
         universe_port=universe_port,
         identity=identity,
         strategy=strategy,
+        liquidity_port=liquidity_port,
     )
 
     result = evaluate_criteria(
@@ -616,7 +626,9 @@ def main(argv: list[str] | None = None) -> int:
     from ..data import configure_logging
     from .adapters import (
         MasterUniverse,
+        _close_liquidity_port,
         _close_price_port,
+        _select_liquidity_port,
         _select_price_port,
         _select_universe,
     )
@@ -664,16 +676,28 @@ def main(argv: list[str] | None = None) -> int:
             )
             delisted_ratio = 0.0
         config = canonical_gate_config(start=days[0], end=days[-1])
-        result = run_s6_gate(
-            config,
-            price_port=price_port,
-            universe_port=universe,
-            identity=EdgarSnapshotResolver(base_dir),
-            strategy=EqualWeightTopN(),
-            delisted_ratio=delisted_ratio,
-            verify_passed=verify_passed,
-            n_folds=args.n_folds,
+        # 유동성 포트(ADR-010) — cache.duckdb(volume) 기반. 부재면 Noop(필터 off·WARNING·H2 거짓PASS
+        # 위험) → CLI 는 `bulk --finalize` 로 cache 선행 전제. 끝나면 close(연결 해제).
+        liquidity = _select_liquidity_port(
+            base_dir,
+            min_price=config.min_price_floor,
+            min_adv=config.min_adv_dollar,
+            window=config.adv_window_days,
         )
+        try:
+            result = run_s6_gate(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                identity=EdgarSnapshotResolver(base_dir),
+                strategy=EqualWeightTopN(),
+                liquidity_port=liquidity,
+                delisted_ratio=delisted_ratio,
+                verify_passed=verify_passed,
+                n_folds=args.n_folds,
+            )
+        finally:
+            _close_liquidity_port(liquidity)
     finally:
         _close_price_port(price_port)
 

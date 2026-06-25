@@ -12,8 +12,8 @@ from dataclasses import replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from . import calendar
-from .engine import _holding_period_return, _window_start
+from . import calendar, costs
+from .engine import _holding_period_return, _turnover, _window_start
 from .metrics import compute_metrics
 from .profile_types import timed
 
@@ -22,15 +22,16 @@ if TYPE_CHECKING:
 
     from .config import BacktestConfig
     from .metrics import BacktestResult
-    from .ports import PriceSeriesPort, UniversePort
+    from .ports import LiquidityPort, PriceSeriesPort, UniversePort
     from .profile_types import PhaseTimer
 
 logger = logging.getLogger(__name__)
 
 _PERIODS_PER_YEAR = {"monthly": 12, "quarterly": 4}
 _BENCH_CAVEAT = (
-    "벤치=등가중 전체 유니버스(폐지 포함·무비용=이론 상한). ⚠️ 멤버=거래가능 전체"
-    "(룰은 모멘텀 산출가능 top_n — 워밍업 구간 풀 상이) · 키=ticker(cik 앵커 아님, "
+    "벤치=등가중 유동 유니버스(폐지 포함·전략과 동일 cost_bps·동일 유동성 필터·ADR-010 #5). "
+    "⚠️ 등가중=small-cap 틸트(momentum 낙관편향·G-3 판정 시 caveat) · 멤버=거래가능·유동 전체"
+    "(룰은 momentum 산출가능 decile/top_n — 워밍업 구간 풀 상이) · 키=ticker(cik 앵커 아님, "
     "ticker_history 도입 후 정규화). S&P500 historical constituents 는 후속(결제 후)."
 )
 
@@ -40,9 +41,18 @@ def equal_weight_universe(
     *,
     price_port: PriceSeriesPort,
     universe_port: UniversePort,
+    liquidity_port: LiquidityPort,
     profile: PhaseTimer | None = None,
 ) -> BacktestResult:
-    """매 리밸 as_of=t 거래가능 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계.
+    """매 리밸 as_of=t 거래가능·**유동** 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계.
+
+    liquidity_port(ADR-010·필수): `tradable &= liquid_tickers(t, tradable)` 로 엔진(_rank_at)과
+    **대칭** 유동성 필터 적용(동일 as_of·candidates). 비유동 microcap 을 벤치에서도 동일하게 배제해
+    공정 비교(필터 비대칭이면 G-3 초과가 인공적).
+
+    비용(M2·ADR-010 #5): 등가중 멤버십 회전(turnover)에 **전략과 동일 `config.cost_bps`** 부과 —
+    무비용 벤치(이론 상한)는 불공정이라 폐기. 엔진과 동일 회계(`_turnover`·`apply_cost_fraction`·
+    진입 전 equity 차감). prev 멤버십과 동일하면 turnover 0(비용 없음)·첫 진입/멤버십 변동분만 과금.
 
     멤버십은 `tickers_with_data`(DISTINCT ticker·가격 미물질화·Task7 최적화), 보유수익은 보유종목
     × [entry,exit] 만 `load_range`(full_series·load(as_of) 전체 OOM 회피).
@@ -59,7 +69,10 @@ def equal_weight_universe(
     equity = Decimal(1)
     curve: list[tuple[date, Decimal]] = []
     period_returns: list[Decimal] = []
+    turnover_total = Decimal(0)
+    cost_total = Decimal(0)
     n_delisted = 0
+    prev_weights: dict[str, Decimal] = {}
     if plan.anchor is not None:
         curve.append((plan.anchor, equity))
 
@@ -67,14 +80,24 @@ def equal_weight_universe(
         if profile is not None:
             profile.tick_rebalance()
         tradable = universe_port.constituents(as_of=t)
+        tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)  # 엔진과 대칭
         # 멤버십만 필요(가격 미사용) — load_range PricePoint 물질화 회피·키집합 동치(Task7 finding).
         with timed(profile, "members"):
             members = price_port.tickers_with_data(
                 tickers=tradable, start=_window_start(config, t), end=t
             )
+        weights = (
+            {tk: Decimal(1) / Decimal(len(members)) for tk in members} if members else {}
+        )
+        # 비용: 회전(turnover)분에만(엔진과 동일·M2 동일비용 벤치). 진입 전 equity_before 기준 차감.
+        turnover = _turnover(prev_weights, weights)
+        cost_frac = costs.apply_cost_fraction(turnover, config.cost_bps)
+        cost_amount = equity * cost_frac
+        equity -= cost_amount
+        turnover_total += turnover
+        cost_total += cost_amount
+
         if members:
-            w = Decimal(1) / Decimal(len(members))
-            weights = {tk: w for tk in members}
             key_to_ticker = {tk: tk for tk in members}
             with timed(profile, "bench_hold"):
                 held = price_port.load_range(tickers=members, start=entry_day, end=exit_day)
@@ -94,14 +117,21 @@ def equal_weight_universe(
         equity *= Decimal(1) + pret
         period_returns.append(pret)
         curve.append((exit_day, equity))
+        prev_weights = weights
 
-    logger.info("벤치(등가중 유니버스) 완료: 기간=%d, 폐지청산=%d", len(period_returns), n_delisted)
+    logger.info(
+        "벤치(등가중 유동 유니버스) 완료: 기간=%d, 폐지청산=%d, 총회전=%s, 총비용=%s",
+        len(period_returns),
+        n_delisted,
+        turnover_total,
+        cost_total,
+    )
     return compute_metrics(
         curve,
         period_returns,
         periods_per_year=_PERIODS_PER_YEAR[config.rebalance_freq],
-        turnover_total=Decimal(0),
-        cost_total=Decimal(0),
+        turnover_total=turnover_total,
+        cost_total=cost_total,
         n_rebalances=len(period_returns),
         n_delisted=n_delisted,
         benchmark_returns={},

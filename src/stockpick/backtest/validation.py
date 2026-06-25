@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from .config import BacktestConfig
     from .metrics import BacktestResult
-    from .ports import IdentityResolver, PriceSeriesPort, UniversePort
+    from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
     from .strategy import Strategy
 
 
@@ -89,6 +89,7 @@ def walk_forward(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
 ) -> list[Fold]:
@@ -96,6 +97,7 @@ def walk_forward(
 
     purge_gap_days 기본 = lookback_days + skip_recent_days(OOS 룩백이 IS 침범 차단). IS 길이가
     부족한 fold(lookback 미만)는 건너뛴다(조용한 추측 금지 — 빈 fold 생성 안 함).
+    liquidity_port(ADR-010): IS·OOS run 양쪽에 동일 주입(필터 일관·엔진/벤치 대칭).
     """
     if n_folds < 1:
         msg = f"n_folds 는 1 이상(받음={n_folds})"
@@ -134,6 +136,7 @@ def walk_forward(
             universe_port=universe_port,
             identity=identity,
             strategy=strategy,
+            liquidity_port=liquidity_port,
         )
         oos_res = run(
             oos_cfg,
@@ -141,6 +144,7 @@ def walk_forward(
             universe_port=universe_port,
             identity=identity,
             strategy=strategy,
+            liquidity_port=liquidity_port,
         )
         guard = decay_ratio(
             is_sharpe=is_res.sharpe, oos_sharpe=oos_res.sharpe, purge_gap_days=purge

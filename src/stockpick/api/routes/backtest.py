@@ -21,7 +21,13 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
-from ...backtest.adapters import _close_price_port, _select_price_port, _select_universe
+from ...backtest.adapters import (
+    _close_liquidity_port,
+    _close_price_port,
+    _select_liquidity_port,
+    _select_price_port,
+    _select_universe,
+)
 from ...backtest.benchmark import attach_benchmarks, equal_weight_universe
 from ...backtest.config import BacktestConfig
 from ...backtest.engine import run as run_backtest
@@ -100,14 +106,30 @@ def backtest(
             start=days[0],
             end=days[-1],
         )
-        result = run_backtest(
-            config,
-            price_port=price_port,
-            universe_port=universe,
-            identity=identity,  # EdgarSnapshotResolver(저장본 없으면 빈 맵→cik="" 폴백)
-            strategy=_STRATEGIES[strategy],
+        # 유동성 포트(ADR-010) — cache 있으면 DuckDB·없으면 Noop(필터 off·WARNING). 요청당 생성.
+        liquidity = _select_liquidity_port(
+            base_dir,
+            min_price=config.min_price_floor,
+            min_adv=config.min_adv_dollar,
+            window=config.adv_window_days,
         )
-        bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
+        try:
+            result = run_backtest(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                identity=identity,  # EdgarSnapshotResolver(저장본 없으면 빈 맵→cik="" 폴백)
+                strategy=_STRATEGIES[strategy],
+                liquidity_port=liquidity,
+            )
+            bench = equal_weight_universe(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                liquidity_port=liquidity,
+            )
+        finally:
+            _close_liquidity_port(liquidity)
         result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
     finally:
         _close_price_port(price_port)  # DuckDB read_only 연결 해제(요청당 생성·누수 방지)

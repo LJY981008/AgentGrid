@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from ..types import Exchange, TopEntry
     from .config import BacktestConfig
     from .metrics import BacktestResult
-    from .ports import IdentityResolver, PriceSeriesPort, UniversePort
+    from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
     from .profile_types import PhaseTimer
     from .strategy import Strategy
 
@@ -49,9 +49,14 @@ def run(
     universe_port: UniversePort,
     identity: IdentityResolver,
     strategy: Strategy,
+    liquidity_port: LiquidityPort,
     profile: PhaseTimer | None = None,
 ) -> BacktestResult:
     """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터).
+
+    liquidity_port(ADR-010·필수): 매 리밸 거래가능 유니버스를 PIT 유동성 필터(close≥$5·ADV20≥$1M)
+    로 좁힌다 — 벤치(equal_weight_universe)와 **대칭**(동일 as_of·동일 candidates 규약). 필터 끄려면
+    FakeLiquidityPort(None)/_NoopLiquidityPort 명시 주입(조용한 skip 금지 — required 라 누락 불가).
 
     profile(선택) 주입 시 phase(rank/hold_load/hold_return)별 wall 을 누적 — **결과 불변**(계측만·
     관측용). 미주입(기본 None)이면 계측 0(stdlib `timed` 가 즉시 yield). 모듈경계: prometheus 무관.
@@ -81,7 +86,9 @@ def run(
         if profile is not None:
             profile.tick_rebalance()  # 라이브 진행 곡선(계측만·결과 무관)
         with timed(profile, "rank"):
-            ranked = _rank_at(config, price_port, universe_port, identity, exchanges, t)
+            ranked = _rank_at(
+                config, price_port, universe_port, identity, exchanges, t, liquidity_port
+            )
         weights = strategy.weights(ranked, as_of=t)
         key_to_ticker = {(e.cik or e.ticker): e.ticker for e in ranked}
 
@@ -157,8 +164,16 @@ def _rank_at(
     identity: IdentityResolver,
     exchanges: Mapping[str, Exchange],
     t: date,
+    liquidity_port: LiquidityPort,
 ) -> list[TopEntry]:
     """as_of=t 랭킹. survivorship: constituents(as_of=t) 교집합(가격파일 존재 아님). cik enrich.
+
+    유동성(ADR-010): `tradable &= liquidity_port.liquid_tickers(t, tradable)` 로 PIT 유동 종목만
+    랭킹 후보(벤치와 대칭·룩어헤드 ≤t). microcap penny·비유동 분모붕괴 배제(2차 폭발 해소).
+
+    포트크기: `config.portfolio_pct` 설정 시 **decile 모드** — rank 절단 없이(top_n=후보수) 전
+    후보를 전략(TopDecileEqualWeight)에 넘겨 상위 pct 선택. None 이면 고정 `config.top_n` 절단.
+    decile 분모 = 유동 필터 통과 후 momentum 산출 후보 수(M1·전체 유니버스 아님).
 
     load_range(tradable, [_window_start(t), t]) 로 거래가능 종목 × 랭킹 윈도우만 로드(load(as_of)
     전 종목 t 이하 전체 OOM 회피). 룩어헤드 상한 ≤t 유지·tradable 푸시필터. 결과 불변(momentum
@@ -167,6 +182,7 @@ def _rank_at(
     members 와 동일 계열).
     """
     tradable = universe_port.constituents(as_of=t)
+    tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)
     if isinstance(price_port, MomentumScorePort):
         # SQL 부분 푸시다운(ADR-007) — 끝점 2점만 스캔(1억행 풀로드 회피).
         # load_range+momentum_universe 와 bit-identical(windowed wn·Task2/5 봉인·윈도우 동일 출처).
@@ -190,11 +206,18 @@ def _rank_at(
     ticker_to_exchange = {
         k: ex for k, ex in exchanges.items() if k in scores and scores[k].score is not None
     }
+    # decile 모드면 rank 절단 없이 전 후보(top_n=후보수) → 전략이 상위 pct 선택(분모=후보수·M1).
+    # 고정 모드면 config.top_n 절단. 후보수 = momentum 산출(score!=None) 종목 수.
+    if config.portfolio_pct is not None:
+        n_candidates = sum(1 for ms in scores.values() if ms.score is not None)
+        rank_top_n = max(1, n_candidates)
+    else:
+        rank_top_n = config.top_n
     ranked = rank_by_momentum(
         scores,
         ticker_to_exchange,
         lookback_days=config.lookback_days,
-        top_n=config.top_n,
+        top_n=rank_top_n,
         group_by_exchange=config.group_by_exchange,
     )
     # cik 앵커 enrich(가능 시) — 생존편향 ticker 재사용 오조인 방지. 미해소면 "" 유지(caveat).

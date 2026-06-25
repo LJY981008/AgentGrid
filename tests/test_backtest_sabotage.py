@@ -8,12 +8,16 @@ from decimal import Decimal
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
 )
 from stockpick.backtest.strategy import EqualWeightTopN
 from stockpick.rules._scan import PricePoint
+
+# 필터 off(전 종목 유동) — 유동성 외 가드(룩어헤드·생존편향) 테스트는 필터 무관(전종목 통과).
+_NOLIQ = FakeLiquidityPort(None)
 
 
 def _weekdays(start: date, n: int) -> list[date]:
@@ -62,6 +66,7 @@ def test_lookahead_future_beyond_horizon_does_not_change_result() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
     )
     # sabotage: horizon 이후 미래에 A 가격을 폭등시켜 추가(누설되면 결과 바뀜)
     spiked = [
@@ -74,6 +79,7 @@ def test_lookahead_future_beyond_horizon_does_not_change_result() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
     )
     assert r_base.total_return == r_spiked.total_return
     assert r_base.equity_curve == r_spiked.equity_curve
@@ -99,6 +105,7 @@ def test_survivorship_excluding_delisted_changes_metrics() -> None:
         universe_port=uni_incl,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
     )
     # 제외: B 만(폐지 A 를 유니버스에서 빼버린 생존편향 시나리오)
     uni_excl = FakeUniversePort(listed={"B": date(2023, 1, 1)}, delisted={})
@@ -108,6 +115,7 @@ def test_survivorship_excluding_delisted_changes_metrics() -> None:
         universe_port=uni_excl,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
     )
     # 금액 봉인(차이만이 아니라 정확값): 폐지 A(recovery 0) 포함 → 전액 손실 -1.
     # 제외(B 평탄만) → 무손익 0. 발동 여부가 아니라 발동 금액을 봉인.
@@ -136,7 +144,7 @@ def test_rank_at_ignores_future_data() -> None:
     b_spiked = [p if p.trade_date <= t else PricePoint(p.trade_date, Decimal("999999")) for p in b]
     spiked = FakePriceSeriesPort({"A": a, "B": b_spiked})
 
-    r_base = _rank_at(cfg, base, uni, ident, base.ticker_exchanges(), t)
-    r_spiked = _rank_at(cfg, spiked, uni, ident, spiked.ticker_exchanges(), t)
+    r_base = _rank_at(cfg, base, uni, ident, base.ticker_exchanges(), t, _NOLIQ)
+    r_spiked = _rank_at(cfg, spiked, uni, ident, spiked.ticker_exchanges(), t, _NOLIQ)
     assert [e.ticker for e in r_base] == [e.ticker for e in r_spiked]
     assert [e.ticker for e in r_base] == ["A", "B"]  # 정상: A 가 #1(미래 무관)

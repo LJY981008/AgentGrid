@@ -28,7 +28,9 @@ from ..data import configure_logging
 from . import engine
 from .adapters import (
     DuckDBPriceSeriesPort,
+    _close_liquidity_port,
     _close_price_port,
+    _select_liquidity_port,
     _select_price_port,
     _select_universe,
 )
@@ -142,15 +144,31 @@ def main() -> int:
             return 0
         config = _build_config(days)
         identity = EdgarSnapshotResolver(base_dir)
-        result = engine.run(
-            config,
-            price_port=price_port,
-            universe_port=universe,
-            identity=identity,
-            strategy=EqualWeightTopN(),
-            profile=timer,
+        liquidity = _select_liquidity_port(
+            base_dir,
+            min_price=config.min_price_floor,
+            min_adv=config.min_adv_dollar,
+            window=config.adv_window_days,
         )
-        equal_weight_universe(config, price_port=price_port, universe_port=universe, profile=timer)
+        try:
+            result = engine.run(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                identity=identity,
+                strategy=EqualWeightTopN(),
+                liquidity_port=liquidity,
+                profile=timer,
+            )
+            equal_weight_universe(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                liquidity_port=liquidity,
+                profile=timer,
+            )
+        finally:
+            _close_liquidity_port(liquidity)
         duckdb_used, duckdb_limit = _duckdb_memory(price_port)
     finally:
         _close_price_port(price_port)

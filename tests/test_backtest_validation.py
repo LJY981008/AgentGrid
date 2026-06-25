@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
@@ -81,6 +82,7 @@ def test_walk_forward_purge_gap_separates_is_oos() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
         n_folds=2,
         purge_gap_days=purge,
     )
@@ -106,6 +108,7 @@ def test_walk_forward_insufficient_data_returns_empty() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
         n_folds=3,
     )
     assert folds == []

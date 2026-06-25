@@ -8,8 +8,9 @@ from decimal import Decimal
 import pytest
 
 from stockpick.backtest.config import BacktestConfig
-from stockpick.backtest.engine import _holding_period_return, run
+from stockpick.backtest.engine import _holding_period_return, _rank_at, run
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
@@ -58,6 +59,7 @@ def test_rising_winner_grows_equity_no_delisting() -> None:
         universe_port=uni,
         identity=StubIdentityResolver({"A": "CIK_A", "B": "CIK_B"}),
         strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
     )
     assert res.total_return > Decimal("0")
     assert res.n_delisted_liquidations == 0
@@ -80,6 +82,7 @@ def test_delisting_during_holding_realizes_total_loss() -> None:
         universe_port=uni,
         identity=StubIdentityResolver({"A": "CIK_A", "B": "CIK_B"}),
         strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
     )
     assert res.n_delisted_liquidations >= 1
     # 금액 봉인: recovery_rate=0 → A(상승추세라 매 리밸 선택) 보유 중 폐지 = 그 기간 -100%
@@ -99,6 +102,7 @@ def test_empty_universe_flat_equity() -> None:
         universe_port=uni,
         identity=StubIdentityResolver({"A": "CIK_A"}),
         strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
     )
     assert res.total_return == Decimal("0")
 
@@ -193,3 +197,74 @@ def test_liquidity_fields_must_be_positive() -> None:
     ):
         with pytest.raises(ValueError, match=field):
             _cfg(days, **{field: val})
+
+
+# --- 유동성 PIT 필터 배선(ADR-010·engine·룩어헤드 ≤t·생존편향 대칭) ---
+
+
+def test_rank_at_applies_liquidity_filter() -> None:
+    # 후보 A,B 둘 다 모멘텀 산출되지만 유동성 포트가 {"A"}만 통과 → 랭킹에서 B 제외(필터 발동).
+    days = _weekdays(date(2024, 1, 1), 40)
+    t = days[20]
+    a = [PricePoint(d, Decimal(100 + i)) for i, d in enumerate(days)]
+    b = [PricePoint(d, Decimal(100 + 3 * i)) for i, d in enumerate(days)]  # 모멘텀 더 강함
+    port = FakePriceSeriesPort({"A": a, "B": b})
+    uni = FakeUniversePort(listed={"A": date(2023, 1, 1), "B": date(2023, 1, 1)}, delisted={})
+    ident = StubIdentityResolver({})
+    cfg = _cfg(days, top_n=2)
+    exch = port.ticker_exchanges()
+    ranked_all = _rank_at(cfg, port, uni, ident, exch, t, FakeLiquidityPort(None))
+    ranked_liq = _rank_at(cfg, port, uni, ident, exch, t, FakeLiquidityPort({"A"}))
+    assert {e.ticker for e in ranked_all} == {"A", "B"}  # 필터 off → 둘 다
+    assert {e.ticker for e in ranked_liq} == {"A"}  # 필터 on → B(비유동) 제외
+
+
+def test_rank_at_decile_mode_returns_full_candidate_pool() -> None:
+    # decile 모드(portfolio_pct 설정): _rank_at 가 top_n 으로 자르지 않고 전 후보 반환(전략이
+    # decile 선택). 고정 모드(portfolio_pct None)는 top_n 절단. M1 분모 = 후보 수.
+    days = _weekdays(date(2024, 1, 1), 40)
+    t = days[20]
+    n = 30
+    series = {
+        f"T{i:02d}": [PricePoint(d, Decimal(100 + i + j)) for j, d in enumerate(days)]
+        for i in range(n)
+    }
+    port = FakePriceSeriesPort(series)
+    uni = FakeUniversePort(listed={tk: date(2023, 1, 1) for tk in series}, delisted={})
+    ident = StubIdentityResolver({})
+    exch = port.ticker_exchanges()
+    nofilter = FakeLiquidityPort(None)
+    ranked_decile = _rank_at(
+        _cfg(days, top_n=5, portfolio_pct=Decimal("0.1")), port, uni, ident, exch, t, nofilter
+    )
+    ranked_fixed = _rank_at(_cfg(days, top_n=5), port, uni, ident, exch, t, nofilter)
+    assert len(ranked_decile) == n  # 전 후보(자르지 않음 → 전략이 decile)
+    assert len(ranked_fixed) == 5  # top_n 절단(고정 모드)
+
+
+def test_liquidity_filter_changes_holdings_end_to_end() -> None:
+    # run() 전 구간: B 모멘텀 최고지만 유동성 {"A"}만 통과 → A 보유. 필터 off 와 결과 달라짐.
+    days = _weekdays(date(2024, 1, 1), 70)
+    a = [PricePoint(d, Decimal(100 + i)) for i, d in enumerate(days)]
+    b = [PricePoint(d, Decimal(100 + 3 * i)) for i, d in enumerate(days)]
+    port = FakePriceSeriesPort({"A": a, "B": b})
+    uni = FakeUniversePort(listed={"A": date(2023, 1, 1), "B": date(2023, 1, 1)}, delisted={})
+    ident = StubIdentityResolver({"A": "CIK_A", "B": "CIK_B"})
+    cfg = _cfg(days, top_n=1)
+    r_all = run(
+        cfg,
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort(None),
+    )
+    r_liq = run(
+        cfg,
+        price_port=port,
+        universe_port=uni,
+        identity=ident,
+        strategy=EqualWeightTopN(),
+        liquidity_port=FakeLiquidityPort({"A"}),
+    )
+    assert r_all.total_return != r_liq.total_return  # 필터가 선택 종목을 바꿈

@@ -20,6 +20,7 @@ from stockpick.backtest.benchmark import equal_weight_universe
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
@@ -108,6 +109,9 @@ def _scenario(
     return series, days, exchanges, uni, StubIdentityResolver({}), EqualWeightTopN()
 
 
+_NOLIQ = FakeLiquidityPort(None)  # 필터 off(port-독립 pass-through) — bit-identical 봉인 유지
+
+
 def _make_cfg(days: list[date], *, group_by_exchange: bool) -> BacktestConfig:
     return BacktestConfig(
         strategy_name="equal_weight_top_n",
@@ -132,6 +136,7 @@ def test_engine_parquet_load_range_matches_fake(tmp_path: Path) -> None:
         universe_port=uni,
         identity=idn,
         strategy=strat,
+        liquidity_port=_NOLIQ,
     )
     r_parq = run(
         cfg,
@@ -139,6 +144,7 @@ def test_engine_parquet_load_range_matches_fake(tmp_path: Path) -> None:
         universe_port=uni,
         identity=idn,
         strategy=strat,
+        liquidity_port=_NOLIQ,
     )
     # 실 DuckDB load_range 경로 == Fake 메모리 경로(결과 불변·폐지청산·갭 동일 처리).
     assert r_parq.equity_curve == r_fake.equity_curve
@@ -169,6 +175,7 @@ def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
             universe_port=uni,
             identity=idn,
             strategy=strat,
+            liquidity_port=_NOLIQ,
         )
         r_parq = run(
             cfg,
@@ -176,10 +183,18 @@ def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
             universe_port=uni,
             identity=idn,
             strategy=strat,
+            liquidity_port=_NOLIQ,
         )
         dport = DuckDBPriceSeriesPort(tmp_path)
         try:
-            r_duck = run(cfg, price_port=dport, universe_port=uni, identity=idn, strategy=strat)
+            r_duck = run(
+                cfg,
+                price_port=dport,
+                universe_port=uni,
+                identity=idn,
+                strategy=strat,
+                liquidity_port=_NOLIQ,
+            )
         finally:
             _close_price_port(dport)
 
@@ -197,14 +212,22 @@ def test_engine_duckdb_port_matches_parquet_and_fake(tmp_path: Path) -> None:
 
         # 벤치(equal_weight_universe·tickers_with_data 멤버십) — 세 포트 bit-identical.
         b_fake = equal_weight_universe(
-            cfg, price_port=FakePriceSeriesPort(series, exchanges), universe_port=uni
+            cfg,
+            price_port=FakePriceSeriesPort(series, exchanges),
+            universe_port=uni,
+            liquidity_port=_NOLIQ,
         )
         b_parq = equal_weight_universe(
-            cfg, price_port=ParquetPriceSeriesPort(tmp_path), universe_port=uni
+            cfg,
+            price_port=ParquetPriceSeriesPort(tmp_path),
+            universe_port=uni,
+            liquidity_port=_NOLIQ,
         )
         bdport = DuckDBPriceSeriesPort(tmp_path)
         try:
-            b_duck = equal_weight_universe(cfg, price_port=bdport, universe_port=uni)
+            b_duck = equal_weight_universe(
+                cfg, price_port=bdport, universe_port=uni, liquidity_port=_NOLIQ
+            )
         finally:
             _close_price_port(bdport)
         assert b_duck.equity_curve == b_parq.equity_curve == b_fake.equity_curve, f"bench gbe={gbe}"

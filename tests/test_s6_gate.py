@@ -11,6 +11,7 @@ import pytest
 from stockpick.backtest.config import BacktestConfig
 from stockpick.backtest.engine import run
 from stockpick.backtest.fakes import (
+    FakeLiquidityPort,
     FakePriceSeriesPort,
     FakeUniversePort,
     StubIdentityResolver,
@@ -40,6 +41,8 @@ from stockpick.data import storage
 from stockpick.data.storage import write_daily_bars
 from stockpick.rules._scan import PricePoint
 from stockpick.types import DailyBar, Exchange
+
+_NOLIQ = FakeLiquidityPort(None)  # 필터 off(전종목 유동) — 게이트 배선·결과불변 검증용
 
 
 def _pass_kwargs() -> dict[str, object]:
@@ -104,6 +107,7 @@ def test_sensitivity_analysis_has_key_per_cost_variant() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         n_folds=2,
         purge_gap_days=5,
     )
@@ -120,7 +124,12 @@ def test_sensitivity_analysis_is_result_invariant() -> None:
 
     def _run() -> object:
         return run(
-            cfg, price_port=port, universe_port=uni, identity=ident, strategy=EqualWeightTopN()
+            cfg,
+            price_port=port,
+            universe_port=uni,
+            identity=ident,
+            strategy=EqualWeightTopN(),
+            liquidity_port=_NOLIQ,
         )
 
     before = _run()
@@ -130,6 +139,7 @@ def test_sensitivity_analysis_is_result_invariant() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         n_folds=2,
         purge_gap_days=5,
     )
@@ -150,6 +160,7 @@ def test_walk_forward_by_cost_threads_distinct_cost_into_each_fold() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         cost_bps_variants=(Decimal("5"), Decimal("15")),
         n_folds=2,
         purge_gap_days=5,
@@ -334,6 +345,7 @@ def test_run_s6_gate_wiring_fails_on_insufficient_folds() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         delisted_ratio=0.5,
         verify_passed=True,
         n_folds=2,
@@ -358,6 +370,7 @@ def test_run_s6_gate_rejects_variants_without_baseline() -> None:
             universe_port=uni,
             identity=ident,
             strategy=EqualWeightTopN(),
+            liquidity_port=_NOLIQ,
             delisted_ratio=0.5,
             verify_passed=True,
             n_folds=2,
@@ -376,6 +389,7 @@ def test_run_s6_gate_rejects_out_of_range_delisted_ratio() -> None:
             universe_port=uni,
             identity=ident,
             strategy=EqualWeightTopN(),
+            liquidity_port=_NOLIQ,
             delisted_ratio=1.5,  # >1
             verify_passed=True,
             n_folds=2,
@@ -560,6 +574,7 @@ def test_walk_forward_yields_n_folds_when_data_sufficient() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         n_folds=10,
         purge_gap_days=5,
     )
@@ -621,6 +636,7 @@ def test_run_s6_gate_short_circuits_when_verify_failed() -> None:
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         delisted_ratio=0.5,
         verify_passed=False,  # 무결성 실패 주입
         n_folds=2,
@@ -652,6 +668,7 @@ def test_run_s6_gate_does_not_call_backtest_when_verify_failed(
         universe_port=uni,
         identity=ident,
         strategy=EqualWeightTopN(),
+        liquidity_port=_NOLIQ,
         delisted_ratio=0.5,
         verify_passed=False,
         n_folds=2,

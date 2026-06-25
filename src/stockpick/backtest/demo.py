@@ -18,7 +18,13 @@ from typing import TYPE_CHECKING
 
 from ..data import configure_logging
 from . import engine
-from .adapters import _close_price_port, _select_price_port, _select_universe
+from .adapters import (
+    _close_liquidity_port,
+    _close_price_port,
+    _select_liquidity_port,
+    _select_price_port,
+    _select_universe,
+)
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
 from .identity import EdgarSnapshotResolver
@@ -58,14 +64,30 @@ def run_demo(base_dir: Path) -> int:
             start=days[0],
             end=days[-1],
         )
-        result = engine.run(
-            config,
-            price_port=price_port,
-            universe_port=universe,
-            identity=identity,
-            strategy=EqualWeightTopN(),
+        # 유동성 포트(ADR-010) — cache 있으면 DuckDB·없으면 Noop(필터 off·WARNING). 끝나면 close.
+        liquidity = _select_liquidity_port(
+            base_dir,
+            min_price=config.min_price_floor,
+            min_adv=config.min_adv_dollar,
+            window=config.adv_window_days,
         )
-        bench = equal_weight_universe(config, price_port=price_port, universe_port=universe)
+        try:
+            result = engine.run(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                identity=identity,
+                strategy=EqualWeightTopN(),
+                liquidity_port=liquidity,
+            )
+            bench = equal_weight_universe(
+                config,
+                price_port=price_port,
+                universe_port=universe,
+                liquidity_port=liquidity,
+            )
+        finally:
+            _close_liquidity_port(liquidity)
         result = attach_benchmarks(result, {"EQUAL_WEIGHT_UNIVERSE": bench})
         _print_report(result, n_tickers=universe.ticker_count())
     finally:
