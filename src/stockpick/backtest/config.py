@@ -47,11 +47,22 @@ class BacktestConfig:
     min_price_floor: Decimal = _DEFAULT_MIN_PRICE_FLOOR
     min_adv_dollar: Decimal = _DEFAULT_MIN_ADV_DOLLAR
     adv_window_days: int = _DEFAULT_ADV_WINDOW_DAYS
+    # 포트폴리오 분산(ADR-010 #3 — top decile). portfolio_pct 설정 시 decile 모드(유동 후보 상위
+    # pct·종목수 가변·top_n 무시), None=고정 top_n. decile_min_holdings = 초기/소형 유니버스 floor.
+    # 둘 다 fingerprint + compute_rule_signature 포함(동결 우회 차단·top_n 과 다른 룰 정체성).
+    portfolio_pct: Decimal | None = None
+    decile_min_holdings: int = 20
 
     def __post_init__(self) -> None:
         # 조용한 오설정 금지(명시 실패). cap<=0 은 모든 수익 음수 뭉갬·유동성 임계 음수=무의미.
         if self.period_return_cap <= 0:
             msg = f"period_return_cap 은 양수여야 함(현재 {self.period_return_cap})"
+            raise ValueError(msg)
+        if self.portfolio_pct is not None and not (0 < self.portfolio_pct <= 1):
+            msg = f"portfolio_pct 는 0<pct<=1 비율이어야 함(현재 {self.portfolio_pct})"
+            raise ValueError(msg)
+        if self.decile_min_holdings <= 0:
+            msg = f"decile_min_holdings 는 양수여야 함(현재 {self.decile_min_holdings})"
             raise ValueError(msg)
         if self.min_price_floor <= 0:
             msg = f"min_price_floor 는 양수여야 함(현재 {self.min_price_floor})"

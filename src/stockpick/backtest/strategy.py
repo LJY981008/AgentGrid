@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -36,6 +37,37 @@ class EqualWeightTopN:
             return {}
         w = Decimal(1) / Decimal(len(ranked))
         return {_key(e): w for e in ranked}
+
+
+class TopDecileEqualWeight:
+    """상위 decile 등가중(ADR-010 #3) — 랭킹된 후보 풀 상위 `pct`(종목수 가변·floor 가드) 등가중.
+
+    표준 momentum 검증 포트(JT 2001류 decile). 입력 `ranked` = **유동성 필터 통과 후 momentum 랭킹된
+    전 후보**(rank 오름차순). 보유수 = `clamp(max(min_holdings, ceil(pct×N)), 1, N)` — `pct×N` 올림
+    (부분 종목 없음)·소형/초기 유니버스는 `min_holdings` floor 로 과집중 방지·전체보다 클 순 없음.
+    분모 N = 후보 수(전체 유니버스 아님·M1). top-5 고정(EqualWeightTopN)과 별도 룰 정체성(name).
+
+    ⚠️ `ranked` 가 평면 단일 랭킹임을 전제(group_by_exchange=False·게이트 정규값). 거래소별 그룹핑
+    리스트면 '이어붙인 리스트 상위 pct'(블록 편중)라 decile 의미가 흐려진다 — 정규 게이트는 평면
+    랭킹이라 무방(엔진이 decile 모드선 group 평면 가정).
+    """
+
+    name = "top_decile_equal_weight"
+
+    def __init__(self, *, pct: Decimal, min_holdings: int) -> None:
+        self._pct = pct
+        self._min_holdings = min_holdings
+
+    def weights(self, ranked: list[TopEntry], *, as_of: date) -> dict[str, Decimal]:  # noqa: ARG002
+        if not ranked:
+            return {}
+        n_total = len(ranked)
+        # pct×N 올림(부분 종목 없음) → floor 와 max → 전체 cap. Decimal×int=Decimal·ceil=int.
+        n = max(self._min_holdings, math.ceil(self._pct * Decimal(n_total)))
+        n = min(n, n_total)
+        selected = ranked[:n]
+        w = Decimal(1) / Decimal(len(selected))
+        return {_key(e): w for e in selected}
 
 
 class ScoreWeightTopN:
