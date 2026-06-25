@@ -43,10 +43,11 @@ S6-b 게이트 첫 판정 `validated=false`. **G-7 블로커(0-price)는 A-1 정
 5. ✅ **ranking-API (c)사후필터**(2-8·7cea0d1): `_select_liquidity_port` 선필터(rules 불변·모듈경계)+route signature 정합.
 6. ✅ **sabotage 대칭 + decile wiring smoke**(2-9·b404425): engine↔bench 유동성 대칭·`run_s6_gate` decile 경로 end-to-end 실측 통과.
 
-### ▶ 남은 작업 (사용자 격리 실행 — 게이트 전 H2 선결 필수)
-0. **🔴 cache 재빌드(volume)** — 위 H2 블로커. app 정지 후 격리 build_cache. **안 하면 sanity/게이트 무효**.
-1. **빠른경로 sanity**: 축소 decile config(최근~20년·2~3 fold)로 R2 excess 수렴(|excess|≤10)·decay 정상화 확인(분 단위·`docker run` 격리). decile wiring smoke 는 합성서 통과 — 실데이터 R2 수렴이 핵심 미지수.
-2. **신뢰구간 게이트 1회**: `canonical_gate_config()`(decile·2000~2026)·app·web 정지·`docker run --memory 20g`·MALLOC_ARENA_MAX=2(H3) → R2 판정 → G-1~G-8 → validated 결정. ⚠️ pre-registration: 패치-재실행 루프 금지(게이트 1회).
+### ▶ 남은 작업 (사용자 격리 실행)
+0. ✅ **cache 재빌드(volume) 완료**(2026-06-25): `build_cache`→98,235,517행·컬럼 `[ticker,trade_date,close,adj_factor,volume]`. H2 해소.
+1. ✅ **빠른경로 sanity 완료**(2026-06-25·격리·실데이터 2020~2026 단일 1패스): 전략 decile total_return −0.189·벤치(동일비용 유동성 등가중) −0.101·**EXCESS −0.0878(|excess| 0.088=O(1))**. 구 e7/e20 폭발 소멸 → **증폭기 제거 실증**(R2 임계 ≤10 안쪽). 부수: decile momentum −8.8%p 언더퍼폼(알파 약함 방향)이나 공정 측정 가능. OOS/decay 미측정(단일 1패스).
+2. **🔴 신뢰구간 게이트 1회(미실행·메모리 선결)**: `canonical_gate_config()`(decile·2000~2026)·walk_forward(IS+OOS×3cost×N fold=다수 백테스트). ⚠️ **단일 1패스도 12g 빠듯**(`engine.run` 리밸 누적 메모리 7GB+·재사용 DuckDB read 연결 버퍼·2 연결×6GB 캡=~12GB=구 native peak 13GB OOM 정체). sanity 는 `STOCKPICK_DUCKDB_MEMORY_LIMIT=2GB`+`MALLOC_ARENA_MAX=2`+격리(uvicorn 제거)로 완주했으나 full 게이트(누적)는 **더 큰 박스(>16g 호스트 여유) 또는 MEM-fix(DuckDB 연결 주기적 재생성/malloc_trim) 선결**. 그 후 R2→G-1~8→validated. pre-registration: 게이트 1회(패치-재실행 루프 금지).
+   - 격리 실행 예: `docker compose run -d --no-deps -v <sanity.py>:/s.py:ro -e STOCKPICK_DATA_DIR=/app/data/parquet -e STOCKPICK_DUCKDB_MEMORY_LIMIT=2GB -e MALLOC_ARENA_MAX=2 app sh -c 'python -u /s.py > /app/data/parquet/out.txt 2>&1; echo EXIT=$? >> ...'` (app·web 정지 후·`docker logs`/`docker cp`로 결과·`oom={{.State.OOMKilled}}` 확인). ⚠️ `docker rm/kill` 은 pre-bash-guard 차단(사용자 정리).
 
 ### ⚠️ 재개 함정 (누락검증 반영·반드시 읽어라)
 - **B1(BLOCKING·flip 영원히-false)**: 게이트 CLI `s6_gate.py`는 `canonical_gate_config(start=days[0], end=days[-1])` 호출 — 함수 기본값이 아직 `top_n=5·lookback126·start=days[0]`. **이 팩토리가 decile signature·R4 flip 정합의 단일 출처** → #4서 기본값을 decile비율·252/21·**2000-01-01** 동결값으로 바꿔야 CLI/route/ranking 3자 signature 일치(안 하면 검증은 decile·signature는 top5 발산→validated 영원히 false). `compute_rule_signature`에 유동성3필드 추가 시 `ranking_rule_signature`·route 동시 갱신.
