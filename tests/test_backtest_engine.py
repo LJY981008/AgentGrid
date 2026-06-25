@@ -173,3 +173,23 @@ def test_period_return_cap_must_be_positive() -> None:
     days = _weekdays(date(2024, 1, 1), 10)
     with pytest.raises(ValueError, match="period_return_cap"):
         _cfg(days, period_return_cap=Decimal("0"))
+
+
+def test_liquidity_fields_in_fingerprint() -> None:
+    # ADR-010 유동성 임계는 유니버스를 바꿈 → 재현성 fingerprint 반영(다르면 다른 해시).
+    days = _weekdays(date(2024, 1, 1), 10)
+    base = _cfg(days).fingerprint()
+    assert _cfg(days, min_price_floor=Decimal("10")).fingerprint() != base
+    assert _cfg(days, min_adv_dollar=Decimal("2000000")).fingerprint() != base
+    assert _cfg(days, adv_window_days=30).fingerprint() != base
+
+
+def test_liquidity_fields_must_be_positive() -> None:
+    days = _weekdays(date(2024, 1, 1), 10)
+    for field, val in (
+        ("min_price_floor", Decimal("0")),
+        ("min_adv_dollar", Decimal("0")),
+        ("adv_window_days", 0),
+    ):
+        with pytest.raises(ValueError, match=field):
+            _cfg(days, **{field: val})

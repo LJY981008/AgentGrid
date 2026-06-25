@@ -18,6 +18,14 @@ from typing import Final
 # 환경변수 조정 가능. cap 은 룰 정체성(compute_rule_signature) 포함 — 비정규 cap 게이트는 flip 차단.
 _DEFAULT_RETURN_CAP: Final = Decimal(os.environ.get("STOCKPICK_RETURN_CAP", "1.0"))
 
+# PIT 유동성 유니버스 필터(ADR-010·게이트 전 동결·외부 시장원칙). raw close(t)≥floor + ADV20≥min_adv
+# 인 종목만 거래가능 유니버스(시점별·생존편향 안전). microcap penny 분모붕괴·비현실 종목 배제.
+#   PRICE=$5(SEC penny 정의·JT 2001) · ADV=$1M(20거래일 mean(close×volume)·하위 비유동 꼬리 제거)
+#   WINDOW=20거래일. 시총하한은 0c(SEC shares ≈0%) 불가 → ADV 프록시 단독.
+_DEFAULT_MIN_PRICE_FLOOR: Final = Decimal(os.environ.get("STOCKPICK_MIN_PRICE", "5"))
+_DEFAULT_MIN_ADV_DOLLAR: Final = Decimal(os.environ.get("STOCKPICK_MIN_ADV", "1000000"))
+_DEFAULT_ADV_WINDOW_DAYS: Final = int(os.environ.get("STOCKPICK_ADV_WINDOW", "20"))
+
 
 @dataclass(frozen=True, slots=True)
 class BacktestConfig:
@@ -35,11 +43,24 @@ class BacktestConfig:
     end: date
     trading_days_per_year: int = 252  # 연환산 상수(현재 metrics 미사용·예약 — 일별 sharpe 도입 시)
     period_return_cap: Decimal = _DEFAULT_RETURN_CAP  # L4 상한 캡(재현성 → fingerprint + rule_sig)
+    # 유동성 PIT 필터(ADR-010·fingerprint + rule_sig 동결). 전부 양수.
+    min_price_floor: Decimal = _DEFAULT_MIN_PRICE_FLOOR
+    min_adv_dollar: Decimal = _DEFAULT_MIN_ADV_DOLLAR
+    adv_window_days: int = _DEFAULT_ADV_WINDOW_DAYS
 
     def __post_init__(self) -> None:
-        # cap<=0 은 모든 수익을 음수로 뭉갬 = 백테스트 무의미. 조용한 오설정 금지(명시 실패).
+        # 조용한 오설정 금지(명시 실패). cap<=0 은 모든 수익 음수 뭉갬·유동성 임계 음수=무의미.
         if self.period_return_cap <= 0:
             msg = f"period_return_cap 은 양수여야 함(현재 {self.period_return_cap})"
+            raise ValueError(msg)
+        if self.min_price_floor <= 0:
+            msg = f"min_price_floor 는 양수여야 함(현재 {self.min_price_floor})"
+            raise ValueError(msg)
+        if self.min_adv_dollar <= 0:
+            msg = f"min_adv_dollar 는 양수여야 함(현재 {self.min_adv_dollar})"
+            raise ValueError(msg)
+        if self.adv_window_days <= 0:
+            msg = f"adv_window_days 는 양수여야 함(현재 {self.adv_window_days})"
             raise ValueError(msg)
 
     def fingerprint(self) -> str:
