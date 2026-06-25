@@ -110,6 +110,17 @@ class UniversePort(Protocol):
 
 
 @runtime_checkable
+class LiquidityPort(Protocol):
+    def liquid_tickers(self, *, as_of: date, candidates: set[str]) -> set[str]:
+        """ADR-010 PIT 유동성 필터 — candidates 중 as_of 시점 가격·유동성 충족 ticker(부분집합).
+
+        엔진·벤치가 `tradable = constituents(t) & liquidity.liquid_tickers(t, tradable)` 로 적용
+        (대칭). 임계(min_price·min_adv·window)는 포트 생성 시 고정(config 동결값). ≤t(룩어헤드).
+        """
+        ...
+
+
+@runtime_checkable
 class IdentityResolver(Protocol):
     def cik_for(self, ticker: str, *, on: date) -> str:
         """시점 on 에서 ticker 의 cik(안정 식별자). 미해소면 빈 문자열(caveat 대상)."""

@@ -78,6 +78,21 @@ class FakeUniversePort:
         return len(self._listed)
 
 
+class FakeLiquidityPort:
+    """테스트용 유동성 필터 — 주입된 유동 집합(None=전부 유동·필터 off). DI override.
+
+    as_of 무관 정적 집합(테스트 단순화). 시변 유동성 검증은 DuckDBLiquidityPort 통합 테스트에서.
+    """
+
+    def __init__(self, liquid: set[str] | None = None) -> None:
+        self._liquid = liquid
+
+    def liquid_tickers(self, *, as_of: date, candidates: set[str]) -> set[str]:  # noqa: ARG002
+        if self._liquid is None:
+            return candidates
+        return candidates & self._liquid
+
+
 class StubIdentityResolver:
     """골격용 — 주입된 ticker→cik 맵. 미해소면 빈 문자열(caveat). 실전=ticker_history(후속)."""
 

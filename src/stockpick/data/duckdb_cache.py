@@ -74,7 +74,9 @@ def build_cache(base_dir: Path) -> int:
         con.execute("PRAGMA disable_progress_bar")
         con.execute(
             f"CREATE TABLE {_TABLE} AS "  # noqa: S608 — _TABLE 리터럴·glob 파라미터 바인딩
-            "SELECT ticker, trade_date, close, adj_factor "
+            # volume 추가(ADR-010 유동성 ADV용). momentum_endpoints/load_range 는 volume 미참조
+            # → momentum bit-identical 불변(컬럼 존재만·읽지 않음).
+            "SELECT ticker, trade_date, close, adj_factor, volume "
             "FROM read_parquet($glob, hive_partitioning=true)",
             {"glob": glob},
         )
@@ -184,6 +186,41 @@ def momentum_endpoints(
             start_idx,
         )
     return out
+
+
+def query_liquid_tickers(
+    con: duckdb.DuckDBPyConnection,
+    *,
+    as_of: date,
+    candidates: Iterable[str],
+    min_price: Decimal,
+    min_adv: Decimal,
+    window: int,
+) -> set[str]:
+    """ADR-010 PIT 유동성 필터 — candidates 중 as_of 시점 유동/가격 충족 ticker 집합(단일 SQL 출처).
+
+    각 ticker 의 `trade_date ≤ as_of` 최근 `window` 거래일로: ADV=mean(close×volume) ≥ min_adv
+    AND 최근 close(arg_max by trade_date) ≥ min_price. 봉 < window(신규/희박)면 제외(보수).
+    룩어헤드: 상한=as_of(이후 0). $lo 는 window 거래일을 덮는 여유·비유동은 count 미달 제외.
+    backtest 포트(adapters)·api(ranking) 공유 — engine·벤치 대칭 동일 SQL.
+    """
+    tk = list(candidates)
+    if not tk:
+        return set()
+    lo = as_of - timedelta(days=window * 3 + 7)  # window 거래일 충분 포함(여유)
+    sql = (
+        "WITH w AS (SELECT ticker, close, close*volume dvol, trade_date, "  # noqa: S608 — daily_bar 리터럴·바인딩
+        "ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY trade_date DESC) rd "
+        "FROM daily_bar WHERE ticker = ANY($t) AND trade_date BETWEEN $lo AND $a) "
+        "SELECT ticker FROM w WHERE rd <= $win GROUP BY ticker "
+        "HAVING count(*) >= $win AND avg(dvol) >= $minadv "
+        "AND arg_max(close, trade_date) >= $minprice"
+    )
+    rows = con.execute(
+        sql,
+        {"t": tk, "a": as_of, "lo": lo, "win": window, "minadv": min_adv, "minprice": min_price},
+    ).fetchall()
+    return {r[0] for r in rows if isinstance(r[0], str)}
 
 
 def _group_window_rows(

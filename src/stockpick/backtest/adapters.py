@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from ..rules._scan import PricePoint
     from ..rules.factors import MomentumScore
     from ..types import Exchange
-    from .ports import PriceSeriesPort, UniversePort
+    from .ports import LiquidityPort, PriceSeriesPort, UniversePort
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +312,72 @@ class MasterUniverse:
             return 0.0
         delisted = sum(1 for _, boundary in self._membership.values() if boundary is not None)
         return delisted / total
+
+
+class DuckDBLiquidityPort:
+    """ADR-010 PIT 유동성 필터 — cache.duckdb(volume) 기반. 임계는 생성 시 고정(config 동결값).
+
+    `DuckDBPriceSeriesPort` 와 **별도** read_only 연결(포트 독립·생명주기 분리). 단일 SQL 출처
+    `duckdb_cache.query_liquid_tickers`(backtest·api 공유). 호출부는 끝나면 `close()`.
+    """
+
+    def __init__(
+        self, base_dir: Path, *, min_price: Decimal, min_adv: Decimal, window: int
+    ) -> None:
+        self._con = duckdb_cache.connect_readonly(base_dir)
+        self._min_price = min_price
+        self._min_adv = min_adv
+        self._window = window
+
+    def close(self) -> None:
+        self._con.close()
+
+    def liquid_tickers(self, *, as_of: date, candidates: set[str]) -> set[str]:
+        return duckdb_cache.query_liquid_tickers(
+            self._con,
+            as_of=as_of,
+            candidates=candidates,
+            min_price=self._min_price,
+            min_adv=self._min_adv,
+            window=self._window,
+        )
+
+
+class _NoopLiquidityPort:
+    """cache 부재 폴백 — 필터 미적용(candidates 그대로). ⚠️ 결과-변경(필터 off)이라 가격포트
+    폴백과 달리 동등 아님. WARNING 동반·게이트 경로는 항상 cache 존재(이 폴백 미발동)."""
+
+    def liquid_tickers(self, *, as_of: date, candidates: set[str]) -> set[str]:  # noqa: ARG002
+        return candidates
+
+
+def _select_liquidity_port(
+    base_dir: Path, *, min_price: Decimal, min_adv: Decimal, window: int
+) -> LiquidityPort:
+    """cache.duckdb 있으면 DuckDBLiquidityPort·없으면 _NoopLiquidityPort(필터 off·loud WARNING).
+
+    ⚠️ 폴백은 **유동성 필터를 끈다**(결과 변경) — 가격포트 폴백(결과 동등)과 다름. 게이트는 cache
+    재빌드 후 실행이라 이 폴백 미발동. 부재 시 필터 없는 결과가 조용히 나가는 걸 WARNING 으로 노출.
+    """
+    if not duckdb_cache.cache_exists(base_dir):
+        logger.warning(
+            "유동성포트=_NoopLiquidityPort 폴백 — cache.duckdb 부재(ADR-010 유동성 필터 OFF·"
+            "결과 비현실 가능). `bulk --finalize` 로 cache(volume) 빌드 필요"
+        )
+        return _NoopLiquidityPort()
+    import duckdb
+
+    try:
+        return DuckDBLiquidityPort(base_dir, min_price=min_price, min_adv=min_adv, window=window)
+    except (duckdb.Error, OSError):
+        logger.exception("cache.duckdb 연결 실패 — _NoopLiquidityPort 폴백(유동성 필터 OFF)")
+        return _NoopLiquidityPort()
+
+
+def _close_liquidity_port(port: LiquidityPort) -> None:
+    """DuckDBLiquidityPort 연결 해제(Noop 은 no-op). 호출부 finally."""
+    if isinstance(port, DuckDBLiquidityPort):
+        port.close()
 
 
 def _select_universe(base_dir: Path, price_port: PriceSeriesPort) -> UniversePort:
