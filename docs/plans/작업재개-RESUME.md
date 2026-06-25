@@ -1,5 +1,65 @@
 # 🔄 작업 재개 플랜 (compact 생존용 — 이 문서 하나로 바로 이어가기)
 
+## 🆕 현 위치 (2026-06-25 — **최신·이 섹션 먼저 읽어라**)
+
+> **한 줄**: validated 판정 위해 momentum 백테스트를 **표준 퀀트 셋업으로 전면 교정 중**(다전문가 토의·승인). Phase 0 진단·Phase 1 동결(ADR-010) 완료, **Phase 2 구현 진행중**(3/N task 커밋).
+>
+> **읽기 순서(재개)**: 이 섹션 → 활성 플랜 `/home/code/.claude/plans/pro-3-5-twinkling-adleman.md`(Phase 0~3 전문) → [[../decisions/ADR-010-백테스트방법론-표준교정-동결]](동결 결정·근거) → `docs/work-history/2026-06-25-백테스트방법론-전면교정.md`(진행·실측). roadmap 메모리 자동 recall 됨.
+
+### 왜 이 작업 (배경)
+S6-b 게이트 첫 판정 `validated=false`. **G-7 블로커(0-price)는 A-1 정제로 해소**(커밋 ec4f2b8~6b74472·verify PASS). 재실행했더니 **G-3 등 e80 폭발** → A1p2(EODHD $1M sentinel 정제·커밋 1a721fe)로 72자릿수 제거. 그래도 **2차 폭발(oos_excess e7) 잔존**. **3 전문가(미국주식 퀀트·구현·적대비판) 독립 수렴**: 폭발 근본 = microcap 아니라 **측정 셋업(증폭기)** = `top-5(w=0.2) × per-ticker +19 cap × 산술복리 × 등가중-전체 벤치`. → **유동성 필터만=band-aid**. 표준 퀀트(JT2001/CRSP/Russell)로 전면 교정해 **공정 측정** → 정직한 판정.
+
+### 결정 동결 (ADR-010·게이트 전 pre-registration·**변경 금지·진단으로도 못 흔듦=R1 방화벽**)
+| 항목 | 동결값 | 근거 |
+|---|---|---|
+| 기간 | **2000-01-01~2026-06-18** | 0d 실측: pre-2000 폐지 미완비=생존편향(1962=27티커·폐지 pre-1995≈0·2000=10,222) |
+| 수익처리 | per-ticker simple return **clip ±100%**(`period_return_cap`=**1.0**·min(ret,cap)) | 0a 실측: +19 cap=증폭기(1 cap-hit pret +380%·×4.8). +1.0 clip=증폭기 제거 |
+| 포트(검증) | **top decile**(유동 유니버스 상위 10%·가변·초기 최소 20) | 표준 momentum=decile. top-5=별도 product 변형 |
+| lookback | **12-1(252/21)** 1차·126/21 변형 | JT 학술 주류 |
+| 벤치 | 전략과 **동일 cost_bps** + 유동성필터 + **등가중**(시총가중 0c 불가) | M1·등가중 small-cap 틸트 caveat |
+| 유니버스 | close(t)≥**$5** + ADV20≥**$1M** + 종목유형 제외. **시총하한 없음**(0c SEC shares≈0%→ADV 프록시) | JT2001·절대값 컷(NYSE decile 비채택=과설계) |
+| R2 측정게이트 | **`|worst_oos_excess|≤10`**(G-3 분리) | 외부원칙·미수렴=인프라부족 정직노출 |
+| G-3 | 동일비용·decile 재정의·**집계 전-fold 유지**(보수·loosening 금지) | amends ADR-009 |
+| R4 | 게이트=decile 검증·운영 Top5=decile 상위 부분집합·flip signature=decile | 검증룰≠운영룰 다리 |
+
+### 고려/봉인된 정직성 가드 (재litigate 금지)
+- **R1 방화벽(critic·BLOCKING)**: 진단(0a/0c/0d)은 방법 **종류**만 결정. 수치 임계는 전부 외부 시장원칙 동결 — 진단 분포 보고 "이 값이 excess 예쁘다" 선택=p-hacking 금지.
+- **pre-registration(C2)**: 방법론 ALL 동결 후 **게이트 1회**. 패치-재실행 루프=OOS 오염 금지.
+- **R3**: ±100% clip이 momentum 정당 우측꼬리 죽이는지 0a로 점검(cap-hit=+1900%/월=정상 알파 아님→완화 확인).
+- momentum 피벗은 **깨끗한 측정 후·fail 시에만**(지금 피벗=인프라버그를 룰 무알파로 오진). 양 전문가 ACCEPT-WITH-RESERVATIONS.
+
+### 완료 (커밋·381 passed·mypy/ruff clean)
+- Phase 0 진단(f8d2614·8994d2c)·Phase 1 ADR-010(8994d2c).
+- **2-1 수익처리 root fix**(5bcb48e): cap 19→1.0. **실증**: total_return **2.2e20→−1.0**(폭발 소멸)·pret>+380% 20→0개·증폭기=root 확정.
+- 2-2 유동성 config 3필드(be0cff2). 2-3 LiquidityPort+`query_liquid_tickers` SQL+cache volume(267e5ea).
+
+### 남은 작업 (재개 = 여기부터·결합도 높아 한 묶음 권장)
+1. **decile 전략**: `strategy.py` EqualWeightTopN→top decile(유니버스 상위 10%·가변·`config.top_n`→비율). TDD.
+2. **engine(:169)/benchmark(:69) 배선**: `tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)` 대칭(engine·벤치 동일)·decile 적용·liquidity_port DI 인자(run·equal_weight_universe·walk_forward·run_s6_gate·CLI `_select_liquidity_port`/`_close`).
+3. **벤치 동일비용**: `benchmark.equal_weight_universe` 의 `cost_total=Decimal(0)` 강제 해제→config.cost_bps.
+4. **s6_gate**: `compute_rule_signature`에 유동성 3필드 추가(period_return_cap 패턴)+`canonical_gate_config`(기간 2000~·lookback 252/21·유동성 동결값)+`ranking_rule_signature`+G-3 동일비용 재정의+**R2 측정게이트** 추가.
+5. **ranking-API (c)사후필터**: `api/routes/ranking.py`가 `query_liquid_tickers`로 series 선필터(rules 불변·모듈경계)+ranking_rule_signature 정합.
+6. **sabotage 가드 TDD**: 룩어헤드·분모붕괴 차단·engine/벤치 대칭.
+→ 빠른경로 sanity(축소 config·excess R2 임계 수렴 확인) → **신뢰구간 게이트 1회**(app·web 정지·격리·mem 20g[생성시점]·MALLOC_ARENA_MAX=2) → R2 판정 → validated 결정.
+
+### ⚠️ 재개 함정 (누락검증 반영·반드시 읽어라)
+- **B1(BLOCKING·flip 영원히-false)**: 게이트 CLI `s6_gate.py`는 `canonical_gate_config(start=days[0], end=days[-1])` 호출 — 함수 기본값이 아직 `top_n=5·lookback126·start=days[0]`. **이 팩토리가 decile signature·R4 flip 정합의 단일 출처** → #4서 기본값을 decile비율·252/21·**2000-01-01** 동결값으로 바꿔야 CLI/route/ranking 3자 signature 일치(안 하면 검증은 decile·signature는 top5 발산→validated 영원히 false). `compute_rule_signature`에 유동성3필드 추가 시 `ranking_rule_signature`·route 동시 갱신.
+- **H1(clip 표기)**: 수익처리 clip은 **상한-only `min(ret,cap)` 로 이미 충분**(ret≥−1 구조적·engine.py:236). ADR-010 표 '[−1.0,+1.0]'은 효과 동등 의미지 **하한 floor 추가 지시 아님**(floor=낙관편향·금지).
+- **H2(거짓 PASS)**: 게이트 전 `cache.duckdb`+**volume 재빌드 확인 필수**. 부재 시 `_select_liquidity_port`가 `_NoopLiquidityPort`(필터 OFF·WARNING만) 반환→유동성 필터 없이 거짓 PASS. `build_cache`(volume) 선행.
+- **H3(게이트 OOM)**: 격리 실행 = **`docker run --memory 20g`(별도 컨테이너)** — app mem_limit:12g 로는 native peak~13GB OOM(137). "mem_limit 임시 20g 후 복원" 가정은 미검증이니 격리 컨테이너가 안전. +MALLOC_ARENA_MAX=2.
+- **M1(decile 분모)**: decile = **유동성 필터 통과 후 랭킹 후보 수**의 상위 10%(전체 유니버스 아님). floor min(20). `config.top_n`→`top_pct` 비율 신필드(fingerprint+signature 동결).
+- **M2(벤치 비용)**: #3서 benchmark `cost_total=Decimal(0)` 해제 시 **`turnover_total=Decimal(0)`도 동반 해제**(둘 다 0이면 cost_bps 곱해도 0=무효). G-3 동일비용·decile 재측정.
+- **L1(시작점)**: 남은작업 #1(decile)=work-history "Phase 2-4". **커밋 250b04b 이후가 시작점**.
+- **L2(커밋 함정)**: 커밋 메시지 본문 `(명령어)` 괄호=verify-commit-msg 훅 subject 오파싱 차단 → `git commit -F <파일>`. **src/** 변경 커밋엔 `docs/work-history/` 엔트리 필수**(drift 훅 차단).
+
+### 운영 메모
+- 검증: `docker compose run --rm --no-deps app sh -c 'ruff check src tests && mypy && pytest -q'`.
+- 진단 스크립트 패턴: scratchpad `diag_0a.py`(engine.run 1패스·equity_curve→pret 분포·결과불변). 빠른경로=직접 engine.run(축소 기간/fold).
+- ⚠️ docker stop/compose stop 은 guard 미차단(prune·rm·DDL만 차단). `_old` 0-price 는 A-1서 해소.
+
+---
+
+
 > **compact된 Claude 읽는 법**: CLAUDE.md → [PLAN_STATUS](PLAN_STATUS.md) → 이 문서. 결정은 ADR(`docs/decisions/`), 데이터 스펙은 [M1-데이터파이프라인](M1-데이터파이프라인.md). 최신 갱신 **2026-06-23 ②(S6-b 신뢰성 게이트 판정=validated=false·G-7 무결성 블로커)**.
 > 💡 **EODHD 무료티어 실측(2026-06-17)**: 가격 history=**최신 1년(251 거래일)만**, 과거 범위 요청은 무시. **유니버스는 무료 전체**(활성 51,705 + 폐지 57,825 = 109,530, 폐지 리스트 포함). 파이프라인 end-to-end(EodhdSource→Parquet→검증 게이트)가 무료 실데이터로 PASS. → **M2(룰·백테스트) 개발은 무료 1년치로 가능**, 전체 다년 history만 유료($19.99) 전환. 결제를 M2 끝까지 미룰 수 있음.
 
