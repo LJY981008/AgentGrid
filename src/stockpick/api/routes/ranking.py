@@ -22,6 +22,12 @@ from typing import TYPE_CHECKING, Literal
 
 from fastapi import APIRouter, Depends, Query
 
+from ...backtest.adapters import _close_liquidity_port, _select_liquidity_port
+from ...backtest.config import (
+    _DEFAULT_ADV_WINDOW_DAYS,
+    _DEFAULT_MIN_ADV_DOLLAR,
+    _DEFAULT_MIN_PRICE_FLOOR,
+)
 from ...backtest.s6_gate import load_s6_gate_verdict, ranking_rule_signature
 from ...rules._financials import load_financial_facts
 from ...rules._scan import load_adjusted_series, load_close_as_of, load_ticker_exchanges
@@ -99,6 +105,22 @@ def ranking(
         lookback_days=lookback_days,
         skip_recent_days=skip_recent_days,
     )
+
+    # (c) 사후 PIT 유동성 필터(ADR-010·rules 불변·모듈경계 — api 가 data/backtest 조합).
+    # cache.duckdb 있으면 검증 decile 과 동일 유니버스($5·ADV $1M)로 좁혀 display 일관,
+    # 부재면 Noop(WARNING). rank_by_momentum 불변 — 입력 scores 만 선필터(룩어헤드 ≤as_of).
+    liquidity_port = _select_liquidity_port(
+        base_dir,
+        min_price=_DEFAULT_MIN_PRICE_FLOOR,
+        min_adv=_DEFAULT_MIN_ADV_DOLLAR,
+        window=_DEFAULT_ADV_WINDOW_DAYS,
+    )
+    try:
+        liquid = liquidity_port.liquid_tickers(as_of=effective_as_of, candidates=set(scores))
+    finally:
+        _close_liquidity_port(liquidity_port)
+    scores = {t: s for t, s in scores.items() if t in liquid}
+
     entries = rank_by_momentum(
         scores,
         ticker_to_exchange,

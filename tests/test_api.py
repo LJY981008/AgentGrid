@@ -31,17 +31,19 @@ from stockpick.types import DailyBar, Exchange, FinancialFact, Stock
 _DUMMY_KEY = "DUMMY-SECRET-EODHD-KEY-9f3a"  # 키 비노출 단언용 — 응답에 이 값이 절대 안 나와야 함
 
 
-def _bar(ticker: str, d: date, *, close: str, adj_factor: str = "1") -> DailyBar:
-    # OHLC 정합성 유지(high>=다른값, low<=다른값) — close 기준으로 ±5 범위(검증 게이트 통과).
+def _bar(
+    ticker: str, d: date, *, close: str, adj_factor: str = "1", volume: int = 1000
+) -> DailyBar:
+    # OHLC 정합(high>=, low<=) — close ±5 범위, low 는 0 미만 클램프(penny 안전).
     c = Decimal(close)
     return DailyBar(
         ticker=ticker,
         trade_date=d,
         open=c,
         high=c + Decimal("5"),
-        low=c - Decimal("5"),
+        low=max(Decimal("0.01"), c - Decimal("5")),
         close=c,
-        volume=1000,
+        volume=volume,
         value=None,
         adj_factor=Decimal(adj_factor),
     )
@@ -235,6 +237,31 @@ def test_ranking_validated_false_when_signature_mismatch(client: TestClient) -> 
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
     assert r.json()["meta"]["validated"] is False
+
+
+def test_ranking_excludes_illiquid_when_cache_present(client: TestClient) -> None:
+    # ADR-010 (c) 사후 유동성 필터 — cache.duckdb 있으면 penny(close<$5)/비유동을 랭킹서 제외
+    # (검증 decile 와 동일 유니버스). cache 부재면 Noop(기존 테스트 불변).
+    from stockpick.data.duckdb_cache import build_cache
+
+    base = client.base_dir
+    start = date(2025, 1, 1)
+    liq = [
+        _bar("LIQ", start + timedelta(days=i), close=str(100 + i), volume=50000) for i in range(60)
+    ]
+    penny = [
+        _bar("PENNY", start + timedelta(days=i), close="4", volume=50000) for i in range(60)
+    ]
+    write_daily_bars(liq, exchange=Exchange.NASDAQ, base_dir=base, source="synthetic")
+    write_daily_bars(penny, exchange=Exchange.NASDAQ, base_dir=base, source="synthetic")
+    build_cache(base)  # cache.duckdb(volume) — 사후 유동성 필터 활성
+    r = client.get(
+        "/api/ranking", params={"lookback_days": 20, "skip_recent_days": 0, "group": "all"}
+    )
+    assert r.status_code == 200
+    tickers = [e["ticker"] for e in r.json()["entries"]]
+    assert "LIQ" in tickers
+    assert "PENNY" not in tickers  # close<$5 → 유동성 필터 제외
 
 
 def test_backtest_validated_true_when_gate_passed_and_signature_matches(
