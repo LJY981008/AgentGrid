@@ -424,6 +424,7 @@ def _gate_result(*, passed: bool, signature: str) -> S6GateResult:
         g6_cost_pass=True,
         g7_verify_pass=passed,
         g8_reproducible=True,
+        r2_measurable=True,
         fold_decays=(0.9,) * 10,
         sensitivity={"5bps": 0.8, "10bps": 0.9, "15bps": 0.7},
         delisted_ratio=0.5,
@@ -478,18 +479,9 @@ def test_load_verdict_passed_truthy_string_is_false(tmp_path: Path) -> None:
     assert load_s6_gate_verdict(tmp_path, "SIG") is False
 
 
-def test_canonical_gate_config_signature_matches_ranking_signature() -> None:
-    # 정렬 봉인: 게이트가 canonical_gate_config(group=False)로 검증하면 그 룰 signature 가
-    # ranking_rule_signature(group=False)와 동일해야 flip 일관(정규값 발산=영원히 false 함정 차단).
-    cfg = canonical_gate_config(
-        start=date(2020, 1, 1),
-        end=date(2021, 1, 1),
-        top_n=5,
-        lookback_days=126,
-        skip_recent_days=21,
-        group_by_exchange=False,
-    )
-    gate_sig = compute_rule_signature(
+def _sig_from_config(cfg: BacktestConfig) -> str:
+    # config 전 룰필드 → compute_rule_signature(게이트가 run_s6_gate 에서 쓰는 것과 동일 구성).
+    return compute_rule_signature(
         strategy_name=cfg.strategy_name,
         top_n=cfg.top_n,
         lookback_days=cfg.lookback_days,
@@ -497,11 +489,72 @@ def test_canonical_gate_config_signature_matches_ranking_signature() -> None:
         rebalance_freq=cfg.rebalance_freq,
         delisting_recovery_rate=cfg.delisting_recovery_rate,
         group_by_exchange=cfg.group_by_exchange,
+        period_return_cap=cfg.period_return_cap,
+        portfolio_pct=cfg.portfolio_pct,
+        decile_min_holdings=cfg.decile_min_holdings,
+        min_price_floor=cfg.min_price_floor,
+        min_adv_dollar=cfg.min_adv_dollar,
+        adv_window_days=cfg.adv_window_days,
     )
+
+
+def test_compute_rule_signature_includes_portfolio_and_liquidity_fields() -> None:
+    # 신규 동결 필드(decile·유동성)는 룰 정체성 → signature 발산(동결 우회 차단·ADR-010).
+    base = _sig_kwargs()
+    a = compute_rule_signature(**base)  # type: ignore[arg-type]
+    assert compute_rule_signature(**base, portfolio_pct=Decimal("0.1")) != a  # type: ignore[arg-type]
+    assert compute_rule_signature(**base, decile_min_holdings=30) != a  # type: ignore[arg-type]
+    assert compute_rule_signature(**base, min_price_floor=Decimal("10")) != a  # type: ignore[arg-type]
+    assert compute_rule_signature(**base, min_adv_dollar=Decimal("2e6")) != a  # type: ignore[arg-type]
+    assert compute_rule_signature(**base, adv_window_days=30) != a  # type: ignore[arg-type]
+
+
+def test_canonical_gate_config_is_decile_frozen() -> None:
+    # B1: 팩토리 기본값 = ADR-010 동결(decile·252/21·2000~2026·top_decile 전략). 단일 출처.
+    cfg = canonical_gate_config()
+    assert cfg.strategy_name == "top_decile_equal_weight"
+    assert cfg.portfolio_pct == Decimal("0.10")
+    assert cfg.decile_min_holdings == 20
+    assert cfg.lookback_days == 252
+    assert cfg.skip_recent_days == 21
+    assert cfg.group_by_exchange is False
+    assert cfg.start == date(2000, 1, 1)
+    assert cfg.end == date(2026, 6, 18)
+
+
+def test_decile_gate_signature_matches_ranking_signature() -> None:
+    # B1 핵심: 게이트 decile config 의 rule_signature == ranking 요청(같은 momentum 파라미터)의
+    # signature → flip 일관(정규값 발산=validated 영원히 false 함정 차단). R4 운영Top5↔decile 다리.
+    gate_sig = _sig_from_config(canonical_gate_config())
     rank_sig = ranking_rule_signature(
-        top_n=5, lookback_days=126, skip_recent_days=21, group_by_exchange=False
+        lookback_days=252, skip_recent_days=21, group_by_exchange=False
     )
     assert gate_sig == rank_sig
+
+
+def test_ranking_signature_mismatch_on_wrong_lookback() -> None:
+    # 검증된 룰(lookback 252)과 다른 lookback 요청은 signature 불일치 → flip false(검증 범위 밖).
+    assert _sig_from_config(canonical_gate_config()) != ranking_rule_signature(
+        lookback_days=126, skip_recent_days=21, group_by_exchange=False
+    )
+
+
+def test_r2_measurability_fails_on_excess_explosion() -> None:
+    # ADR-010 #7 R2: |worst_oos_excess|>10 = 측정 artifact → r2 미통과·passed False
+    # (G-3 는 전 fold>0 라 통과해도). 2차 폭발(e7)이 G-3 만으론 안 잡히는 갭을 R2 가 차단.
+    kw = _pass_kwargs()
+    kw["oos_excesses"] = (5.0, 1e7, 3.0)  # 전부 >0(G-3 통과) 이나 1e7 폭발
+    r = evaluate_criteria(**kw)  # type: ignore[arg-type]
+    assert r.g3_excess_pass is True
+    assert r.r2_measurable is False
+    assert r.passed is False
+
+
+def test_r2_measurable_when_excess_bounded() -> None:
+    # 정상 범위(|excess|<=10)면 측정 가능 → r2 통과(다른 G 통과 시 passed True).
+    r = evaluate_criteria(**_pass_kwargs())  # type: ignore[arg-type]
+    assert r.r2_measurable is True
+    assert r.passed is True
 
 
 # ── Task4: CLI 스모크(합성 데이터·전구간 8hr 전 배선 검증) ──

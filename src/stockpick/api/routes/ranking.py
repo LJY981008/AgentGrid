@@ -131,12 +131,12 @@ def ranking(
         price_by_cik=price_by_cik,
     )
 
-    # validated flip(S6-b) — 모멘텀 룰(lookback/skip/top_n/group)이 게이트 정규 실행으로 통과·
-    # signature 일치할 때만 true(그 외 false 보수). 게이트 미실행이면 항상 false(§4.1 기본).
+    # validated flip(S6-b·R4) — 게이트는 decile momentum 을 검증. 운영 Top5 는 그 decile 의 상위
+    # 부분집합이라 display top_n 은 signature 와 무관(ranking_rule_signature 가 decile 정규값 채움).
+    # 요청 momentum(lookback/skip/group)이 검증 decile 과 일치할 때만 true(그 외 false 보수).
     validated = load_s6_gate_verdict(
         base_dir,
         ranking_rule_signature(
-            top_n=top_n,
             lookback_days=lookback_days,
             skip_recent_days=skip_recent_days,
             group_by_exchange=group_by_exchange,

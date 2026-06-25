@@ -215,9 +215,8 @@ def _write_gate_result(base_dir: Path, *, signature: str, passed: bool) -> None:
 
 def test_ranking_validated_true_when_gate_passed_and_signature_matches(client: TestClient) -> None:
     _write_synthetic(client.base_dir)
-    sig = ranking_rule_signature(
-        top_n=5, lookback_days=20, skip_recent_days=0, group_by_exchange=True
-    )
+    # R4: display top_n 은 signature 무관(decile 부분집합) — lookback/skip/group 일치 시 flip.
+    sig = ranking_rule_signature(lookback_days=20, skip_recent_days=0, group_by_exchange=True)
     _write_gate_result(client.base_dir, signature=sig, passed=True)
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
@@ -227,10 +226,10 @@ def test_ranking_validated_true_when_gate_passed_and_signature_matches(client: T
 
 
 def test_ranking_validated_false_when_signature_mismatch(client: TestClient) -> None:
-    # 게이트 통과 파일이 있어도 다른 룰(top_n 불일치) 요청이면 false(검증 범위=통과한 그 config 뿐).
+    # 게이트 통과 파일이 있어도 다른 룰(lookback 불일치) 요청이면 false(검증 범위=통과한 그 룰뿐).
     _write_synthetic(client.base_dir)
     sig = ranking_rule_signature(
-        top_n=99, lookback_days=20, skip_recent_days=0, group_by_exchange=True
+        lookback_days=99, skip_recent_days=0, group_by_exchange=True
     )
     _write_gate_result(client.base_dir, signature=sig, passed=True)
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})

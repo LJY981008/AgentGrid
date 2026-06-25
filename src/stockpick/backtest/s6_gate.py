@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .benchmark import equal_weight_universe
-from .config import _DEFAULT_RETURN_CAP
+from .config import (
+    _DEFAULT_ADV_WINDOW_DAYS,
+    _DEFAULT_MIN_ADV_DOLLAR,
+    _DEFAULT_MIN_PRICE_FLOOR,
+    _DEFAULT_RETURN_CAP,
+)
 from .engine import run
 from .validation import walk_forward
 
@@ -39,6 +44,7 @@ logger = logging.getLogger(__name__)
 _DECAY_MIN = 0.5  # G-2·G-6 OOS 방어율(decay=OOS/IS sharpe) 하한
 _N_FOLDS = 10  # G-4 최소 워크포워드 분할 수
 _DELISTED_MIN = 0.30  # G-5 유니버스 폐지 커버리지 하한(실측 63.5%)
+_R2_EXCESS_MAX = 10.0  # ADR-010 #7 R2 측정가능성 — |worst_oos_excess|>10(+1000%) = 측정 artifact
 
 _RESULT_NAME = "s6_gate_result.json"  # 게이트 판정 영속(flip 단일 진실원천)
 
@@ -169,6 +175,7 @@ class S6GateResult:
     g6_cost_pass: bool  # 전 비용(5/10/15bps) 최악 decay>=_DECAY_MIN
     g7_verify_pass: bool  # bulk --verify PASS(외부 측정)
     g8_reproducible: bool  # baseline fold 재실행 bit-identical
+    r2_measurable: bool  # ADR-010 #7 — |worst_oos_excess|<=_R2_EXCESS_MAX(측정 artifact 아님)
     fold_decays: tuple[float | None, ...]
     sensitivity: dict[str, float]
     delisted_ratio: float
@@ -187,6 +194,7 @@ def _failure_notes(
     g6: bool,
     g7: bool,
     g8: bool,
+    r2: bool,
 ) -> tuple[str, ...]:
     """실패 기준을 정직히 나열(통과면 빈 tuple) — 판정 리포트·validated=false 사유 추적."""
     labels = {
@@ -198,6 +206,7 @@ def _failure_notes(
         "G-6": g6,
         "G-7": g7,
         "G-8": g8,
+        "R-2(측정가능성)": r2,
     }
     failed = [k for k, ok in labels.items() if not ok]
     if not failed:
@@ -233,7 +242,11 @@ def evaluate_criteria(
     g6 = bool(sensitivity) and all(v >= _DECAY_MIN for v in sensitivity.values())
     g7 = verify_passed
     g8 = reproducible
-    passed = all((g1, g2, g3, g4, g5, g6, g7, g8))
+    # R2(ADR-010 #7·측정가능성 전제): 공정 벤치 대비 |worst OOS 초과|>10(+1000%)이면 측정 artifact
+    # (2차 폭발류) — G-3(전 fold>0)만으론 안 잡히는 갭을 차단. 빈 excess=측정 불가(fail-closed).
+    # G-1~G-8 의미는 R2 통과를 전제 → passed 에 AND(미통과=인프라 부족 정직 노출·clip 조정 금지).
+    r2 = bool(oos_excesses) and max(abs(e) for e in oos_excesses) <= _R2_EXCESS_MAX
+    passed = all((g1, g2, g3, g4, g5, g6, g7, g8, r2))
     return S6GateResult(
         passed=passed,
         rule_signature=rule_signature,
@@ -246,12 +259,13 @@ def evaluate_criteria(
         g6_cost_pass=g6,
         g7_verify_pass=g7,
         g8_reproducible=g8,
+        r2_measurable=r2,
         fold_decays=fold_decays,
         sensitivity=dict(sensitivity),
         delisted_ratio=delisted_ratio,
         n_delisted_liquidations=n_delisted_liquidations,
         oos_excesses=oos_excesses,
-        notes=_failure_notes(g1=g1, g2=g2, g3=g3, g4=g4, g5=g5, g6=g6, g7=g7, g8=g8),
+        notes=_failure_notes(g1=g1, g2=g2, g3=g3, g4=g4, g5=g5, g6=g6, g7=g7, g8=g8, r2=r2),
     )
 
 
@@ -326,6 +340,11 @@ def run_s6_gate(
         delisting_recovery_rate=config.delisting_recovery_rate,
         group_by_exchange=config.group_by_exchange,
         period_return_cap=config.period_return_cap,  # 비정규 cap(env override) 게이트는 flip 불가
+        portfolio_pct=config.portfolio_pct,
+        decile_min_holdings=config.decile_min_holdings,
+        min_price_floor=config.min_price_floor,
+        min_adv_dollar=config.min_adv_dollar,
+        adv_window_days=config.adv_window_days,
     )
     if not verify_passed:
         # G-7 무결성 실패 → 데이터 신뢰 불가. 손상 데이터 백테스트(G-1~G-6)는 garbage-in·무의미.
@@ -416,16 +435,39 @@ def run_s6_gate(
     return result
 
 
-# 게이트가 검증하는 룰의 정규 실행 파라미터 — ranking(실행 파라미터 미노출)이 signature 구성에 사용.
-# CLI(Task4)도 동일 값으로 config 를 만들어야 ranking 매칭 가능(불일치=보수적 false).
-_CANONICAL_STRATEGY_NAME = "equal_weight_top_n"
+# 게이트가 검증하는 룰의 정규 실행 파라미터(ADR-010 동결·B1 단일 출처) — ranking(실행 파라미터
+# 미노출)이 signature 구성에 사용. CLI 도 동일 값으로 config 를 만들어야 ranking 매칭(불일치=보수
+# false). canonical_gate_config·ranking_rule_signature 가 같은 상수 → 정규값 발산(영원 false) 차단.
+_CANONICAL_STRATEGY_NAME = "top_decile_equal_weight"  # ADR-010 #3 검증=top decile
 _CANONICAL_REBALANCE_FREQ = "monthly"
+_CANONICAL_TOP_N = 5  # decile 모드선 미사용(전략이 pct 선택)이나 signature 필드 — route 와 동일값
+_CANONICAL_LOOKBACK_DAYS = 252  # ADR-010 #4 — 12-1
+_CANONICAL_SKIP_RECENT_DAYS = 21
+_CANONICAL_DECILE_MIN_HOLDINGS = 20  # ADR-010 #3 floor
 
 
 def _canonical_recovery_rate() -> Decimal:
     from decimal import Decimal as D
 
     return D("0")
+
+
+def _canonical_portfolio_pct() -> Decimal:
+    from decimal import Decimal as D
+
+    return D("0.10")  # ADR-010 #3 — top decile(상위 10%)
+
+
+def _canonical_start() -> date:
+    from datetime import date as date_cls
+
+    return date_cls(2000, 1, 1)  # ADR-010 #1 — 폐지 완비 구간 시작(0d)
+
+
+def _canonical_end() -> date:
+    from datetime import date as date_cls
+
+    return date_cls(2026, 6, 18)  # ADR-010 #1 — 동결 종료
 
 
 def compute_rule_signature(
@@ -438,13 +480,19 @@ def compute_rule_signature(
     delisting_recovery_rate: Decimal,
     group_by_exchange: bool,
     period_return_cap: Decimal = _DEFAULT_RETURN_CAP,
+    portfolio_pct: Decimal | None = None,
+    decile_min_holdings: int = 20,
+    min_price_floor: Decimal = _DEFAULT_MIN_PRICE_FLOOR,
+    min_adv_dollar: Decimal = _DEFAULT_MIN_ADV_DOLLAR,
+    adv_window_days: int = _DEFAULT_ADV_WINDOW_DAYS,
 ) -> str:
     """검증된 **룰 정체성** 해시 — gate 기록과 route 요청이 같은 룰이면 같은 키.
 
     cost_bps(G-6 가 5/10/15 범위로 검증 — 룰 정체성 아님)·start/end(백테스트 window·룰 아님)는
-    **제외**. 8개 필드가 "어떤 룰을 검증했나"를 규정한다. recovery 는 Decimal→normalize 문자열.
-    period_return_cap(L4 상한)은 수익 계산식을 바꾸므로 포함 — 기본값=정규 동결값. route/ranking 은
-    인자 생략 시 정규 cap 매칭, 비정규 cap 게이트는 signature 불일치라 flip 안 됨.
+    **제외**. 나머지 필드가 "어떤 룰을 검증했나"를 규정한다. recovery 는 Decimal→normalize 문자열.
+    period_return_cap(L4 상한)·portfolio_pct/decile_min(decile 포트·ADR-010 #3)·유동성 3필드
+    (min_price/min_adv/window·ADR-010 #6)는 전부 수익/유니버스를 바꾸므로 포함 — 동결 우회 차단.
+    기본값=정규 동결값이라 route/ranking 은 인자 생략 시 정규 매칭, 비정규 게이트는 flip 안 됨.
     """
     payload = {
         "strategy_name": strategy_name,
@@ -455,6 +503,11 @@ def compute_rule_signature(
         "delisting_recovery_rate": f"{delisting_recovery_rate.normalize():f}",
         "group_by_exchange": group_by_exchange,
         "period_return_cap": f"{period_return_cap.normalize():f}",
+        "portfolio_pct": None if portfolio_pct is None else f"{portfolio_pct.normalize():f}",
+        "decile_min_holdings": decile_min_holdings,
+        "min_price_floor": f"{min_price_floor.normalize():f}",
+        "min_adv_dollar": f"{min_adv_dollar.normalize():f}",
+        "adv_window_days": adv_window_days,
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
@@ -479,6 +532,7 @@ def write_s6_gate_result(base_dir: Path, result: S6GateResult) -> Path:
             "G-6_cost": result.g6_cost_pass,
             "G-7_verify": result.g7_verify_pass,
             "G-8_reproducible": result.g8_reproducible,
+            "R-2_measurable": result.r2_measurable,
         },
         "fold_decays": list(result.fold_decays),
         "sensitivity": result.sensitivity,
@@ -517,42 +571,47 @@ def load_s6_gate_verdict(base_dir: Path, request_signature: str) -> bool:
 
 def ranking_rule_signature(
     *,
-    top_n: int,
     lookback_days: int,
     skip_recent_days: int,
     group_by_exchange: bool,
 ) -> str:
-    """ranking(실행 파라미터 미노출)용 룰 signature — strategy/rebalance/recovery 를 게이트 정규값
-    으로 채워 compute_rule_signature 에 위임. 게이트가 정규 실행으로 검증했고 모멘텀 파라미터
-    (lookback/skip/top_n/group)가 일치하면 매칭, 그 외엔 보수적 false(검증 안 된 실행).
+    """ranking(실행 파라미터 미노출)용 룰 signature — 검증된 **decile 룰**(R4 다리)로 위임.
+
+    게이트는 decile momentum 을 검증. 운영 Top5 도 검증 **decile 의 상위 부분집합**이라 display
+    top_n 은 signature 무관 — strategy/portfolio_pct/decile_min/cap/유동성/recovery 를 전부 게이트
+    정규값(ADR-010 동결)으로 채우고 요청 momentum(lookback/skip/group)만 받아 compute_rule_signature
+    에 위임. 검증 decile 와 그 셋 일치 시 flip true, 그 외 보수 false.
     """
     return compute_rule_signature(
         strategy_name=_CANONICAL_STRATEGY_NAME,
-        top_n=top_n,
+        top_n=_CANONICAL_TOP_N,
         lookback_days=lookback_days,
         skip_recent_days=skip_recent_days,
         rebalance_freq=_CANONICAL_REBALANCE_FREQ,
         delisting_recovery_rate=_canonical_recovery_rate(),
         group_by_exchange=group_by_exchange,
+        portfolio_pct=_canonical_portfolio_pct(),
+        decile_min_holdings=_CANONICAL_DECILE_MIN_HOLDINGS,
     )
 
 
 def canonical_gate_config(
     *,
-    start: date,
-    end: date,
-    top_n: int = 5,
-    lookback_days: int = 126,
-    skip_recent_days: int = 21,
+    start: date | None = None,
+    end: date | None = None,
+    top_n: int = _CANONICAL_TOP_N,
+    lookback_days: int = _CANONICAL_LOOKBACK_DAYS,
+    skip_recent_days: int = _CANONICAL_SKIP_RECENT_DAYS,
     group_by_exchange: bool = False,
 ) -> BacktestConfig:
-    """게이트가 검증하는 **정규 룰 config** — 실행 파라미터를 동결값으로 채운 단일 출처.
+    """게이트가 검증하는 **정규 decile 룰 config** — ADR-010 동결값을 채운 단일 출처(B1).
 
-    strategy=equal_weight_top_n·rebalance=monthly·cost=baseline(10)·recovery=0·group_by_exchange=False.
-    CLI(Task4)는 반드시 이 팩토리로 config 를 만들어야 route 의 `compute_rule_signature`/
-    `ranking_rule_signature` 와 같은 키가 나와 flip 이 일관된다(정규값 발산=영원히 false 함정 방지).
-    ⚠️ group_by_exchange 기본 False(평면 랭킹) — ranking `group=all` 과 매칭. `group=exchange`(기본
-    True)는 정규 config 와 불일치라 보수적 false(원하면 게이트를 group_by_exchange=True 로 재실행).
+    strategy=top_decile_equal_weight·portfolio_pct=0.10·decile_min=20·lookback=252·skip=21·
+    rebalance=monthly·cost=baseline(10)·recovery=0·group=False·기간 2000~2026·유동성=config 동결
+    기본($5/$1M/20). CLI 는 인자 없이(`canonical_gate_config()`) 호출해야 route 의
+    `compute_rule_signature`/`ranking_rule_signature` 와 같은 키가 나와 flip 일관(정규값 발산=영원히
+    false 함정 방지). start/end 기본=동결 기간(데이터에 pre-2000 있어도 walk_forward 가 구간 필터 →
+    생존편향 배제). ⚠️ group_by_exchange 기본 False(평면 decile) — ranking `group=all` 과 매칭.
     """
     from .config import BacktestConfig as _Config
 
@@ -565,8 +624,10 @@ def canonical_gate_config(
         cost_bps=_baseline_cost(),
         delisting_recovery_rate=_canonical_recovery_rate(),
         group_by_exchange=group_by_exchange,
-        start=start,
-        end=end,
+        start=start if start is not None else _canonical_start(),
+        end=end if end is not None else _canonical_end(),
+        portfolio_pct=_canonical_portfolio_pct(),
+        decile_min_holdings=_CANONICAL_DECILE_MIN_HOLDINGS,
     )
 
 
@@ -599,6 +660,7 @@ def _print_verdict(result: S6GateResult) -> None:
         ("G-6 비용민감", result.g6_cost_pass),
         ("G-7 무결성", result.g7_verify_pass),
         ("G-8 재현성", result.g8_reproducible),
+        ("R-2 측정가능", result.r2_measurable),
     )
     print("[s6_gate] ===== S6-b 신뢰성 게이트 판정 =====")  # noqa: T201
     for label, ok in criteria:
@@ -633,7 +695,7 @@ def main(argv: list[str] | None = None) -> int:
         _select_universe,
     )
     from .identity import EdgarSnapshotResolver
-    from .strategy import EqualWeightTopN
+    from .strategy import EqualWeightTopN, TopDecileEqualWeight
 
     configure_logging()
     parser = argparse.ArgumentParser(prog="stockpick.backtest.s6_gate")
@@ -675,7 +737,16 @@ def main(argv: list[str] | None = None) -> int:
                 "유니버스 MasterUniverse 아님(생존편향 미방어) — delisted_ratio=0(G-5 fail)"
             )
             delisted_ratio = 0.0
-        config = canonical_gate_config(start=days[0], end=days[-1])
+        # ADR-010 동결 정규 decile config(기간 2000~2026·lookback 252·top decile·B1 단일 출처).
+        # start=days[0] 주입 금지 — 동결 기간을 써야 walk_forward 가 pre-2000(생존편향)을 필터·
+        # signature 가 route/ranking 과 일치(정규값 발산=영원히 false 함정 방지).
+        config = canonical_gate_config()
+        pct = config.portfolio_pct
+        strategy = (
+            TopDecileEqualWeight(pct=pct, min_holdings=config.decile_min_holdings)
+            if pct is not None
+            else EqualWeightTopN()
+        )
         # 유동성 포트(ADR-010) — cache.duckdb(volume) 기반. 부재면 Noop(필터 off·WARNING·H2 거짓PASS
         # 위험) → CLI 는 `bulk --finalize` 로 cache 선행 전제. 끝나면 close(연결 해제).
         liquidity = _select_liquidity_port(
@@ -690,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
                 price_port=price_port,
                 universe_port=universe,
                 identity=EdgarSnapshotResolver(base_dir),
-                strategy=EqualWeightTopN(),
+                strategy=strategy,
                 liquidity_port=liquidity,
                 delisted_ratio=delisted_ratio,
                 verify_passed=verify_passed,
