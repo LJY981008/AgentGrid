@@ -2,9 +2,11 @@
 
 ## 🆕 현 위치 (2026-06-25 — **최신·이 섹션 먼저 읽어라**)
 
-> **한 줄**: validated 판정 위해 momentum 백테스트를 **표준 퀀트 셋업으로 전면 교정 중**(다전문가 토의·승인). Phase 0 진단·Phase 1 동결(ADR-010) 완료, **Phase 2 구현 진행중**(3/N task 커밋).
+> **한 줄**: validated 판정 위해 momentum 백테스트를 **표준 퀀트 셋업으로 전면 교정**(다전문가 토의·승인). Phase 0 진단·Phase 1 동결(ADR-010)·**Phase 2 구현 6단(2-4~2-9) 전부 완료**(decile·유동성 대칭·동일비용 벤치·signature B1·R2 게이트·ranking (c)·sabotage·decile wiring smoke — 전체 TDD green·ruff/mypy clean). **다음 = 빠른경로 sanity → 게이트 1회**(둘 다 사용자 격리 실행).
 >
-> **읽기 순서(재개)**: 이 섹션 → 활성 플랜 `/home/code/.claude/plans/pro-3-5-twinkling-adleman.md`(Phase 0~3 전문) → [[../decisions/ADR-010-백테스트방법론-표준교정-동결]](동결 결정·근거) → `docs/work-history/2026-06-25-백테스트방법론-전면교정.md`(진행·실측). roadmap 메모리 자동 recall 됨.
+> **🔴 게이트 전 선결(H2·실측 2026-06-25)**: `cache.duckdb`(98.2M행)에 **`volume` 컬럼 없음**(Phase 2-3 전 빌드·컬럼=ticker/trade_date/close/adj_factor). 유동성 필터가 volume 필요 → 현 cache 로 게이트 실행 시 query 크래시(또는 Noop 폴백=거짓PASS). **반드시 cache 재빌드 선행**: app 정지 후 격리 — `docker compose stop app web && docker compose run -d --rm --no-deps app python -m stockpick.data.bulk --finalize`(commit 직후 build_cache·volume 포함) 또는 직접 `build_cache(base_dir)`. 재빌드 후 위 schema 에 `volume` 확인.
+>
+> **읽기 순서(재개)**: 이 섹션 → 활성 플랜 `/home/code/.claude/plans/pro-3-5-twinkling-adleman.md`(Phase 0~3 전문) → [[../decisions/ADR-010-백테스트방법론-표준교정-동결]](동결 결정·근거) → `docs/work-history/2026-06-25-백테스트방법론-전면교정.md`(진행·실측·6단 커밋 SHA). roadmap 메모리 자동 recall 됨.
 
 ### 왜 이 작업 (배경)
 S6-b 게이트 첫 판정 `validated=false`. **G-7 블로커(0-price)는 A-1 정제로 해소**(커밋 ec4f2b8~6b74472·verify PASS). 재실행했더니 **G-3 등 e80 폭발** → A1p2(EODHD $1M sentinel 정제·커밋 1a721fe)로 72자릿수 제거. 그래도 **2차 폭발(oos_excess e7) 잔존**. **3 전문가(미국주식 퀀트·구현·적대비판) 독립 수렴**: 폭발 근본 = microcap 아니라 **측정 셋업(증폭기)** = `top-5(w=0.2) × per-ticker +19 cap × 산술복리 × 등가중-전체 벤치`. → **유동성 필터만=band-aid**. 표준 퀀트(JT2001/CRSP/Russell)로 전면 교정해 **공정 측정** → 정직한 판정.
@@ -33,14 +35,18 @@ S6-b 게이트 첫 판정 `validated=false`. **G-7 블로커(0-price)는 A-1 정
 - **2-1 수익처리 root fix**(5bcb48e): cap 19→1.0. **실증**: total_return **2.2e20→−1.0**(폭발 소멸)·pret>+380% 20→0개·증폭기=root 확정.
 - 2-2 유동성 config 3필드(be0cff2). 2-3 LiquidityPort+`query_liquid_tickers` SQL+cache volume(267e5ea).
 
-### 남은 작업 (재개 = 여기부터·결합도 높아 한 묶음 권장)
-1. **decile 전략**: `strategy.py` EqualWeightTopN→top decile(유니버스 상위 10%·가변·`config.top_n`→비율). TDD.
-2. **engine(:169)/benchmark(:69) 배선**: `tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)` 대칭(engine·벤치 동일)·decile 적용·liquidity_port DI 인자(run·equal_weight_universe·walk_forward·run_s6_gate·CLI `_select_liquidity_port`/`_close`).
-3. **벤치 동일비용**: `benchmark.equal_weight_universe` 의 `cost_total=Decimal(0)` 강제 해제→config.cost_bps.
-4. **s6_gate**: `compute_rule_signature`에 유동성 3필드 추가(period_return_cap 패턴)+`canonical_gate_config`(기간 2000~·lookback 252/21·유동성 동결값)+`ranking_rule_signature`+G-3 동일비용 재정의+**R2 측정게이트** 추가.
-5. **ranking-API (c)사후필터**: `api/routes/ranking.py`가 `query_liquid_tickers`로 series 선필터(rules 불변·모듈경계)+ranking_rule_signature 정합.
-6. **sabotage 가드 TDD**: 룩어헤드·분모붕괴 차단·engine/벤치 대칭.
-→ 빠른경로 sanity(축소 config·excess R2 임계 수렴 확인) → **신뢰구간 게이트 1회**(app·web 정지·격리·mem 20g[생성시점]·MALLOC_ARENA_MAX=2) → R2 판정 → validated 결정.
+### ✅ 구현 완료 (Phase 2-4~2-9·2026-06-25·전체 TDD green·6 커밋 3d1e7f6~b404425)
+1. ✅ **decile 전략**(2-4·3d1e7f6): `TopDecileEqualWeight`(pct·floor)+config `portfolio_pct`/`decile_min_holdings`(fingerprint).
+2. ✅ **engine/bench 유동성 대칭 배선**(2-5·811ad46): `tradable &= liquidity_port.liquid_tickers(t,tradable)` engine·벤치 대칭·decile 풀(portfolio_pct 시 전 후보→전략 decile)·`liquidity_port` 필수 kw DI(run·equal_weight_universe·walk_forward·run_s6_gate·CLI·demo·profile·api/backtest).
+3. ✅ **벤치 동일비용**(2-6·811ad46): `cost_total`/`turnover_total` 0강제 해제→`_turnover`+config.cost_bps(M2 trap).
+4. ✅ **s6_gate signature/canonical**(2-7·2f0bdc5): `compute_rule_signature` 5신필드(portfolio_pct·decile_min·유동성 3)+`canonical_gate_config` **decile/252·21/2000~2026 frozen**(B1 단일출처)+`ranking_rule_signature` R4(top_n 제거)+**R2 측정게이트**(|worst_oos_excess|≤10·passed AND).
+5. ✅ **ranking-API (c)사후필터**(2-8·7cea0d1): `_select_liquidity_port` 선필터(rules 불변·모듈경계)+route signature 정합.
+6. ✅ **sabotage 대칭 + decile wiring smoke**(2-9·b404425): engine↔bench 유동성 대칭·`run_s6_gate` decile 경로 end-to-end 실측 통과.
+
+### ▶ 남은 작업 (사용자 격리 실행 — 게이트 전 H2 선결 필수)
+0. **🔴 cache 재빌드(volume)** — 위 H2 블로커. app 정지 후 격리 build_cache. **안 하면 sanity/게이트 무효**.
+1. **빠른경로 sanity**: 축소 decile config(최근~20년·2~3 fold)로 R2 excess 수렴(|excess|≤10)·decay 정상화 확인(분 단위·`docker run` 격리). decile wiring smoke 는 합성서 통과 — 실데이터 R2 수렴이 핵심 미지수.
+2. **신뢰구간 게이트 1회**: `canonical_gate_config()`(decile·2000~2026)·app·web 정지·`docker run --memory 20g`·MALLOC_ARENA_MAX=2(H3) → R2 판정 → G-1~G-8 → validated 결정. ⚠️ pre-registration: 패치-재실행 루프 금지(게이트 1회).
 
 ### ⚠️ 재개 함정 (누락검증 반영·반드시 읽어라)
 - **B1(BLOCKING·flip 영원히-false)**: 게이트 CLI `s6_gate.py`는 `canonical_gate_config(start=days[0], end=days[-1])` 호출 — 함수 기본값이 아직 `top_n=5·lookback126·start=days[0]`. **이 팩토리가 decile signature·R4 flip 정합의 단일 출처** → #4서 기본값을 decile비율·252/21·**2000-01-01** 동결값으로 바꿔야 CLI/route/ranking 3자 signature 일치(안 하면 검증은 decile·signature는 top5 발산→validated 영원히 false). `compute_rule_signature`에 유동성3필드 추가 시 `ranking_rule_signature`·route 동시 갱신.
