@@ -671,7 +671,7 @@ def test_rule_signature_includes_period_return_cap() -> None:
         group_by_exchange=False,
     )
     sig_default = compute_rule_signature(**base)  # type: ignore[arg-type]
-    sig_canon = compute_rule_signature(**base, period_return_cap=Decimal("19.0"))  # type: ignore[arg-type]
+    sig_canon = compute_rule_signature(**base, period_return_cap=Decimal("1.0"))  # type: ignore[arg-type]  # ADR-010 ±100% clip
     sig_other = compute_rule_signature(**base, period_return_cap=Decimal("5.0"))  # type: ignore[arg-type]
-    assert sig_default == sig_canon  # 기본값=정규 동결값(인자 생략=정규 매칭)
+    assert sig_default == sig_canon  # 기본값=정규 동결값(ADR-010 cap=1.0·인자 생략=정규 매칭)
     assert sig_canon != sig_other  # 비정규 cap → 다른 룰 정체성

@@ -10,13 +10,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Final
 
-# A1p2 L4: per-ticker 수익률 **상한 캡**(데이터 보기 전 동결·과적합 금지). sentinel 정제(L1~L3)를
-# 뚫은 잔존 garbage·극소 진입가 폭발을 per-bar 수익률에서 차단. ret=exit/entry-1 은 entry>0·
-# exit>=0 이라 ret>=-1(하한 폭발 불가) — 상한만 캡(하한 floor 는 정상 손실 마스킹=낙관편향).
-#   CAP=+19.0 — 실재 16.2x 급등(GME, ret=15.2) 보존하며 199999배(sentinel exit) 폭발만 차단.
-# 환경변수로 실험 조정 가능. cap 은 룰 정체성에 포함(compute_rule_signature) — 비정규 cap 으로
-# 게이트 통과해도 signature 불일치라 validated flip 안 됨(동결 우회 차단).
-_DEFAULT_RETURN_CAP: Final = Decimal(os.environ.get("STOCKPICK_RETURN_CAP", "19.0"))
+# 수익률 처리 — per-ticker simple return 상한 clip(ADR-010 동결·±100%/리밸). ret=exit/entry-1 은
+# entry>0·exit>=0 이라 ret>=-1(하한 구조적) → 상한만 clip 하면 [-1,+1]. min(ret, cap).
+#   CAP=+1.0(=+100%) — 표준 return clipping(±100%). A1p2 의 +19.0 은 Phase 0a 진단서 불충분 입증:
+#   top-5 w=0.2 → 1 cap-hit 시 pret=0.2×19=+380%(equity ×4.8) 복리 폭발(cap-hit=ret≥+1900%/월=
+#   정상 알파 아님). +1.0 clip 시 0.2×1=+20%(×1.2)로 증폭기 제거(root fix). decile(w↓)이 추가 완화.
+# 환경변수 조정 가능. cap 은 룰 정체성(compute_rule_signature) 포함 — 비정규 cap 게이트는 flip 차단.
+_DEFAULT_RETURN_CAP: Final = Decimal(os.environ.get("STOCKPICK_RETURN_CAP", "1.0"))
 
 
 @dataclass(frozen=True, slots=True)

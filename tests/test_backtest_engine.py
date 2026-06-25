@@ -103,11 +103,11 @@ def test_empty_universe_flat_equity() -> None:
     assert res.total_return == Decimal("0")
 
 
-# --- A1p2 L4: per-ticker 수익률 상한 캡(sentinel 잔존·극소 진입가 폭발 방어·engine+bench 공유) ---
+# --- 수익률 처리: per-ticker simple return clip(ADR-010 ±100%·증폭기 root fix) ---
 
 
 def _hold1(
-    pts: list[PricePoint], *, recovery: str = "0", de: date | None = None, cap: str = "19.0"
+    pts: list[PricePoint], *, recovery: str = "0", de: date | None = None, cap: str = "1.0"
 ) -> Decimal:
     entry, exit_ = pts[0].trade_date, pts[-1].trade_date
     delisted: dict[str, date | None] = {} if de is None else {"A": de}
@@ -130,8 +130,8 @@ def _pp(d: tuple[int, int, int], price: str) -> PricePoint:
 
 
 def test_holding_return_caps_upper_explosion() -> None:
-    # exit_p sentinel 잔존(혹은 극소 진입가) → 199999배 → +19 캡(G-3 폭발 차단).
-    assert _hold1([_pp((2024, 1, 2), "5"), _pp((2024, 1, 31), "1000000")]) == Decimal("19.0")
+    # 극소 진입가/잔존 garbage → 199999배 → +100% clip(ADR-010·증폭기 차단).
+    assert _hold1([_pp((2024, 1, 2), "5"), _pp((2024, 1, 31), "1000000")]) == Decimal("1.0")
 
 
 def test_holding_return_no_floor_preserves_real_loss() -> None:
@@ -140,9 +140,15 @@ def test_holding_return_no_floor_preserves_real_loss() -> None:
     assert _hold1([_pp((2024, 1, 2), "1000000"), _pp((2024, 1, 31), "5")]) == expected
 
 
-def test_holding_return_preserves_gme_16x() -> None:
-    # 실재 16.2x 급등(GME) → cap +19 안쪽 → 무변경(실수익 보존).
-    assert _hold1([_pp((2024, 1, 2), "10"), _pp((2024, 1, 31), "162")]) == Decimal("15.2")
+def test_holding_return_clips_legit_large_gain() -> None:
+    # ADR-010: 실재 대급등(GME 16.2x·ret 15.2)도 +100% clip — +1900%/월급 cap-hit 은 정상 알파
+    # 아님(0a 증폭기 확정). A1p2 의 GME 보존(+19)은 Phase 0a 진단서 폐기(증폭기 root).
+    assert _hold1([_pp((2024, 1, 2), "10"), _pp((2024, 1, 31), "162")]) == Decimal("1.0")
+
+
+def test_holding_return_below_clip_unchanged() -> None:
+    # clip 안쪽 정상 수익(+50%)은 무변경(기계 검증).
+    assert _hold1([_pp((2024, 1, 2), "100"), _pp((2024, 1, 31), "150")]) == Decimal("0.5")
 
 
 def test_holding_return_delisting_recovery0_stays_total_loss() -> None:
