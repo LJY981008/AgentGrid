@@ -244,8 +244,11 @@ def sync_daily_bars_from_parquet(
 
     import duckdb
 
+    # `:memory:` memory_limit 캡(MEM-fix) — 무설정=호스트RAM 80% → full Parquet 스캔 RSS 폭발(실측
+    # 12.95G·_scan/storage 동형). 캡→spill·결과 불변. env STOCKPICK_SCAN_MEMORY_LIMIT(기본 1GB).
+    mlimit = os.environ.get("STOCKPICK_SCAN_MEMORY_LIMIT", "1GB")
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": mlimit})
     try:
         # ⚠️ ingested_at(TIMESTAMPTZ)는 epoch_us(bigint)로 추출 — DuckDB tz-aware Python 변환은
         # pytz 의존(미설치). 마이크로초 정수로 받아 Python UTC datetime 재구성(원본 시각 보존).

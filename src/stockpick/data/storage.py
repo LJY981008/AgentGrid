@@ -469,7 +469,7 @@ def verify_parquet(
     glob = f"{dataset_root}/**/*.parquet"
     params: dict[str, object] = {"glob": glob}
 
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _VERIFY_MEMORY_LIMIT})
     try:
         # 버퍼 캡 — 미설정 DuckDB 기본(호스트RAM 80%)은 cgroup 무시 OOM(exit137 실측). 초과분은
         # temp_directory 디스크 spill(결과 불변·느려질 뿐). temp=base_dir(쓰기가능 볼륨).
@@ -621,7 +621,7 @@ def list_dataset_tickers(base_dir: Path) -> list[str]:
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _VERIFY_MEMORY_LIMIT})
     try:
         rows = con.execute(_SQL_DISTINCT_TICKERS, {"glob": glob}).fetchall()
     finally:
@@ -643,7 +643,7 @@ def load_trade_date_bounds(base_dir: Path) -> dict[str, tuple[date, date]]:
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _VERIFY_MEMORY_LIMIT})
     try:
         rows = con.execute(_SQL_TRADE_DATE_BOUNDS, {"glob": glob}).fetchall()
     finally:

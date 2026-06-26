@@ -21,6 +21,7 @@ trade_date <= :asOf ORDER BY trade_date 로 종목별 시계열을 꺼내는 것
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Final
@@ -34,6 +35,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DATASET_NAME: Final = "daily_bar"
+# `:memory:` DuckDB 연결 memory_limit 캡(MEM-fix·실측). 무설정 시 DuckDB 기본=호스트RAM 80%(~25GB)
+# 라 full Parquet 스캔(`load_ticker_exchanges` 98M행 GROUP BY 등)이 RSS 12.95G 폭발(profile:
+# 이 한 호출이 전 메모리·핫패스 cache 쿼리는 0). 캡 → 디스크 spill·결과 불변(스캔 느려질 뿐).
+_SCAN_MEMORY_LIMIT: Final = os.environ.get("STOCKPICK_SCAN_MEMORY_LIMIT", "1GB")
 
 # 수정주가 시계열 조회 SQL. SQL 골격은 코드 리터럴, 경로/as_of 는 파라미터 바인딩($glob,$as_of)
 # 으로만 주입(사용자 입력이 SQL 에 안 섞임 — storage.py 동일 규약). adjusted = close * adj_factor.
@@ -127,7 +132,7 @@ def load_adjusted_series(
     else:
         sql = _SQL_SERIES_ALL
 
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(sql, params).fetchall()
     finally:
@@ -171,7 +176,7 @@ def load_close_as_of(base_dir: Path, *, as_of: date | None = None) -> dict[str, 
     else:
         sql = _SQL_CLOSE_ALL
 
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(sql, params).fetchall()
     finally:
@@ -204,7 +209,7 @@ def load_ticker_exchanges(base_dir: Path) -> dict[str, Exchange]:
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(_SQL_TICKER_EXCHANGE, {"glob": glob}).fetchall()
     finally:
@@ -248,7 +253,7 @@ def load_trading_days(base_dir: Path) -> list[date]:
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(_SQL_TRADING_DAYS, {"glob": glob}).fetchall()
     finally:
@@ -289,7 +294,7 @@ def load_range_series(
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(
             _SQL_SERIES_RANGE,
@@ -334,7 +339,7 @@ def load_tickers_with_data(
     import duckdb
 
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _SCAN_MEMORY_LIMIT})
     try:
         rows = con.execute(
             _SQL_TICKERS_WITH_DATA,

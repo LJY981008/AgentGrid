@@ -11,6 +11,7 @@ base_dir 에서 합성한 값이지만, 동일 규약을 지켜 일관성·안�
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
 from pathlib import Path
 
@@ -66,8 +67,11 @@ def dataset(base_dir: Path = Depends(get_base_dir)) -> DatasetSummary:
 
     import duckdb
 
+    # `:memory:` memory_limit 캡(MEM-fix) — 무설정=호스트RAM 80% → full Parquet 스캔 RSS 폭발(실측
+    # 12.95G·_scan/storage 동형). 캡→spill·결과 불변. env STOCKPICK_SCAN_MEMORY_LIMIT(기본 1GB).
+    mlimit = os.environ.get("STOCKPICK_SCAN_MEMORY_LIMIT", "1GB")
     glob = f"{dataset_root}/**/*.parquet"
-    con = duckdb.connect(database=":memory:")
+    con = duckdb.connect(database=":memory:", config={"memory_limit": mlimit})
     try:
         rows = con.execute(_SQL_PER_TICKER, {"glob": glob}).fetchall()
     finally:
