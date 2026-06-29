@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import Depends
 
-from ..backtest.identity import EdgarSnapshotResolver
+from ..backtest.identity import PitIdentityResolver
 from ..data.eodhd import EodhdSource
 from ..data.source import DataSource
 
@@ -60,13 +60,13 @@ def get_source() -> DataSource:
 
 
 @lru_cache(maxsize=8)
-def _resolver_for(base_dir: Path) -> EdgarSnapshotResolver:
-    """base_dir 별 EdgarSnapshotResolver 캐시 — 저장본 JSON 1회 read(요청마다 재read 방지)."""
-    return EdgarSnapshotResolver(base_dir)
+def _resolver_for(base_dir: Path) -> PitIdentityResolver:
+    """base_dir 별 PitIdentityResolver 캐시 — ticker_history.json 1회 read(요청마다 재read 방지)."""
+    return PitIdentityResolver(base_dir)
 
 
 def get_identity_resolver(base_dir: Path = Depends(get_base_dir)) -> IdentityResolver:
-    """ticker→cik resolver. base_dir 의 EDGAR 저장본 기반(없으면 빈 맵→cik="" 폴백).
+    """ticker→cik resolver. base_dir 의 ticker_history.json 시점별 해소(없으면 빈 맵→cik="" 폴백).
 
     base_dir 를 Depends 로 받아 dependency_overrides(tmp) 가 그대로 반영되게 한다(_resolver_for 가
     base_dir 별 캐시).

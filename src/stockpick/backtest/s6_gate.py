@@ -696,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
         _select_price_port,
         _select_universe,
     )
-    from .identity import EdgarSnapshotResolver
+    from .identity import PitIdentityResolver
     from .strategy import EqualWeightTopN, TopDecileEqualWeight
 
     configure_logging()
@@ -762,7 +762,7 @@ def main(argv: list[str] | None = None) -> int:
                 config,
                 price_port=price_port,
                 universe_port=universe,
-                identity=EdgarSnapshotResolver(base_dir),
+                identity=PitIdentityResolver(base_dir),
                 strategy=strategy,
                 liquidity_port=liquidity,
                 delisted_ratio=delisted_ratio,

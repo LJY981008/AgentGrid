@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 from stockpick.api import create_app
 from stockpick.api.deps import get_base_dir, get_learning_dir, get_source
 from stockpick.backtest.s6_gate import compute_rule_signature, ranking_rule_signature
-from stockpick.data.edgar import store_financials, store_ticker_cik
+from stockpick.data.edgar import store_financials
 from stockpick.data.eodhd import EodhdAuthError, EodhdRateLimitError
 from stockpick.data.storage import write_daily_bars
 from stockpick.types import DailyBar, Exchange, FinancialFact, Stock
@@ -511,9 +511,21 @@ def test_backtest_invalid_params_422(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ranking_cik_enriched_from_edgar_store(client: TestClient) -> None:
+def _store_ticker_history(base_dir: Path, mapping: dict[str, str]) -> None:
+    # PIT resolver 입력 — 각 ticker 개구간(valid_from floor·valid_to None)로 전 시점 해소.
+    payload = {
+        "generated_at": "2026-06-29T00:00:00+00:00",
+        "history": [
+            {"ticker": t, "cik": cik, "valid_from": "2000-01-01", "valid_to": None}
+            for t, cik in mapping.items()
+        ],
+    }
+    (base_dir / "ticker_history.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_ranking_cik_enriched_from_ticker_history(client: TestClient) -> None:
     _write_synthetic(client.base_dir)  # NVDA·AAPL
-    store_ticker_cik({"NVDA": "0001045810", "AAPL": "0000320193"}, client.base_dir)
+    _store_ticker_history(client.base_dir, {"NVDA": "0001045810", "AAPL": "0000320193"})
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
     ciks = {e["ticker"]: e["cik"] for e in r.json()["entries"]}
@@ -521,8 +533,8 @@ def test_ranking_cik_enriched_from_edgar_store(client: TestClient) -> None:
     assert ciks["AAPL"] == "0000320193"
 
 
-def test_ranking_cik_empty_without_edgar_store(client: TestClient) -> None:
-    _write_synthetic(client.base_dir)  # EDGAR 저장본 없음 → cik="" 폴백(graceful)
+def test_ranking_cik_empty_without_ticker_history(client: TestClient) -> None:
+    _write_synthetic(client.base_dir)  # ticker_history.json 없음 → cik="" 폴백(graceful)
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
     assert all(e["cik"] == "" for e in r.json()["entries"])
@@ -557,7 +569,7 @@ def _store_nvda_financials(base_dir: Path, *, filed: tuple[int, int, int]) -> No
 
 def test_ranking_financial_factors_enriched(client: TestClient) -> None:
     _write_synthetic(client.base_dir)  # NVDA 마지막 close=218 @2025-03-01
-    store_ticker_cik({"NVDA": "0001045810", "AAPL": "0000320193"}, client.base_dir)
+    _store_ticker_history(client.base_dir, {"NVDA": "0001045810", "AAPL": "0000320193"})
     _store_nvda_financials(client.base_dir, filed=(2025, 1, 15))  # as_of(2025-03-01) 이전 공시
     r = client.get("/api/ranking", params={"top_n": 5, "lookback_days": 20, "skip_recent_days": 0})
     assert r.status_code == 200
@@ -576,7 +588,7 @@ def test_ranking_financial_factors_enriched(client: TestClient) -> None:
 
 def test_ranking_financial_factors_lookahead_excludes_future_filing(client: TestClient) -> None:
     _write_synthetic(client.base_dir)
-    store_ticker_cik({"NVDA": "0001045810"}, client.base_dir)
+    _store_ticker_history(client.base_dir, {"NVDA": "0001045810"})
     _store_nvda_financials(client.base_dir, filed=(2026, 2, 1))  # as_of 이후 공시 → 누설 차단
     r = client.get(
         "/api/ranking",

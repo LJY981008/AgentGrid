@@ -293,3 +293,49 @@ def test_export_stock_snapshot_empty(conn: _Conn, tmp_path: Path) -> None:
     payload = json.loads((tmp_path / "stock_snapshot.json").read_text(encoding="utf-8"))
     assert payload["stocks"] == []
     assert "generated_at" in payload
+
+
+def _stock_ids(conn: _Conn) -> dict[str, int]:
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, ticker FROM stock ORDER BY ticker")
+        return {str(t): int(i) for i, t in cur.fetchall()}
+
+
+def test_export_ticker_history_snapshot(conn: _Conn, tmp_path: Path) -> None:
+    # active(valid_to=null)·delisted(valid_to=delisted+1) → ticker_history.json.
+    db.upsert_stocks(conn, [_stock("THA", cik="0000000301")], source="eodhd", ingested_at=_STAMP)
+    db.upsert_stocks(
+        conn,
+        [_stock("THD", cik="0000000302")],
+        source="eodhd",
+        ingested_at=_STAMP,
+        status="delisted",
+    )
+    ids = _stock_ids(conn)
+    db.upsert_ticker_history(
+        conn,
+        [
+            (ids["THA"], "THA", "0000000301", date(2010, 1, 1), None),
+            (ids["THD"], "THD", "0000000302", date(2000, 1, 1), date(2008, 9, 16)),
+        ],
+    )
+    n = db.export_ticker_history_snapshot(conn, tmp_path)
+    assert n == 2
+    payload = json.loads((tmp_path / "ticker_history.json").read_text(encoding="utf-8"))
+    assert datetime.fromisoformat(payload["generated_at"])  # ISO 파싱 가능
+    rows = {r["ticker"]: r for r in payload["history"]}
+    assert rows["THA"] == {
+        "ticker": "THA",
+        "cik": "0000000301",
+        "valid_from": "2010-01-01",
+        "valid_to": None,  # 개구간(현재사)
+    }
+    assert rows["THD"]["valid_to"] == "2008-09-16"  # 폐지 경계(배타 상한)
+
+
+def test_export_ticker_history_snapshot_empty(conn: _Conn, tmp_path: Path) -> None:
+    n = db.export_ticker_history_snapshot(conn, tmp_path)
+    assert n == 0
+    payload = json.loads((tmp_path / "ticker_history.json").read_text(encoding="utf-8"))
+    assert payload["history"] == []
+    assert "generated_at" in payload

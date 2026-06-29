@@ -27,7 +27,7 @@ from .adapters import (
 )
 from .benchmark import attach_benchmarks, equal_weight_universe
 from .config import BacktestConfig
-from .identity import EdgarSnapshotResolver
+from .identity import PitIdentityResolver
 from .strategy import EqualWeightTopN
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ def run_demo(base_dir: Path) -> int:
             return 0
 
         universe = _select_universe(base_dir, price_port)  # 스냅샷 있으면 Master·없으면 폴백
-        identity = EdgarSnapshotResolver(base_dir)  # EDGAR 저장본 cik(없으면 빈 맵→"")
+        identity = PitIdentityResolver(base_dir)  # 시점별 cik(ticker_history.json·없으면 빈 맵→"")
         config = BacktestConfig(
             strategy_name="equal_weight_top_n",
             top_n=min(5, universe.ticker_count()),

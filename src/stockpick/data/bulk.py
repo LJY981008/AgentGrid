@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import configure_logging
-from .db import connect, export_stock_snapshot, master_securities, update_stock_dates
+from .db import (
+    connect,
+    export_stock_snapshot,
+    export_ticker_history_snapshot,
+    master_securities,
+    update_stock_dates,
+)
 from .duckdb_cache import build_cache
 from .eodhd import EodhdAuthError, EodhdRateLimitError, EodhdResponseError, EodhdSource
 from .storage import (
@@ -34,6 +40,7 @@ from .storage import (
     verify_parquet,
     write_daily_bars,
 )
+from .universe import rebuild_ticker_history
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -148,7 +155,11 @@ def _apply_dates_and_snapshot(conn: psycopg.Connection[TupleRow], base_dir: Path
     반환 = 스냅샷 종목 수.
     """
     update_stock_dates(conn, load_trade_date_bounds(base_dir))
-    return export_stock_snapshot(conn, base_dir)
+    n = export_stock_snapshot(conn, base_dir)
+    # A2: 날짜 backfill 후 ticker_history 실 다행 재빌드(+A1 복구 cik) → PIT resolver 입력 export.
+    rebuild_ticker_history(conn, base_dir)
+    export_ticker_history_snapshot(conn, base_dir)
+    return n
 
 
 def _run_verify(base_dir: Path, expected: dict[str, TickerExpectation] | None) -> bool:

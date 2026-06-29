@@ -223,6 +223,54 @@ def upsert_ticker_history(
     return len(rows)
 
 
+def clear_ticker_history(conn: psycopg.Connection[TupleRow]) -> int:
+    """ticker_history 전 행 삭제(파생 투영 clean rebuild·stale 윈도우 제거). 반환=삭제 수.
+
+    ticker_history = stock+delisted_cik 의 결정적 투영 → rebuild 전 clear 로 멱등. 커밋=호출부.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM ticker_history")
+        return cur.rowcount
+
+
+def export_ticker_history_snapshot(conn: psycopg.Connection[TupleRow], base_dir: Path) -> int:
+    """ticker_history → `base_dir/ticker_history.json`(PitIdentityResolver 입력·atomic). 반환=행수.
+
+    `{"generated_at":ISO, "history":[{ticker, cik, valid_from, valid_to}]}`. cik NULL→`null`·
+    valid_to NULL(개구간=현재사)→`null`. dates ISO. stock_snapshot 동형(temp→replace).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT ticker, cik, valid_from, valid_to FROM ticker_history "
+            "ORDER BY ticker, valid_from"
+        )
+        rows = cur.fetchall()
+    history: list[dict[str, object]] = []
+    for row in rows:  # 명시 언팩 — fetchall Any 흐름 차단(date 만 isoformat).
+        ticker, cik, valid_from, valid_to = row
+        history.append(
+            {
+                "ticker": ticker,
+                "cik": cik,
+                "valid_from": valid_from.isoformat() if isinstance(valid_from, date) else None,
+                "valid_to": valid_to.isoformat() if isinstance(valid_to, date) else None,
+            }
+        )
+    payload = {"generated_at": datetime.now(UTC).isoformat(), "history": history}
+    base_dir.mkdir(parents=True, exist_ok=True)
+    target = base_dir / "ticker_history.json"
+    tmp = base_dir / ".ticker_history.json.tmp"
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, target)  # atomic — 독자는 부분 파일을 보지 않음
+    except OSError:
+        logger.error("ticker_history 스냅샷 쓰기 실패: %s", target, exc_info=True)
+        tmp.unlink(missing_ok=True)
+        raise
+    logger.info("ticker_history 스냅샷 export: %d행 → %s", len(history), str(target))
+    return len(history)
+
+
 def sync_daily_bars_from_parquet(
     conn: psycopg.Connection[TupleRow],
     base_dir: Path,

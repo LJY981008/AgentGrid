@@ -1,9 +1,9 @@
 """S5-b 종목마스터 적재 오케스트레이션 — EODHD Common Stock 유니버스 → PG stock/ticker_history.
 
 흐름: `fetch_common_stock_universe`(활성/폐지 분리) → EDGAR cik enrich(`load_ticker_cik`) →
-`upsert_stocks`(⚠️ **delisted 먼저 → active 나중** — resolved cik 충돌 시 active 승리·B1) →
-`ticker_history` 현재 스냅샷(⚠️ **stock.id 당 1행**·floor sentinel — M-a). 단방향·멱등. 진입점
-`main()` 이 configure_logging(G6 토큰 가드)·connect·commit.
+`upsert_stocks`(⚠️ **delisted 먼저 → active 나중** — resolved cik 충돌 시 active 승리·B1). 단방향·
+멱등. 진입점 `main()` 이 configure_logging(G6 토큰 가드)·connect·commit. ⚠️ **ticker_history 는
+master-load 아니라 finalize(`rebuild_ticker_history`)가 소유**(실 다행엔 backfill 날짜 필요·A2).
 
 ⚠️ 단일 트랜잭션(마스터 규모 수만 행 — 원샷·멱등 UPSERT·실패 시 깨끗한 rollback+재실행). 청크/
 체크포인트는 S5-c(다년 가격). 거래소는 EODHD "US"→OTC 다수(M2 한계·S5-d 정밀화). 날짜
@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import configure_logging
-from .db import connect, upsert_stocks, upsert_ticker_history
+from .cik_mapping import load_delisted_ciks
+from .db import clear_ticker_history, connect, upsert_stocks, upsert_ticker_history
 from .edgar import load_ticker_cik
 from .eodhd import EodhdSource
 
@@ -38,9 +39,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ticker_history 스냅샷 valid_from sentinel — 현 스냅샷이 전 구간 유효 가정(cik_for(ticker, on)
-# 어떤 날짜도 해소). 시점별 ticker 재사용 해소·EXCLUDE 제약은 S5-d(실 history).
-_SNAPSHOT_FLOOR = date(1900, 1, 1)
 _DATA_DIR_ENV = "STOCKPICK_DATA_DIR"
 _DEFAULT_DATA_DIR = "data/parquet"
 
@@ -52,10 +50,10 @@ def load_universe_master(
     conn: psycopg.Connection[TupleRow],
     ingested_at: datetime,
 ) -> dict[str, int]:
-    """Common Stock 유니버스 → stock UPSERT + ticker_history 스냅샷. 반환 = 카운트. 커밋은 호출부.
+    """Common Stock 유니버스 → stock UPSERT. 반환 = {active, delisted} 카운트. 커밋은 호출부.
 
     cik enrich = EDGAR ticker_cik 저장본(해소 시 stock.cik·미해소 ""→NULL). delisted 먼저·active
-    나중(active-wins on resolved cik). ticker_history 는 stock.id 당 1행(같은 ticker 2행이면 2행).
+    나중(active-wins on resolved cik). ticker_history 미적재(finalize rebuild 소유).
     """
     active, delisted = source.fetch_common_stock_universe(include_delisted=True)
     ticker_cik = load_ticker_cik(base_dir)
@@ -72,26 +70,39 @@ def load_universe_master(
     upsert_stocks(conn, delisted_e, source=source.name, ingested_at=ingested_at, status="delisted")
     upsert_stocks(conn, active_e, source=source.name, ingested_at=ingested_at, status="active")
 
-    rows = _snapshot_ticker_history(conn)
-    upsert_ticker_history(conn, rows)
-
-    logger.info(
-        "종목마스터 적재: active=%d, delisted=%d, ticker_history=%d(stock.id 당)",
-        len(active_e),
-        len(delisted_e),
-        len(rows),
-    )
-    return {"active": len(active_e), "delisted": len(delisted_e), "ticker_history": len(rows)}
+    # ⚠️ ticker_history 미적재 — 실 다행엔 listed/delisted 날짜 필요하나 이 시점 NULL(S5-c backfill
+    # 전). finalize(`rebuild_ticker_history`)가 단일 소유.
+    logger.info("종목마스터 적재: active=%d, delisted=%d", len(active_e), len(delisted_e))
+    return {"active": len(active_e), "delisted": len(delisted_e)}
 
 
-def _snapshot_ticker_history(conn: psycopg.Connection[TupleRow]) -> list[TickerHistoryRow]:
-    """현재 stock 전 행 → ticker_history 스냅샷(stock.id 당 1행·floor→NULL). M-a: ticker 당 아님."""
+def rebuild_ticker_history(conn: psycopg.Connection[TupleRow], base_dir: Path) -> int:
+    """stock(+A1 `delisted_cik.json`) → ticker_history 실 다행 재빌드(clear+upsert·멱등). 반환=행수.
+
+    finalize(날짜 backfill 후) 단일 소유. stock 행(id,ticker,cik,listed_at,delisted_at) + A1 복구
+    cik 를 `build_ticker_history_rows` 로 PIT 다행화 → clear 후 upsert(파생 투영 멱등). 커밋=호출부.
+    날짜 NULL(backfill 전)이면 빌더가 전부 제외 → 0행(에러 아님). 복구맵 부재→{}(stock.cik 만).
+    """
     with conn.cursor() as cur:
-        cur.execute("SELECT id, ticker, cik FROM stock")
-        return [
-            (int(r[0]), str(r[1]), (str(r[2]) if r[2] is not None else None), _SNAPSHOT_FLOOR, None)
+        cur.execute("SELECT id, ticker, cik, listed_at, delisted_at FROM stock")
+        stocks = [
+            (
+                int(r[0]),
+                str(r[1]),
+                (str(r[2]) if r[2] is not None else None),
+                (r[3] if isinstance(r[3], date) else None),
+                (r[4] if isinstance(r[4], date) else None),
+            )
             for r in cur.fetchall()
         ]
+    recovered = load_delisted_ciks(base_dir)
+    rows = build_ticker_history_rows(stocks, recovered)
+    clear_ticker_history(conn)
+    upsert_ticker_history(conn, rows)
+    logger.info(
+        "ticker_history 재빌드: %d행(stock=%d·복구cik=%d)", len(rows), len(stocks), len(recovered)
+    )
+    return len(rows)
 
 
 def build_ticker_history_rows(
@@ -161,7 +172,7 @@ def main() -> int:
         conn.close()
     print(  # noqa: T201 — 진입점 사용자 출력
         f"[universe] 종목마스터 적재 완료: active={result['active']}, "
-        f"delisted={result['delisted']}, ticker_history={result['ticker_history']}"
+        f"delisted={result['delisted']} (ticker_history 는 벌크 finalize 에서 빌드)"
     )
     return 0
 

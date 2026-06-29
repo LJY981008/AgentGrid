@@ -249,6 +249,7 @@ def test_finalize_apply_idempotent(conn: _Conn, tmp_path: Path) -> None:
     n2 = _apply_dates_and_snapshot(conn, tmp_path)
     assert n1 == n2 == 1  # stock 1개(AAA) — 멱등
     assert (tmp_path / "stock_snapshot.json").is_file()
+    assert (tmp_path / "ticker_history.json").is_file()  # finalize 가 PIT resolver 입력도 빌드(A2)
 
 
 def test_run_bulk_verify_flag(conn: _Conn, tmp_path: Path) -> None:
