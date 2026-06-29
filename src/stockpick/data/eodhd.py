@@ -319,6 +319,45 @@ class EodhdSource:
 
     # ----- 내부 HTTP/파싱 헬퍼 -----
 
+    def _fetch_json(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, str],
+        context: str,
+    ) -> object:
+        """공통 GET → 파싱된 JSON(타입무관·array/object 검증은 호출부). 토큰 주입·노출차단 단일지점.
+
+        ⚠️ 토큰은 여기서만 쿼리에 더한다. 이후 로그·예외에 query_params/url 을 그대로 안 남긴다
+        (httpx 예외 repr 에 토큰 실린 URL 가능 → from None 으로 체인 차단·메시지엔 path/context 만).
+        """
+        token = self._api_token()
+        query: dict[str, str] = {**params, _API_TOKEN_PARAM: token}
+        url = f"{_BASE_URL}{path}"
+        try:
+            if self._client is not None:
+                response = self._client.get(url, params=query)
+            else:
+                with httpx.Client(timeout=self._timeout) as client:
+                    response = client.get(url, params=query)
+        except httpx.TimeoutException:
+            raise EodhdResponseError(
+                f"EODHD 요청 타임아웃: context={context}, path={path}"
+            ) from None
+        except httpx.HTTPError:
+            raise EodhdResponseError(
+                f"EODHD 요청 전송 실패: context={context}, path={path}"
+            ) from None
+
+        self._raise_for_status(response, context=context, path=path)
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise EodhdResponseError(
+                f"EODHD 응답이 JSON 이 아닙니다: context={context}, path={path}",
+                status_code=response.status_code,
+            ) from exc
+
     def _get_json_array(
         self,
         path: str,
@@ -330,42 +369,11 @@ class EodhdSource:
 
         context = 로그·예외 식별용(심볼/경로 — 토큰 없음). 에러를 status 별로 분류해 명확히 보고.
         """
-        token = self._api_token()
-        # ⚠️ 토큰은 여기서만 쿼리에 더한다. 이후 로그·예외에 query_params/url 을 그대로 안 남긴다.
-        query: dict[str, str] = {**params, _API_TOKEN_PARAM: token}
-        url = f"{_BASE_URL}{path}"
-        try:
-            if self._client is not None:
-                response = self._client.get(url, params=query)
-            else:
-                with httpx.Client(timeout=self._timeout) as client:
-                    response = client.get(url, params=query)
-        except httpx.TimeoutException:
-            # from None: httpx 예외 repr 에 토큰 실린 URL 이 포함될 수 있어 체인을 끊는다.
-            # 우리 메시지엔 path(토큰 없음)와 context 만 남긴다(노출 방지).
-            raise EodhdResponseError(
-                f"EODHD 요청 타임아웃: context={context}, path={path}"
-            ) from None
-        except httpx.HTTPError:
-            raise EodhdResponseError(
-                f"EODHD 요청 전송 실패: context={context}, path={path}"
-            ) from None
-
-        self._raise_for_status(response, context=context, path=path)
-
-        try:
-            payload: object = response.json()
-        except ValueError as exc:
-            raise EodhdResponseError(
-                f"EODHD 응답이 JSON 이 아닙니다: context={context}, path={path}",
-                status_code=response.status_code,
-            ) from exc
-
+        payload = self._fetch_json(path, params=params, context=context)
         if not isinstance(payload, list):
             raise EodhdResponseError(
                 f"EODHD 응답이 배열이 아닙니다(type={type(payload).__name__}): "
                 f"context={context}, path={path}",
-                status_code=response.status_code,
             )
         result: list[dict[str, object]] = []
         for item in payload:
@@ -373,10 +381,53 @@ class EodhdSource:
                 raise EodhdResponseError(
                     f"EODHD 응답 원소가 객체가 아닙니다(type={type(item).__name__}): "
                     f"context={context}, path={path}",
-                    status_code=response.status_code,
                 )
             result.append(item)
         return result
+
+    def fetch_id_mapping(self, symbol: str) -> str | None:
+        """ID-Mapping(ticker→CIK) — `symbol` 의 SEC CIK(10자리 zero-pad) 또는 None.
+
+        명세 `GET /api/id-mapping?filter[symbol]={symbol}&fmt=json` → envelope {meta,data,links}.
+        A1 폐지 ticker→cik 복구용(현재신고사는 SEC company_tickers 로 충분). cik 없는 종목(ETF·
+        외국주 등)·미커버 ticker = None(조용한 추측 금지·토큰 비노출은 _fetch_json 가드).
+        """
+        # _BASE_URL 이 이미 `/api` 포함 → path 는 `/id-mapping`(명세 url_pattern `/api/id-mapping`).
+        payload = self._get_json_object(
+            "/id-mapping",
+            params={"filter[symbol]": symbol, "fmt": "json"},
+            context=symbol,
+        )
+        data = payload.get("data")
+        if not isinstance(data, list) or not data:
+            return None
+        first = data[0]
+        if not isinstance(first, dict):
+            return None
+        cik = first.get("cik")
+        if cik is None:
+            return None
+        # SEC companyfacts URL 일관(CIK{10자리}). EODHD 가 정수/비패딩 반환 가능 → zfill.
+        return str(cik).zfill(10)
+
+    def _get_json_object(
+        self,
+        path: str,
+        *,
+        params: Mapping[str, str],
+        context: str,
+    ) -> dict[str, object]:
+        """공통 GET → JSON 객체(envelope: meta+data+links). `_get_json_array` 의 객체 변형.
+
+        토큰 주입·status 분류·노출 차단은 _get_json_array 와 동일 규약(_fetch_json 공유).
+        """
+        payload = self._fetch_json(path, params=params, context=context)
+        if not isinstance(payload, dict):
+            raise EodhdResponseError(
+                f"EODHD 응답이 객체가 아닙니다(type={type(payload).__name__}): "
+                f"context={context}, path={path}",
+            )
+        return payload
 
     def _raise_for_status(self, response: httpx.Response, *, context: str, path: str) -> None:
         """HTTP status 분류 — 429/401·403/기타 4xx·5xx. 메시지엔 토큰 비노출(path/context 만)."""

@@ -489,3 +489,51 @@ def test_fetch_daily_bars_drops_sentinel_bars() -> None:
     bars = src.fetch_daily_bars("MRVL")
     assert len(bars) == 1  # sentinel 2개 drop
     assert bars[0].trade_date == date(2024, 6, 3)
+
+
+# ── ID-Mapping(ticker→CIK) — A1 폐지 cik 복구 ──
+
+
+def _id_mapping_source(handler_fn: object) -> EodhdSource:
+    """ID-Mapping envelope({meta,data,links}) 응답용 EodhdSource(MockTransport·라이브 0)."""
+    return EodhdSource(client=httpx.Client(transport=httpx.MockTransport(handler_fn)))  # type: ignore[arg-type]
+
+
+def test_fetch_id_mapping_returns_zero_padded_cik() -> None:
+    # envelope data[0].cik → 10자리 zero-pad(SEC companyfacts URL 일관). 요청 path=/api/id-mapping.
+    captured: dict[str, str] = {}
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["symbol"] = request.url.params.get("filter[symbol]", "")
+        return httpx.Response(
+            200,
+            json={
+                "meta": {"total": 1, "limit": 1000, "offset": 0},
+                "data": [{"symbol": "AAPL.US", "cik": "320193", "isin": "US0378331005"}],
+                "links": {},
+            },
+        )
+
+    src = _id_mapping_source(_handler)
+    assert src.fetch_id_mapping("AAPL.US") == "0000320193"
+    assert captured["path"] == "/api/id-mapping"
+    assert captured["symbol"] == "AAPL.US"
+
+
+def test_fetch_id_mapping_empty_data_returns_none() -> None:
+    # 미커버 ticker(data 빈 배열) → None(조용한 추측 금지).
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"meta": {"total": 0}, "data": [], "links": {}})
+
+    assert _id_mapping_source(_handler).fetch_id_mapping("DEAD.US") is None
+
+
+def test_fetch_id_mapping_null_cik_returns_none() -> None:
+    # 매핑 레코드는 있으나 cik 결측/null → None(다른 식별자만 있는 종목·추측 금지).
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"meta": {"total": 1}, "data": [{"symbol": "X.US", "cik": None}], "links": {}}
+        )
+
+    assert _id_mapping_source(_handler).fetch_id_mapping("X.US") is None
