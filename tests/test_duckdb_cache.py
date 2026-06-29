@@ -86,3 +86,44 @@ def test_build_cache_empty(tmp_path: Path) -> None:
     assert build_cache(tmp_path) == 0
     assert not cache_exists(tmp_path)
     assert not cache_path(tmp_path).exists()
+
+
+def test_build_cache_includes_financial_fact_table(tmp_path: Path) -> None:
+    # A3: financial_fact Parquet 가 있으면 cache.duckdb 에 동봉 table(B DuckDB 푸시다운 입력).
+    from stockpick.data.storage import write_financial_facts
+    from stockpick.types import FinancialFact
+
+    _write(tmp_path)  # daily_bar 필수(없으면 build_cache early-return)
+    write_financial_facts(
+        [
+            FinancialFact(
+                "0000000001", "NetIncomeLoss", "2024-FY",
+                date(2024, 12, 31), date(2025, 1, 15), Decimal("200"),
+            )
+        ],
+        tmp_path,
+        source="sec-edgar",
+        ingested_at=datetime(2026, 6, 29, tzinfo=UTC),
+    )
+    build_cache(tmp_path)
+    con = connect_readonly(tmp_path)
+    try:
+        cnt = con.execute("SELECT count(*) FROM financial_fact").fetchone()
+        assert cnt is not None and cnt[0] == 1
+        v = con.execute("SELECT value FROM financial_fact WHERE cik='0000000001'").fetchone()
+        assert v is not None and v[0] == Decimal("200")
+    finally:
+        con.close()
+
+
+def test_build_cache_without_financial_fact_ok(tmp_path: Path) -> None:
+    # 재무 미적재(백필 전)여도 build_cache 정상(financial_fact table 없을 뿐).
+    _write(tmp_path)
+    build_cache(tmp_path)
+    con = connect_readonly(tmp_path)
+    try:
+        tables = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
+        assert "daily_bar" in tables
+        assert "financial_fact" not in tables  # 백필 전 — 미생성(graceful)
+    finally:
+        con.close()

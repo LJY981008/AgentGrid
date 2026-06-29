@@ -111,3 +111,23 @@ def test_load_financial_facts_delegates(tmp_path: Path) -> None:
 
 def test_load_financial_facts_missing_empty(tmp_path: Path) -> None:
     assert load_financial_facts(tmp_path) == []
+
+
+def test_load_financial_facts_parquet_precedence_over_json(tmp_path: Path) -> None:
+    # A3: Parquet 백필본이 있으면 그걸 우선(구 JSON 폴백은 미적재 때만). latest_as_of 불변.
+    from datetime import UTC, datetime
+
+    from stockpick.data.storage import write_financial_facts
+
+    write_financial_facts(
+        [_fact("StockholdersEquity", "2024-FY", (2024, 9, 28), (2024, 11, 1), "999")],
+        tmp_path,
+        source="sec-edgar",
+        ingested_at=datetime(2026, 6, 29, tzinfo=UTC),
+    )
+    store_financials(  # JSON 도 존재하나 Parquet 우선 → 무시
+        [_fact("StockholdersEquity", "2024-FY", (2024, 9, 28), (2024, 11, 1), "1")], tmp_path
+    )
+    loaded = load_financial_facts(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].value == Decimal("999")  # Parquet 값(JSON 1 아님)

@@ -29,6 +29,8 @@ _DB_NAME = "cache.duckdb"
 _TMP_NAME = ".cache.duckdb.tmp"
 _TABLE = "daily_bar"
 _DATASET = "daily_bar"
+_FINANCIAL_TABLE = "financial_fact"  # A3 — 재무 fact 동봉 table(B ROE/PB 푸시다운)
+_FINANCIAL_DATASET = "financial_fact"
 _MEMORY_LIMIT = "4GB"  # 적재 OOM 방어(디스크 스필) — app mem_limit 12g 내 여유
 # 읽기 연결 버퍼풀 캡(ADR-008 후속) — memory_limit 미설정 시 DuckDB 기본=호스트RAM 80%라 다년
 # 백테스트 반복 window 쿼리서 버퍼풀이 ~12.8GB 까지 ballooning(profiler 실측: rss 12.8GB vs python
@@ -91,6 +93,18 @@ def build_cache(base_dir: Path) -> int:
                 "(데이터 무결성 위반·조용한 통과 금지)"
             )
             raise ValueError(msg)
+        # A3: 재무 fact table 동봉(있을 때만 — 백필 전 skip). 평면 financial_fact/<CIK>.parquet.
+        # B 의 DuckDB ROE/PB 푸시다운 입력. daily_bar 와 같은 연결 = 원자 동봉.
+        fin_root = base_dir / _FINANCIAL_DATASET
+        fin_files = sorted(str(p) for p in fin_root.glob("*.parquet"))
+        if fin_files:
+            con.execute(
+                f"CREATE TABLE {_FINANCIAL_TABLE} AS "  # noqa: S608 — 리터럴·glob 파라미터 바인딩
+                "SELECT cik, concept, fiscal_period, period_end, disclosed_at, value "
+                "FROM read_parquet($fin_glob)",
+                {"fin_glob": f"{fin_root}/*.parquet"},
+            )
+            logger.info("DuckDB 캐시: financial_fact table 동봉(%d cik 파일)", len(fin_files))
         row = con.execute(f"SELECT count(*) FROM {_TABLE}").fetchone()  # noqa: S608
         n = int(row[0]) if row else 0
     finally:

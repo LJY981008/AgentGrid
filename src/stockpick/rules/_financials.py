@@ -33,9 +33,19 @@ _ANNUAL_SUFFIX = "-FY"  # fiscal_period 가 "{fy}-FY" 면 연간(10-K) — 분�
 
 
 def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
-    """저장된 재무 fact 로드(`data/edgar` 저장본). 미적재면 빈 리스트(에러 아님)."""
-    facts = load_financials(base_dir)
-    logger.info("재무 fact 로드: %d건 (base_dir=%s)", len(facts), base_dir)
+    """저장된 재무 fact 로드 — **Parquet(A3 백필) 우선·JSON 폴백**. 미적재면 빈 리스트(에러 아님).
+
+    A3 이후 운영본은 `financial_fact/<CIK>.parquet`(만-cik). Parquet 있으면 그걸, 없으면(파일럿·
+    미마이그레이션) 구 `edgar/financials.json` 폴백. `latest_as_of` PIT(disclosed_at<=as_of) 불변.
+    """
+    from ..data.storage import load_financial_facts as _load_parquet
+
+    facts = _load_parquet(base_dir)
+    if facts:
+        logger.info("재무 fact 로드(Parquet): %d건 (base_dir=%s)", len(facts), base_dir)
+        return facts
+    facts = load_financials(base_dir)  # JSON 폴백(파일럿 슬라이스·Parquet 미적재)
+    logger.info("재무 fact 로드(JSON 폴백): %d건 (base_dir=%s)", len(facts), base_dir)
     return facts
 
 
