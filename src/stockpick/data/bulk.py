@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import configure_logging
+from .checkpoint import Checkpoint
 from .db import (
     connect,
     export_stock_snapshot,
@@ -57,7 +58,6 @@ _DATA_DIR_ENV = "STOCKPICK_DATA_DIR"
 _DEFAULT_DATA_DIR = "data/parquet"
 
 _CHECKPOINT_NAME = "bulk_checkpoint.jsonl"
-_SKIP_STATUSES = frozenset({"done", "empty"})  # 재개 시 skip(failed 는 재시도)
 _HTTP_SERVER_ERROR = 500
 _MAX_BACKOFF_SECONDS = 60.0
 
@@ -65,46 +65,6 @@ _MAX_BACKOFF_SECONDS = 60.0
 def _backoff_seconds(attempt: int) -> float:
     """지수 backoff(attempt 1→2s, 2→4s, …) 상한 _MAX_BACKOFF_SECONDS."""
     return min(2.0**attempt, _MAX_BACKOFF_SECONDS)
-
-
-class Checkpoint:
-    """ticker 처리 상태 {ticker: 'done'|'empty'|'failed'} — JSONL append(O(1)). 재개 진실원천.
-
-    append-only 라인(`ticker\\tstatus`) — 같은 ticker 재기록 시 마지막 라인 우선(load 가 순차 덮음).
-    크래시 시 마지막 라인 부분기록 가능 → load 가 형식불량 라인 skip(보수적·재시도 회복).
-    """
-
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        self._status: dict[str, str] = {}
-
-    @classmethod
-    def load(cls, path: Path) -> Checkpoint:
-        cp = cls(path)
-        if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                parts = line.split("\t")
-                if len(parts) == 2 and parts[0]:
-                    cp._status[parts[0]] = parts[1]  # 마지막 기록 우선
-        return cp
-
-    def mark(self, ticker: str, status: str) -> None:
-        """⚠️ write_daily_bars 완료 **후에만** 호출(M3 — write→체크포인트 순서)."""
-        self._status[ticker] = status
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(f"{ticker}\t{status}\n")
-
-    def should_skip(self, ticker: str) -> bool:
-        """done/empty 면 skip(재개). failed/미기록 은 (재)처리 대상."""
-        return self._status.get(ticker, "") in _SKIP_STATUSES
-
-    def counts(self) -> dict[str, int]:
-        tally = {"done": 0, "empty": 0, "failed": 0}
-        for status in self._status.values():
-            if status in tally:
-                tally[status] += 1
-        return tally
 
 
 def fetch_with_retry(

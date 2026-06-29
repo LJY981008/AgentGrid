@@ -15,13 +15,14 @@ from pathlib import Path
 import httpx
 import pytest
 
+from stockpick.data.cik_mapping import store_delisted_ciks
 from stockpick.data.edgar import (
     EdgarError,
     EdgarIdentityError,
     EdgarResponseError,
+    backfill_financials,
     fetch_company_tickers,
     fetch_companyfacts,
-    fetch_dataset_financials,
     financials_path,
     load_financials,
     load_ticker_cik,
@@ -29,7 +30,11 @@ from stockpick.data.edgar import (
     store_path,
     store_ticker_cik,
 )
-from stockpick.data.storage import list_dataset_tickers, write_daily_bars
+from stockpick.data.storage import (
+    list_dataset_tickers,
+    load_financial_facts,
+    write_daily_bars,
+)
 from stockpick.types import DailyBar, Exchange, FinancialFact
 
 # docs/apis/sec-edgar/company-tickers.json 실측 샘플 구조(인덱스 키 비안정·cik_str int)
@@ -377,11 +382,13 @@ def test_list_dataset_tickers_empty(tmp_path: Path) -> None:
     assert list_dataset_tickers(tmp_path) == []
 
 
-def test_fetch_dataset_financials_only_dataset_ciks(tmp_path: Path) -> None:
+def test_backfill_writes_parquet_and_only_dataset_plus_delisted(tmp_path: Path) -> None:
+    # 대상 cik = (데이터셋∩ticker_cik) ∪ 폐지 복구. MSFT(데이터셋 없음·폐지 아님)는 제외.
     _write_bar(tmp_path, "AAPL")
     _write_bar(tmp_path, "NVDA")
-    # MSFT 는 ticker_cik 에 있으나 데이터셋(가격)엔 없음 → companyfacts fetch 대상 아님.
     store_ticker_cik({"AAPL": "0000320193", "NVDA": "0001045810", "MSFT": "0000789019"}, tmp_path)
+    # 폐지 복구 cik(생존편향-안전 — 데이터셋엔 없어도 백필 대상).
+    store_delisted_ciks({"LEHMQ": ("0000806085", date(2008, 9, 15))}, tmp_path)
     seen: list[str] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -389,26 +396,76 @@ def test_fetch_dataset_financials_only_dataset_ciks(tmp_path: Path) -> None:
         return httpx.Response(200, json=_FACTS_SAMPLE)
 
     client = _client(httpx.MockTransport(handler))
-    facts, failed = fetch_dataset_financials(tmp_path, _IDENTITY, client=client)
-    assert failed == []
-    assert len(seen) == 2  # 데이터셋 cik(AAPL·NVDA)만 — MSFT 제외
-    assert any("0000320193" in u for u in seen)
-    assert any("0001045810" in u for u in seen)
-    assert not any("0000789019" in u for u in seen)  # MSFT 미fetch(SEC 호출 최소)
-    assert len(facts) == 10  # 2 cik × 5 sample fact
+    counts = backfill_financials(tmp_path, _IDENTITY, client=client)
+    assert counts["done"] == 3  # AAPL·NVDA·LEHMQ(폐지)
+    assert any("0000806085" in u for u in seen)  # 폐지 cik fetch(생존편향-안전)
+    assert not any("0000789019" in u for u in seen)  # MSFT 제외(데이터셋·폐지 아님)
+    facts = load_financial_facts(tmp_path)
+    assert len(facts) == 15  # 3 cik × 5 sample fact(Parquet 적재)
+    assert {f.cik for f in facts} == {"0000320193", "0001045810", "0000806085"}
 
 
-def test_fetch_dataset_financials_collects_failures(tmp_path: Path) -> None:
+def test_backfill_resume_skips_done(tmp_path: Path) -> None:
+    _write_bar(tmp_path, "AAPL")
+    store_ticker_cik({"AAPL": "0000320193"}, tmp_path)
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json=_FACTS_SAMPLE)
+
+    client = _client(httpx.MockTransport(handler))
+    backfill_financials(tmp_path, _IDENTITY, client=client)
+    assert calls["n"] == 1
+    backfill_financials(tmp_path, _IDENTITY, client=client)  # 재실행 — done skip
+    assert calls["n"] == 1  # 추가 호출 0(Checkpoint resume·중복 0)
+
+
+def test_backfill_failure_marked_and_retried(tmp_path: Path) -> None:
     _write_bar(tmp_path, "AAPL")
     _write_bar(tmp_path, "NVDA")
     store_ticker_cik({"AAPL": "0000320193", "NVDA": "0001045810"}, tmp_path)
+    fail_nvda = {"on": True}
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if "0001045810" in str(req.url):  # NVDA → 500(개별 실패)
+        if "0001045810" in str(req.url) and fail_nvda["on"]:
             return httpx.Response(500, json={})
         return httpx.Response(200, json=_FACTS_SAMPLE)
 
     client = _client(httpx.MockTransport(handler))
-    facts, failed = fetch_dataset_financials(tmp_path, _IDENTITY, client=client)
-    assert failed == ["0001045810"]  # 실패 cik 집계(전체 중단 안 함)
-    assert len(facts) == 5  # AAPL 성공분만
+    c1 = backfill_financials(tmp_path, _IDENTITY, client=client)
+    assert c1["failed"] == 1  # NVDA 실패(전체 중단 안 함)
+    assert c1["done"] == 1  # AAPL 성공분 적재
+    fail_nvda["on"] = False  # 복구
+    c2 = backfill_financials(tmp_path, _IDENTITY, client=client)  # 재시도(failed 만)
+    assert c2["done"] == 2  # AAPL(기존)+NVDA(재시도 성공)·failed 0
+    assert {f.cik for f in load_financial_facts(tmp_path)} == {"0000320193", "0001045810"}
+
+
+def test_backfill_fiscal_year_cut_excludes_pre_2009(tmp_path: Path) -> None:
+    # XBRL 의무화(2009) 이전 fy 는 제외 — 전부 옛 fy 면 empty 마킹(적재 0).
+    _write_bar(tmp_path, "OLDCO")
+    store_ticker_cik({"OLDCO": "0000111111"}, tmp_path)
+    old_payload = {
+        "cik": 111111,
+        "facts": {
+            "us-gaap": {
+                "StockholdersEquity": {
+                    "units": {
+                        "USD": [
+                            {"end": "2007-12-31", "val": 100, "fy": 2007, "fp": "FY",
+                             "form": "10-K", "filed": "2008-02-15"},
+                        ]
+                    }
+                }
+            }
+        },
+    }
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=old_payload)
+
+    client = _client(httpx.MockTransport(handler))
+    counts = backfill_financials(tmp_path, _IDENTITY, client=client)
+    assert counts["empty"] == 1  # fy 2007 < 2009 → 적재할 fact 없음(empty)
+    assert load_financial_facts(tmp_path) == []

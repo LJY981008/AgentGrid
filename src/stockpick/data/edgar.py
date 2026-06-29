@@ -36,7 +36,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final
@@ -45,6 +45,7 @@ import httpx
 
 from ..types import FinancialFact
 from . import configure_logging
+from .checkpoint import Checkpoint
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,8 @@ _DATA_DIR_ENV: Final = "STOCKPICK_DATA_DIR"
 _DEFAULT_DATA_DIR: Final = "data/parquet"
 _STORE_SUBPATH: Final = ("edgar", "ticker_cik.json")
 _FINANCIALS_SUBPATH: Final = ("edgar", "financials.json")
+_FINANCIALS_CHECKPOINT_NAME: Final = "financials_checkpoint.jsonl"
+_MIN_FISCAL_YEAR: Final = 2009  # XBRL 의무화 — 이전 재무는 sparse·불신(생존편향 시작점)
 _DEFAULT_TIMEOUT: Final = 30.0
 _FORBIDDEN_STATUS: Final = 403
 
@@ -387,42 +390,69 @@ def load_financials(base_dir: Path) -> list[FinancialFact]:
     return facts
 
 
-def fetch_dataset_financials(
+def _fiscal_year(fact: FinancialFact) -> int:
+    """fiscal_period "{fy}-{fp}" → fy(int). _build_fact 가 형식 보장 — 파싱 실패는 0(컷 제외)."""
+    head = fact.fiscal_period.split("-", 1)[0]
+    return int(head) if head.isdigit() else 0
+
+
+def backfill_financials(
     base_dir: Path,
     identity: str,
     *,
+    min_fiscal_year: int = _MIN_FISCAL_YEAR,
     sleep_s: float = 0.12,
     client: httpx.Client | None = None,
-) -> tuple[list[FinancialFact], list[str]]:
-    """가격 데이터셋에 있는 ticker 의 cik 만 companyfacts fetch → (facts, 실패 cik). 10req/s 준수.
+) -> dict[str, int]:
+    """대상 cik companyfacts 를 cik 단위 증분 백필 → Parquet(financial_fact). Checkpoint resume.
 
-    데이터셋 ticker(`storage.list_dataset_tickers`) ∩ 저장된 ticker_cik 으로 대상 cik 산출
-    (전체 수만 건 아님 — SEC 호출 최소·공정접근). cik 별 fetch 사이 sleep_s 대기(client 주입 시
-    생략 — 테스트). 개별 cik 실패는 집계해 계속(전체 중단 안 함 — 실패 명확 보고).
+    대상 cik = (가격 데이터셋 ticker ∩ ticker_cik) ∪ **폐지 복구 cik**(`delisted_cik.json`·A1·
+    생존편향-안전 — 데이터셋에 가격 없어도 백필). cik 별 fetch → **fy≥min_fiscal_year**(XBRL 컷)
+    필터 → `write_financial_facts`(cik 단위 덮어쓰기) → Checkpoint mark(done/empty). 개별 실패는
+    failed 마킹·계속(전체 중단 안 함·재실행 시 failed 재시도). 10req/s 준수(client 주입 시 sleep
+    생략 — 테스트). 반환 = {target, done, empty, failed}.
     """
-    from .storage import list_dataset_tickers  # 지연 import(pyarrow 로딩 — ticker 모드엔 불요)
+    from .cik_mapping import load_delisted_ciks
+    from .storage import list_dataset_tickers, write_financial_facts  # pyarrow 지연 import
 
     tickers = list_dataset_tickers(base_dir)
     ticker_cik = load_ticker_cik(base_dir)
-    # ticker→cik 해소(미해소 ticker 건너뜀). cik 중복 제거(클래스주 GOOGL/GOOG = 동일 cik).
-    target_ciks = sorted({ticker_cik[t] for t in tickers if ticker_cik.get(t)})
+    # cik 중복 제거(클래스주 GOOGL/GOOG = 동일 cik). 폐지 복구 cik union(생존편향-안전).
+    active_ciks = {ticker_cik[t] for t in tickers if ticker_cik.get(t)}
+    delisted_ciks = {cik for cik, _delisted in load_delisted_ciks(base_dir).values()}
+    target_ciks = sorted(active_ciks | delisted_ciks)
+
+    checkpoint = Checkpoint.load(base_dir / _FINANCIALS_CHECKPOINT_NAME)
+    stamp = datetime.now(UTC)
     logger.info(
-        "재무 적재 대상: 데이터셋 ticker=%d, cik 해소=%d (저장 ticker_cik=%d)",
-        len(tickers),
+        "재무 백필 시작: 대상 cik=%d(데이터셋∩cik=%d, 폐지=%d, 저장 ticker_cik=%d)",
         len(target_ciks),
+        len(active_ciks),
+        len(delisted_ciks),
         len(ticker_cik),
     )
-    all_facts: list[FinancialFact] = []
-    failed: list[str] = []
-    for i, cik in enumerate(target_ciks):
-        if i > 0 and client is None:
+    fetched = 0
+    for cik in target_ciks:
+        if checkpoint.should_skip(cik):
+            continue
+        if fetched > 0 and client is None:
             time.sleep(sleep_s)  # 공정접근(10req/s) — 라이브만. 테스트는 client 주입 시 생략.
+        fetched += 1
         try:
-            all_facts.extend(fetch_companyfacts(cik, identity, client=client))
+            facts = fetch_companyfacts(cik, identity, client=client)
         except EdgarError as exc:
             logger.warning("companyfacts fetch 실패(cik=%s): %r", cik, exc)
-            failed.append(cik)
-    return all_facts, failed
+            checkpoint.mark(cik, "failed")  # 재실행 시 재시도(done/empty 만 skip)
+            continue
+        recent = [f for f in facts if _fiscal_year(f) >= min_fiscal_year]
+        if recent:
+            write_financial_facts(recent, base_dir, source="sec-edgar", ingested_at=stamp)
+            checkpoint.mark(cik, "done")  # ⚠️ write 완료 후에만(부분적재 재개 회복)
+        else:
+            checkpoint.mark(cik, "empty")  # fetch 성공·적재할 fact 0(fy 컷·concept 결측)
+    counts = checkpoint.counts()
+    logger.info("재무 백필 완료: 대상=%d, %s", len(target_ciks), counts)
+    return {"target": len(target_ciks), **counts}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -442,11 +472,14 @@ def main(argv: list[str] | None = None) -> int:
     base_dir = Path(os.environ.get(_DATA_DIR_ENV, _DEFAULT_DATA_DIR))
 
     if mode == "financials":
-        facts, failed = fetch_dataset_financials(base_dir, identity)
-        path = store_financials(facts, base_dir)
-        print(f"[EDGAR] 재무 fact {len(facts)}건 저장: {path}")  # noqa: T201
-        if failed:
-            print(f"[EDGAR] ⚠️ companyfacts 실패 cik {len(failed)}건: {', '.join(failed)}")  # noqa: T201
+        counts = backfill_financials(base_dir, identity)
+        print(  # noqa: T201
+            f"[EDGAR] 재무 백필: 대상 {counts['target']}cik · "
+            f"done={counts['done']} empty={counts['empty']} failed={counts['failed']} "
+            f"→ financial_fact/(Parquet)"
+        )
+        if counts["failed"]:
+            print(f"[EDGAR] ⚠️ 실패 {counts['failed']}cik — 재실행 시 재시도(Checkpoint).")  # noqa: T201
         return 0
     if mode != "tickers":
         print(f"[EDGAR] 알 수 없는 모드 '{mode}' — 'tickers'(기본) 또는 'financials'.")  # noqa: T201

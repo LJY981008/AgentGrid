@@ -17,11 +17,11 @@ from psycopg.rows import TupleRow
 
 from stockpick.data import db
 from stockpick.data.bulk import (
-    Checkpoint,
     _apply_dates_and_snapshot,
     fetch_with_retry,
     run_bulk,
 )
+from stockpick.data.checkpoint import Checkpoint
 from stockpick.data.eodhd import (
     EodhdAuthError,
     EodhdRateLimitError,
