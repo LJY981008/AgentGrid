@@ -105,11 +105,12 @@ def load_delisted_ciks(base_dir: Path) -> dict[str, tuple[str, date]]:
 
 
 def main() -> int:
-    """`python -m stockpick.data.cik_mapping --sample N` — 정지점1 라이브 probe.
+    """`python -m stockpick.data.cik_mapping [--sample N|--resolve-all]` — probe·전체 복구.
 
-    폐지+cik미해소 표본 N개에 EODHD ID-Mapping 라이브 호출 → cik 커버율 측정. 결과로 ID-Mapping
-    단독 채택(≥80%) vs SEC cik-lookup-data.txt fallback 추가 결정. ⚠️ **측정 전용**(저장 안 함 —
-    부분 50건이 A2 입력으로 오인되는 것 방지)·키 비노출(configure_logging G6 가드). 라이브 호출.
+    `--sample N`(기본): 폐지+cik미해소 표본 N개 ID-Mapping 라이브 → 커버율 측정(**저장 안 함** —
+    부분이 A2 입력으로 오인 방지). `--resolve-all`: 전체 모집단 복구 → `edgar/delisted_cik.json`
+    저장(A1 산출물·A2 폐지행 소비). 정지점1 판정=ID-Mapping 단독(in-scope 91.7%·미커버=구조적
+    비-XBRL). 키 비노출(configure_logging G6 가드)·라이브 호출.
     """
     import argparse
     import os
@@ -118,20 +119,24 @@ def main() -> int:
     from . import configure_logging
     from .eodhd import EodhdSource, _to_symbol
 
-    parser = argparse.ArgumentParser(description="폐지 cik 복구 라이브 probe(EODHD ID-Mapping)")
-    parser.add_argument("--sample", type=int, default=50, help="표본 크기(기본 50)")
+    parser = argparse.ArgumentParser(description="폐지 cik 복구(EODHD ID-Mapping)")
+    parser.add_argument("--sample", type=int, default=50, help="probe 표본 크기(기본 50)")
+    parser.add_argument(
+        "--resolve-all", action="store_true", help="전체 복구→delisted_cik.json 저장"
+    )
     ns = parser.parse_args()
 
     configure_logging()  # G6 — httpx api_token URL 로깅 차단(BLOCKING·라이브)
     base_dir = Path(os.environ.get("STOCKPICK_DATA_DIR", "data/parquet"))
     payload = json.loads((base_dir / "stock_snapshot.json").read_text(encoding="utf-8"))
     stocks = payload["stocks"]
-    sample = select_delisted_sample(stocks, ns.sample)
     population = sum(
         1
         for s in stocks
         if isinstance(s.get("delisted_at"), str) and s.get("delisted_at") and not s.get("cik")
     )
+    # resolve-all=전체(저장)·아니면 probe 표본(저장 안 함). select_delisted_sample(n≥pop)=전체.
+    sample = select_delisted_sample(stocks, population if ns.resolve_all else ns.sample)
 
     source = EodhdSource()
     resolved = resolve_delisted_ciks(lambda t: source.fetch_id_mapping(_to_symbol(t)), sample)
@@ -139,12 +144,21 @@ def main() -> int:
     n = len(sample)
     hit = len(resolved)
     rate = hit / n if n else 0.0
+    miss = [ticker for ticker, _ in sample if ticker not in resolved]
+    if ns.resolve_all:
+        path = store_delisted_ciks(resolved, base_dir)
+        print(  # noqa: T201 — 진입점 사용자 출력(cik 은 SEC 퍼블릭도메인·키 아님)
+            "[resolve-all] 폐지 cik 전체 복구 — EODHD ID-Mapping\n"
+            f"  모집단(폐지+cik미해소): {population:,}  해소: {hit:,} ({rate:.1%})"
+            f"  미커버: {len(miss):,}\n"
+            f"  저장: {path}"
+        )
+        return 0
     verdict = (
         "≥80% → ID-Mapping 단독 채택 권장"
         if rate >= 0.80
         else "<80% → SEC cik-lookup-data.txt fallback 추가 필요"
     )
-    miss = [ticker for ticker, _ in sample if ticker not in resolved]
     hit_examples = [f"{t}→{cik}" for t, (cik, _) in list(resolved.items())[:5]]
     print(  # noqa: T201 — 진입점 사용자 출력(cik 은 SEC 퍼블릭도메인·키 아님)
         "[probe] 폐지 cik 복구 라이브 실측 — EODHD ID-Mapping\n"
