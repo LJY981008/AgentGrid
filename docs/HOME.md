@@ -38,6 +38,7 @@
 
 ## 🔬 리서치 (research/)
 
+- [[research/2026-06-29-폐지종목-CIK-매핑|2026-06-29 폐지종목 CIK 매핑]] — 다팩터 재무 블로커: 폐지 ticker→SEC CIK 획득 **가능**(②EODHD ID-Mapping `/api/id-mapping`·Free 포함·폐지커버 50샘플 실측 필요 / ③SEC `cik-lookup-data.txt` 회사명→CIK·폐지누적·영구 fallback). ①EODHD Fundamentals General.CIK 는 구독 제외. ⚠️2009+(XBRL)·ticker재사용→폐지일+명 대조(룩어헤드)
 - [[research/2026-06-23-관측성-스택-버전|2026-06-23 관측성 스택 버전]] — prom v3.12.0(⚠️latest=2.x)·grafana 13.0.2·pushgateway·instrumentator 8.x(starlette1.3.1)·memray. 배치=Pushgateway·peak=tracemalloc+RSS·Local Snapshot·레이어 대시보드(tbbe-hub)
 - [[research/2026-06-17-webapp-stack-버전|2026-06-17 webapp 스택 버전]] — Vite8/React19/TS6/router7/react-markdown10 + FastAPI0.137, API 표면 함정(urlTransform·runtimeCaching·CORS/Vite proxy·Starlette1.0 핀)
 - [[research/2026-06-16-미국주식-데이터소스|2026-06-16 미국주식 데이터소스]] — **리서치 기준선**(가격 본격 소스는 [[decisions/ADR-003-M2-가격소스-EODHD|ADR-003]]에서 Sharadar SEP→**EODHD**로 개정) 가격 Tiingo→Sharadar SEP / 재무 EDGAR(filed=PIT) / SimFin·Polygon 비교, 미장 전환 시점 비교 노트

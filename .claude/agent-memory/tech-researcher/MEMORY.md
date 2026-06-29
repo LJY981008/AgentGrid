@@ -35,4 +35,5 @@
 - [EODHD Exchanges 거래시간·휴장일](research-eodhd-exchanges-trading-hours.md) — v2/v1 exchange-details·5콜/ticker·All-In-One/EOD+Intraday·73거래소 검증휴장일·KRX 코드커버리지 미명시(별도확인) (2026-06-16)
 - [EODHD Stock Market Logos API](research-eodhd-logo-api.md) — /api/logo/{symbol} PNG 200x200·1req=10calls·$299/yr 별도구독(Unicornbay)·KQ/KO 한국포함이나 시장데이터아님(웹앱 장식용only) (2026-06-16)
 - [EODHD MATLAB Connector 실측](research-eodhd-matlab-connector.md) — REST명세 아닌 MATLAB튜토리얼. 레거시 table.csv(a/b/c/d/e/f/g 날짜파라미터)+서드파티 EODML·http nonsecure권장·가격/콜 미명시·KRX무관 (2026-06-16)
+- [폐지종목 ticker→CIK 매핑 판정](research-delisted-ticker-cik-mapping.md) — 다팩터 블로커 해소. EODHD Fundamentals General.CIK(2018+ 주경로)·ID-Mapping(폐지커버 라이브필요)·SEC cik-lookup-data.txt(회사명·영구). 영구NULL 아님 (2026-06-29)
 - [EODHD WordPress Plugin 페이지](research-eodhd-wordpress-plugin.md) — REST명세 아님(shortcode 3종 [eod_fundamental/financials/news] 개요)·엔드포인트 없음·stockpick Python 무관 (2026-06-16)
