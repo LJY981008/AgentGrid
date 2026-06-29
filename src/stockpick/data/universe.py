@@ -18,7 +18,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -28,6 +28,8 @@ from .edgar import load_ticker_cik
 from .eodhd import EodhdSource
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import psycopg
     from psycopg.rows import TupleRow
 
@@ -90,6 +92,58 @@ def _snapshot_ticker_history(conn: psycopg.Connection[TupleRow]) -> list[TickerH
             (int(r[0]), str(r[1]), (str(r[2]) if r[2] is not None else None), _SNAPSHOT_FLOOR, None)
             for r in cur.fetchall()
         ]
+
+
+def build_ticker_history_rows(
+    stocks: list[tuple[int, str, str | None, date | None, date | None]],
+    recovered: dict[str, tuple[str, date]],
+) -> list[TickerHistoryRow]:
+    """stock 행(+A1 복구 cik) → ticker_history 실 다행. valid_from=listed_at·valid_to=delisted_at+1.
+
+    stocks 행 = (stock_id, ticker, cik|None, listed_at|None, delisted_at|None). cik 우선순위
+    stock.cik > recovered[ticker] > None. listed_at None(무가격)·degenerate(listed≥delisted) 제외
+    (MasterUniverse 정렬·거래 불가). ⚠️ 폐지 엔티티는 cik 미해소여도 윈도우 유지(누락 시 재사용
+    ticker 과거 시점이 미래 cik 로 누설·BLOCKING). 재사용=stock_id 당 1행(비중첩 다행). 중첩은
+    detect_overlaps 가 관측(resolver 다중매칭 raise 전 경고).
+    """
+    rows: list[TickerHistoryRow] = []
+    for stock_id, ticker, stock_cik, listed_at, delisted_at in stocks:
+        if listed_at is None:
+            continue  # 무가격 마스터 — 거래 윈도우 없음
+        if delisted_at is not None and listed_at >= delisted_at:
+            continue  # degenerate — 하루도 거래 불가(MasterUniverse 정렬)
+        cik = stock_cik or (recovered[ticker][0] if ticker in recovered else None)
+        valid_to = delisted_at + timedelta(days=1) if delisted_at is not None else None
+        rows.append((stock_id, ticker, cik, listed_at, valid_to))
+    overlaps = detect_overlaps(rows)
+    if overlaps:
+        logger.warning(
+            "ticker_history 중첩 윈도우 %d ticker(추정 폐지일 오차·resolver raise 대상): %s",
+            len(overlaps),
+            ", ".join(overlaps[:10]),
+        )
+    return rows
+
+
+def detect_overlaps(rows: Sequence[TickerHistoryRow]) -> list[str]:
+    """같은 ticker 의 윈도우 [valid_from, valid_to) 가 겹치는 ticker 정렬 리스트(무결성 관측성).
+
+    중첩 = 모호한 시점 식별 → resolver 다중매칭 raise 대상. valid_to None=+∞(개구간). 빈=무결성 OK.
+    valid_from 정렬 후 인접쌍만 검사(정렬되면 i 가 i+2 와 겹치면 i+1 과도 겹침 → 인접 검사로 충분).
+    """
+    by_ticker: dict[str, list[tuple[date, date | None]]] = {}
+    for _stock_id, ticker, _cik, valid_from, valid_to in rows:
+        by_ticker.setdefault(ticker, []).append((valid_from, valid_to))
+    flagged: list[str] = []
+    for ticker, windows in by_ticker.items():
+        if len(windows) < 2:
+            continue
+        ordered = sorted(windows, key=lambda w: w[0])
+        for (_f1, t1), (f2, _t2) in zip(ordered, ordered[1:], strict=False):
+            if t1 is None or f2 < t1:  # 선행 윈도우가 +∞이거나 후행 시작이 선행 끝 이전 → 중첩
+                flagged.append(ticker)
+                break
+    return sorted(flagged)
 
 
 def main() -> int:
