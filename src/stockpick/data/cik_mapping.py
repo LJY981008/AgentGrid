@@ -6,7 +6,7 @@ companyfacts 가 폐지사의 과거 신고를 PIT-correct(filed≤t) 반환. �
 같은 ticker 가 폐지 후 타사에 재할당될 수 있어 폐지일이 엔티티 식별 키).
 
 cik 소스(주입): 1차 EODHD ID-Mapping(`EodhdSource.fetch_id_mapping`·Free 플랜 포함). 폐지 커버<80%면
-SEC `cik-lookup-data.txt`(회사명 기반·후속). 미커버 ticker = 결과서 제외(카운트 로그·조용한 추측 금지).
+SEC `cik-lookup-data.txt`(회사명 기반·후속). 미커버 ticker = 제외(카운트 로그·추측 금지).
 """
 
 from __future__ import annotations
@@ -48,11 +48,37 @@ def resolve_delisted_ciks(
     return result
 
 
+def select_delisted_sample(
+    stocks: list[dict[str, object]], n: int
+) -> list[tuple[str, date]]:
+    """정지점1 라이브 probe 모집단 추출 — 폐지(delisted_at≠null) ∧ cik 미해소 종목 n개.
+
+    모집단 = 생존편향 갭(SEC `company_tickers.json` 현재 신고사만 → 폐지사 cik 부재). cik 해소된
+    폐지사(클래스주 등)는 제외(이미 복구 불요). **ticker 정렬 후 균등 stride** 추출 —
+    알파벳/거래소/시대 편중 회피(첫 n개면 'A' 군집)·**결정적**(라이브 0·재현 가능). n≥모집단=전체.
+    """
+    population: list[tuple[str, date]] = []
+    for stock in stocks:
+        delisted_raw = stock.get("delisted_at")
+        if not isinstance(delisted_raw, str) or not delisted_raw:
+            continue  # 현재사(폐지 아님) — 제외
+        if stock.get("cik"):
+            continue  # cik 이미 해소(갭 아님) — 제외
+        population.append((str(stock["ticker"]), date.fromisoformat(delisted_raw)))
+    population.sort(key=lambda pair: pair[0])
+    if n <= 0:
+        return []
+    if n >= len(population):
+        return population
+    stride = len(population) // n
+    return [population[i * stride] for i in range(n)]
+
+
 def store_delisted_ciks(mapping: dict[str, tuple[str, date]], base_dir: Path) -> Path:
     """`{ticker:(cik,delisted_date)}` → `base_dir/edgar/delisted_cik.json`(사람 읽기·교차검증 가능).
 
-    형식: `{ticker: {cik, delisted_date(ISO)}}`. EODHD 약관(해지 후 삭제)에도 cik 는 SEC 퍼블릭도메인
-    이라 영구보관 합법(cik-lookup-data.txt 교차검증 전제). 반환=경로.
+    형식: `{ticker: {cik, delisted_date(ISO)}}`. cik 는 SEC 퍼블릭도메인이라 영구보관 합법
+    (EODHD 약관=해지 후 삭제이나 cik-lookup-data.txt 교차검증 전제). 반환=경로.
     """
     out_dir = base_dir / "edgar"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -76,3 +102,60 @@ def load_delisted_ciks(base_dir: Path) -> dict[str, tuple[str, date]]:
         str(ticker): (str(rec["cik"]), date.fromisoformat(str(rec["delisted_date"])))
         for ticker, rec in payload.items()
     }
+
+
+def main() -> int:
+    """`python -m stockpick.data.cik_mapping --sample N` — 정지점1 라이브 probe.
+
+    폐지+cik미해소 표본 N개에 EODHD ID-Mapping 라이브 호출 → cik 커버율 측정. 결과로 ID-Mapping
+    단독 채택(≥80%) vs SEC cik-lookup-data.txt fallback 추가 결정. ⚠️ **측정 전용**(저장 안 함 —
+    부분 50건이 A2 입력으로 오인되는 것 방지)·키 비노출(configure_logging G6 가드). 라이브 호출.
+    """
+    import argparse
+    import os
+    from pathlib import Path
+
+    from . import configure_logging
+    from .eodhd import EodhdSource, _to_symbol
+
+    parser = argparse.ArgumentParser(description="폐지 cik 복구 라이브 probe(EODHD ID-Mapping)")
+    parser.add_argument("--sample", type=int, default=50, help="표본 크기(기본 50)")
+    ns = parser.parse_args()
+
+    configure_logging()  # G6 — httpx api_token URL 로깅 차단(BLOCKING·라이브)
+    base_dir = Path(os.environ.get("STOCKPICK_DATA_DIR", "data/parquet"))
+    payload = json.loads((base_dir / "stock_snapshot.json").read_text(encoding="utf-8"))
+    stocks = payload["stocks"]
+    sample = select_delisted_sample(stocks, ns.sample)
+    population = sum(
+        1
+        for s in stocks
+        if isinstance(s.get("delisted_at"), str) and s.get("delisted_at") and not s.get("cik")
+    )
+
+    source = EodhdSource()
+    resolved = resolve_delisted_ciks(lambda t: source.fetch_id_mapping(_to_symbol(t)), sample)
+
+    n = len(sample)
+    hit = len(resolved)
+    rate = hit / n if n else 0.0
+    verdict = (
+        "≥80% → ID-Mapping 단독 채택 권장"
+        if rate >= 0.80
+        else "<80% → SEC cik-lookup-data.txt fallback 추가 필요"
+    )
+    miss = [ticker for ticker, _ in sample if ticker not in resolved]
+    hit_examples = [f"{t}→{cik}" for t, (cik, _) in list(resolved.items())[:5]]
+    print(  # noqa: T201 — 진입점 사용자 출력(cik 은 SEC 퍼블릭도메인·키 아님)
+        "[probe] 폐지 cik 복구 라이브 실측 — EODHD ID-Mapping\n"
+        f"  표본: {n} / 모집단(폐지+cik미해소): {population:,}\n"
+        f"  해소: {hit} ({rate:.1%})  미커버: {len(miss)}\n"
+        f"  판정: {verdict}\n"
+        f"  해소 예시: {', '.join(hit_examples)}\n"
+        f"  미커버 예시: {', '.join(miss[:10])}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
