@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Final
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ..types import FinancialFact
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -655,3 +657,179 @@ def load_trade_date_bounds(base_dir: Path) -> dict[str, tuple[date, date]]:
         if isinstance(ticker, str) and isinstance(min_d, date) and isinstance(max_d, date):
             bounds[ticker] = (min_d, max_d)
     return bounds
+
+
+# ---------------------------------------------------------------------------
+# 재무 fact Parquet (A3 — 다팩터 ROE/PB 입력·생존편향-안전·daily_bar 동형)
+# 레이아웃 `{base_dir}/financial_fact/<CIK>.parquet`(cik 1파일 — 증분 atomic·resume 친화).
+# ⚠️ 평면(`cik=` hive 아님): cik 는 zero-pad 문자열인데 hive 디렉토리면 pyarrow 가 int dictionary 로
+# 추론해 데이터 cik 컬럼(string)과 충돌. cik 는 파일 내 데이터 컬럼으로만 보존.
+# ---------------------------------------------------------------------------
+
+_FINANCIAL_DATASET_NAME: Final = "financial_fact"
+# 재무값 정밀도 — 금액(달러)·주식수는 정수 위주(scale 0~2). scale 4 여유·precision 38(10^34 수용).
+# 초과 시 _check_scale 가 PrecisionError(조용한 반올림 금지·BLOCKING).
+_FIN_VALUE_PRECISION: Final = 38
+_FIN_VALUE_SCALE: Final = 4
+
+_FIN_FROM: Final = "FROM read_parquet($glob)"
+_FIN_SQL_ROW_COUNT: Final = f"SELECT count(*) {_FIN_FROM}"  # noqa: S608
+_FIN_SQL_CIK_COUNT: Final = f"SELECT count(DISTINCT cik) {_FIN_FROM}"  # noqa: S608
+# 자연키(cik,concept,fiscal_period,disclosed_at) 중복 행 수 = sum(group_count-1). 정정공시는
+# disclosed_at 다르므로 별 그룹(중복 아님) — 같은 4튜플 반복만 오염으로 카운트.
+_FIN_SQL_DUPLICATES: Final = (
+    f"SELECT coalesce(sum(c - 1), 0) FROM (SELECT count(*) c {_FIN_FROM} "  # noqa: S608
+    "GROUP BY cik, concept, fiscal_period, disclosed_at HAVING count(*) > 1)"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialVerificationReport:
+    """financial_fact Parquet 무결성 리포트(A3). passed=False 면 자연키 중복(오염) 존재."""
+
+    row_count: int
+    cik_count: int
+    duplicate_count: int  # 자연키(cik,concept,fiscal_period,disclosed_at) 중복 행 수
+
+    @property
+    def passed(self) -> bool:
+        return self.duplicate_count == 0
+
+
+def _financial_arrow_schema() -> pa.Schema:
+    """financial_fact Arrow 스키마 = FinancialFact 6필드 + source + ingested_at(daily_bar 동형)."""
+    return pa.schema(
+        [
+            pa.field("cik", pa.string(), nullable=False),
+            pa.field("concept", pa.string(), nullable=False),
+            pa.field("fiscal_period", pa.string(), nullable=False),
+            pa.field("period_end", pa.date32(), nullable=False),
+            pa.field("disclosed_at", pa.date32(), nullable=False),
+            pa.field(
+                "value", pa.decimal128(_FIN_VALUE_PRECISION, _FIN_VALUE_SCALE), nullable=False
+            ),
+            pa.field("source", pa.string(), nullable=False),
+            pa.field("ingested_at", pa.timestamp("us", tz="UTC"), nullable=False),
+        ]
+    )
+
+
+def _facts_to_table(
+    facts: Sequence[FinancialFact], *, source: str, ingested_at: datetime
+) -> pa.Table:
+    schema = _financial_arrow_schema()
+    cols: dict[str, object] = {
+        "cik": [f.cik for f in facts],
+        "concept": [f.concept for f in facts],
+        "fiscal_period": [f.fiscal_period for f in facts],
+        "period_end": [f.period_end for f in facts],
+        "disclosed_at": [f.disclosed_at for f in facts],
+        "value": [
+            _check_scale(f.value, scale=_FIN_VALUE_SCALE, column="value", ticker=f.cik)
+            for f in facts
+        ],
+        "source": [source] * len(facts),
+        "ingested_at": [ingested_at] * len(facts),
+    }
+    return pa.Table.from_pydict(cols, schema=schema)
+
+
+def write_financial_facts(
+    facts: Sequence[FinancialFact],
+    base_dir: Path,
+    *,
+    source: str,
+    ingested_at: datetime | None = None,
+) -> Path:
+    """`list[FinancialFact]` → cik 파티션 Parquet. 반환 = 데이터셋 루트. 빈 입력 no-op.
+
+    cik 단위 **덮어쓰기**(companyfacts 는 cik 단위 완전 fetch → merge 불요·resume 재시도 멱등).
+    atomic temp→os.replace(중간 실패 시 기존 보존). 음수 value(적자·음수 equity) 정당. scale 초과는
+    _check_scale 가 PrecisionError(조용한 반올림 금지). ingested_at None → 호출 시각(UTC) 1회 고정.
+    """
+    dataset_root = base_dir / _FINANCIAL_DATASET_NAME
+    if not facts:
+        logger.info("적재할 FinancialFact 0건 — no-op: base_dir=%s", base_dir)
+        return dataset_root
+    stamp = ingested_at if ingested_at is not None else datetime.now(UTC)
+    by_cik: dict[str, list[FinancialFact]] = {}
+    for fact in facts:
+        by_cik.setdefault(fact.cik, []).append(fact)
+    dataset_root.mkdir(parents=True, exist_ok=True)
+    total_rows = 0
+    for cik, cik_facts in by_cik.items():
+        table = _facts_to_table(cik_facts, source=source, ingested_at=stamp)
+        target = dataset_root / f"{cik}.parquet"
+        tmp = dataset_root / f"{cik}.parquet.tmp"
+        pq.write_table(table, str(tmp), compression=_ZSTD)  # type: ignore[no-untyped-call]
+        os.replace(tmp, target)  # atomic — 중간 실패 시 기존 cik 파일 보존
+        total_rows += table.num_rows
+    logger.info(
+        "financial_fact 적재: rows=%d, cik=%d, source=%s", total_rows, len(by_cik), source
+    )
+    return dataset_root
+
+
+def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
+    """financial_fact Parquet 전체 → list[FinancialFact]. 미적재(트리 부재)면 빈 리스트(에러 아님).
+
+    cik 파일 전부 읽어 물질화(슬라이스 3 concept — 만-cik 규모도 수백만 행). PIT 선택은
+    `rules/_financials.latest_as_of`(disclosed_at<=as_of) 가 별도 — 여기선 전체 로드만.
+    """
+    dataset_root = base_dir / _FINANCIAL_DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.glob("*.parquet"))
+    if not files:
+        return []
+    table = pa.concat_tables([pq.read_table(f) for f in files])  # type: ignore[no-untyped-call]
+    out: list[FinancialFact] = []
+    for row in table.to_pylist():
+        period_end = row["period_end"]
+        disclosed_at = row["disclosed_at"]
+        value = row["value"]
+        if not isinstance(period_end, date) or not isinstance(disclosed_at, date):
+            msg = f"financial_fact 날짜 형식 오류(cik={row['cik']!r})"
+            raise StorageError(msg)
+        if not isinstance(value, Decimal):
+            msg = f"financial_fact value 형식 오류(cik={row['cik']!r}): {value!r}"
+            raise StorageError(msg)
+        out.append(
+            FinancialFact(
+                cik=str(row["cik"]),
+                concept=str(row["concept"]),
+                fiscal_period=str(row["fiscal_period"]),
+                period_end=period_end,
+                disclosed_at=disclosed_at,
+                value=value,
+            )
+        )
+    return out
+
+
+def verify_financial_facts(base_dir: Path) -> FinancialVerificationReport:
+    """financial_fact Parquet 무결성 — 행수·cik수·자연키 중복(오염). 빈 트리 = 0/0/0 passed.
+
+    중복 = 같은 (cik,concept,fiscal_period,disclosed_at) 반복(오염). 정정공시(같은 회계기간 다른
+    disclosed_at)는 별 그룹이라 중복 아님. 음수 value 는 정당(적자·음수 equity) — 검사 안 함.
+    DuckDB :memory: + memory_limit 캡(verify_parquet 동일·OOM 방어).
+    """
+    dataset_root = base_dir / _FINANCIAL_DATASET_NAME
+    files = sorted(str(p) for p in dataset_root.glob("*.parquet"))
+    if not files:
+        return FinancialVerificationReport(row_count=0, cik_count=0, duplicate_count=0)
+
+    import duckdb
+
+    glob = f"{dataset_root}/*.parquet"
+    params: dict[str, object] = {"glob": glob}
+    con = duckdb.connect(database=":memory:", config={"memory_limit": _VERIFY_MEMORY_LIMIT})
+    try:
+        row_count = con.execute(_FIN_SQL_ROW_COUNT, params).fetchone()
+        cik_count = con.execute(_FIN_SQL_CIK_COUNT, params).fetchone()
+        duplicates = con.execute(_FIN_SQL_DUPLICATES, params).fetchone()
+    finally:
+        con.close()
+    return FinancialVerificationReport(
+        row_count=int(row_count[0]) if row_count else 0,
+        cik_count=int(cik_count[0]) if cik_count else 0,
+        duplicate_count=int(duplicates[0]) if duplicates else 0,
+    )
