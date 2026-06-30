@@ -739,6 +739,28 @@ def _facts_to_table(
     return pa.Table.from_pydict(cols, schema=schema)
 
 
+def _dedup_by_natural_key(facts: Sequence[FinancialFact]) -> list[FinancialFact]:
+    """자연키(cik,concept,period_start,period_end,disclosed_at) 중복 제거 — 결정적 1행 선택.
+
+    companyfacts 는 한 신고가 같은 기간을 여러 fy/fp 라벨로 보고한다(FY 잔액=다음 Q 기초 잔액 등)
+    → fy/fp 만 다른 동일 fact 다수(실측 364/377). **선택 규칙**: ① "-FY"(연간 canonical) 우선
+    — NetIncomeLoss 의 annual_only("-FY" 필터)가 인식해야 ROE 산출(comparative 만 남으면 누락)
+    ② value 최대 — 드문 동일신고 값충돌(실측 13/377·sign-flip·반올림차·~0.007%)을 결정적 해소
+    (latest_as_of 의 비결정 타이 제거). 키별 max((endswith-FY, value)).
+    """
+    _Key = tuple[str, str, "date | None", date, date]
+    chosen: dict[_Key, FinancialFact] = {}
+    for fact in facts:
+        key = (fact.cik, fact.concept, fact.period_start, fact.period_end, fact.disclosed_at)
+        current = chosen.get(key)
+        if current is None or (fact.fiscal_period.endswith("-FY"), fact.value) > (
+            current.fiscal_period.endswith("-FY"),
+            current.value,
+        ):
+            chosen[key] = fact
+    return list(chosen.values())
+
+
 def write_financial_facts(
     facts: Sequence[FinancialFact],
     base_dir: Path,
@@ -749,6 +771,7 @@ def write_financial_facts(
     """`list[FinancialFact]` → cik 파티션 Parquet. 반환 = 데이터셋 루트. 빈 입력 no-op.
 
     cik 단위 **덮어쓰기**(companyfacts 는 cik 단위 완전 fetch → merge 불요·resume 재시도 멱등).
+    적재 전 **자연키 dedup**(`_dedup_by_natural_key` — fy/fp 라벨 중복 제거·verify clean 보장).
     atomic temp→os.replace(중간 실패 시 기존 보존). 음수 value(적자·음수 equity) 정당. scale 초과는
     _check_scale 가 PrecisionError(조용한 반올림 금지). ingested_at None → 호출 시각(UTC) 1회 고정.
     """
@@ -758,7 +781,7 @@ def write_financial_facts(
         return dataset_root
     stamp = ingested_at if ingested_at is not None else datetime.now(UTC)
     by_cik: dict[str, list[FinancialFact]] = {}
-    for fact in facts:
+    for fact in _dedup_by_natural_key(facts):
         by_cik.setdefault(fact.cik, []).append(fact)
     dataset_root.mkdir(parents=True, exist_ok=True)
     total_rows = 0

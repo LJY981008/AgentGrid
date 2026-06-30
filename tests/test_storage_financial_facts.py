@@ -76,11 +76,66 @@ def test_write_empty_noop(tmp_path: Path) -> None:
     assert load_financial_facts(tmp_path) == []
 
 
-def test_verify_detects_duplicate_natural_key(tmp_path: Path) -> None:
-    dup = _fact("0000000001", "NetIncomeLoss", "2024-FY", (2024, 12, 31), (2025, 1, 15), "200")
+def test_write_dedups_identical_natural_key(tmp_path: Path) -> None:
+    # write 가 자연키 중복 제거 → 동일 fact 2개여도 1행(verify clean).
+    dup = _fact("0000000001", "NetIncomeLoss", "2024-FY", (2024, 12, 31), (2025, 1, 15), "200",
+                start=(2024, 1, 1))
     write_financial_facts([dup, dup], tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    assert len(load_financial_facts(tmp_path)) == 1
+    assert verify_financial_facts(tmp_path).passed
+
+
+def test_write_dedups_fy_label_keeps_annual(tmp_path: Path) -> None:
+    # 같은 자연키·fy/fp 라벨만 다름(한 신고 FY/Q 2라벨) → 1행·"-FY"(annual canonical) 우선 보존.
+    facts = [
+        _fact("0000000001", "NetIncomeLoss", "2025-Q1", (2024, 12, 31), (2025, 2, 1), "200",
+              start=(2024, 1, 1)),
+        _fact("0000000001", "NetIncomeLoss", "2024-FY", (2024, 12, 31), (2025, 2, 1), "200",
+              start=(2024, 1, 1)),
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    loaded = load_financial_facts(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].fiscal_period == "2024-FY"  # 연간 라벨 보존(annual_only 인식)
+
+
+def test_write_dedups_value_conflict_deterministic(tmp_path: Path) -> None:
+    # 같은 자연키·다른 value(드문 동일신고 정정) → 1행 결정적(최대값).
+    facts = [
+        _fact("0000000001", "StockholdersEquity", "2024-FY", (2024, 12, 31), (2025, 2, 1), "100"),
+        _fact("0000000001", "StockholdersEquity", "2024-FY", (2024, 12, 31), (2025, 2, 1), "200"),
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    loaded = load_financial_facts(tmp_path)
+    assert len(loaded) == 1
+    assert loaded[0].value == Decimal("200")  # 최대값(결정적)
+    assert verify_financial_facts(tmp_path).passed
+
+
+def test_verify_detects_corruption_bypassing_write(tmp_path: Path) -> None:
+    # verify 무결성 게이트 — write dedup 우회(직접 같은 키 2행 적재)면 탐지.
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from stockpick.data.storage import _financial_arrow_schema
+
+    rows = {
+        "cik": ["0000000001", "0000000001"],
+        "concept": ["StockholdersEquity", "StockholdersEquity"],
+        "fiscal_period": ["2024-FY", "2024-FY"],
+        "period_start": [None, None],
+        "period_end": [date(2024, 12, 31), date(2024, 12, 31)],
+        "disclosed_at": [date(2025, 2, 1), date(2025, 2, 1)],
+        "value": [Decimal("100"), Decimal("200")],
+        "source": ["x", "x"],
+        "ingested_at": [_STAMP, _STAMP],
+    }
+    out = tmp_path / "financial_fact"
+    out.mkdir(parents=True, exist_ok=True)
+    table = pa.Table.from_pydict(rows, schema=_financial_arrow_schema())
+    pq.write_table(table, str(out / "x.parquet"))  # type: ignore[no-untyped-call]
     report = verify_financial_facts(tmp_path)
-    assert report.duplicate_count >= 1
+    assert report.duplicate_count == 1
     assert not report.passed
 
 
@@ -112,18 +167,6 @@ def test_duration_same_end_diff_start_roundtrip_and_not_dup(tmp_path: Path) -> N
     report = verify_financial_facts(tmp_path)
     assert report.duplicate_count == 0  # start 다름 → 중복 아님
     assert report.passed
-
-
-def test_verify_same_period_end_and_disclosed_is_duplicate(tmp_path: Path) -> None:
-    # 같은 (cik,concept,period_end,disclosed_at)·다른 value = 진짜 오염(같은 신고가 한 기간 두 값).
-    facts = [
-        _fact("0000000001", "StockholdersEquity", "2011-FY", (2011, 12, 31), (2012, 2, 1), "100"),
-        _fact("0000000001", "StockholdersEquity", "2011-FY", (2011, 12, 31), (2012, 2, 1), "200"),
-    ]
-    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
-    report = verify_financial_facts(tmp_path)
-    assert report.duplicate_count == 1
-    assert not report.passed
 
 
 def test_verify_amendment_is_not_duplicate(tmp_path: Path) -> None:
