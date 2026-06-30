@@ -402,6 +402,7 @@ def backfill_financials(
     *,
     min_fiscal_year: int = _MIN_FISCAL_YEAR,
     sleep_s: float = 0.12,
+    limit: int | None = None,
     client: httpx.Client | None = None,
 ) -> dict[str, int]:
     """대상 cik companyfacts 를 cik 단위 증분 백필 → Parquet(financial_fact). Checkpoint resume.
@@ -410,7 +411,8 @@ def backfill_financials(
     생존편향-안전 — 데이터셋에 가격 없어도 백필). cik 별 fetch → **fy≥min_fiscal_year**(XBRL 컷)
     필터 → `write_financial_facts`(cik 단위 덮어쓰기) → Checkpoint mark(done/empty). 개별 실패는
     failed 마킹·계속(전체 중단 안 함·재실행 시 failed 재시도). 10req/s 준수(client 주입 시 sleep
-    생략 — 테스트). 반환 = {target, done, empty, failed}.
+    생략 — 테스트). **limit**=미처리 cik 중 이번 호출 최대 처리수(단계 실행·resume 가 다음분 이어감·
+    None=전체). 반환 = {target, done, empty, failed}.
     """
     from .cik_mapping import load_delisted_ciks
     from .storage import list_dataset_tickers, write_financial_facts  # pyarrow 지연 import
@@ -435,6 +437,8 @@ def backfill_financials(
     for cik in target_ciks:
         if checkpoint.should_skip(cik):
             continue
+        if limit is not None and fetched >= limit:
+            break  # 단계 실행 — 이번 호출 한도 도달(나머지는 다음 호출이 resume)
         if fetched > 0 and client is None:
             time.sleep(sleep_s)  # 공정접근(10req/s) — 라이브만. 테스트는 client 주입 시 생략.
         fetched += 1
@@ -472,7 +476,12 @@ def main(argv: list[str] | None = None) -> int:
     base_dir = Path(os.environ.get(_DATA_DIR_ENV, _DEFAULT_DATA_DIR))
 
     if mode == "financials":
-        counts = backfill_financials(base_dir, identity)
+        limit: int | None = None
+        if "--limit" in args:
+            idx = args.index("--limit")
+            if idx + 1 < len(args):
+                limit = int(args[idx + 1])
+        counts = backfill_financials(base_dir, identity, limit=limit)
         print(  # noqa: T201
             f"[EDGAR] 재무 백필: 대상 {counts['target']}cik · "
             f"done={counts['done']} empty={counts['empty']} failed={counts['failed']} "

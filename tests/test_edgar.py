@@ -405,6 +405,26 @@ def test_backfill_writes_parquet_and_only_dataset_plus_delisted(tmp_path: Path) 
     assert {f.cik for f in facts} == {"0000320193", "0001045810", "0000806085"}
 
 
+def test_backfill_limit_caps_and_resumes(tmp_path: Path) -> None:
+    # limit=N → 미처리 cik 중 N개만(단계 실행)·재실행 시 다음 N개(Checkpoint resume).
+    _write_bar(tmp_path, "AAPL")
+    _write_bar(tmp_path, "NVDA")
+    store_ticker_cik({"AAPL": "0000320193", "NVDA": "0001045810"}, tmp_path)
+    calls = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json=_FACTS_SAMPLE)
+
+    client = _client(httpx.MockTransport(handler))
+    c1 = backfill_financials(tmp_path, _IDENTITY, client=client, limit=1)
+    assert calls["n"] == 1  # limit=1 → 1 cik 만
+    assert c1["done"] == 1
+    c2 = backfill_financials(tmp_path, _IDENTITY, client=client, limit=1)  # 다음 cik
+    assert calls["n"] == 2
+    assert c2["done"] == 2  # 누적(resume)
+
+
 def test_backfill_resume_skips_done(tmp_path: Path) -> None:
     _write_bar(tmp_path, "AAPL")
     store_ticker_cik({"AAPL": "0000320193"}, tmp_path)
