@@ -100,7 +100,7 @@ def build_cache(base_dir: Path) -> int:
         if fin_files:
             con.execute(
                 f"CREATE TABLE {_FINANCIAL_TABLE} AS "  # noqa: S608 — 리터럴·glob 파라미터 바인딩
-                "SELECT cik, concept, fiscal_period, period_end, disclosed_at, value "
+                "SELECT cik, concept, fiscal_period, period_start, period_end, disclosed_at, value "
                 "FROM read_parquet($fin_glob)",
                 {"fin_glob": f"{fin_root}/*.parquet"},
             )

@@ -441,6 +441,24 @@ def test_backfill_resume_skips_done(tmp_path: Path) -> None:
     assert calls["n"] == 1  # 추가 호출 0(Checkpoint resume·중복 0)
 
 
+def test_backfill_404_marked_empty_not_retried(tmp_path: Path) -> None:
+    # 404 = companyfacts 없음(XBRL 미신고·영구) → empty(skip), failed(재시도) 아님.
+    _write_bar(tmp_path, "GONE")
+    store_ticker_cik({"GONE": "0000000099"}, tmp_path)
+    client = _client(httpx.MockTransport(lambda req: httpx.Response(404, json={})))
+    c1 = backfill_financials(tmp_path, _IDENTITY, client=client)
+    assert c1["empty"] == 1
+    assert c1["failed"] == 0  # 404 는 failed 아님(영구)
+    calls = {"n": 0}
+
+    def h2(req: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(404, json={})
+
+    backfill_financials(tmp_path, _IDENTITY, client=_client(httpx.MockTransport(h2)))
+    assert calls["n"] == 0  # empty skip — 재호출 0(낭비 제거)
+
+
 def test_backfill_failure_marked_and_retried(tmp_path: Path) -> None:
     _write_bar(tmp_path, "AAPL")
     _write_bar(tmp_path, "NVDA")

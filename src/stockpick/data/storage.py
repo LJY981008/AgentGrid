@@ -675,11 +675,14 @@ _FIN_VALUE_SCALE: Final = 4
 _FIN_FROM: Final = "FROM read_parquet($glob)"
 _FIN_SQL_ROW_COUNT: Final = f"SELECT count(*) {_FIN_FROM}"  # noqa: S608
 _FIN_SQL_CIK_COUNT: Final = f"SELECT count(DISTINCT cik) {_FIN_FROM}"  # noqa: S608
-# 자연키(cik,concept,fiscal_period,disclosed_at) 중복 행 수 = sum(group_count-1). 정정공시는
-# disclosed_at 다르므로 별 그룹(중복 아님) — 같은 4튜플 반복만 오염으로 카운트.
+# 자연키(cik,concept,period_start,period_end,disclosed_at) 중복 행 수 = sum(group_count-1).
+# ⚠️ period_start 포함(duration FY/분기 구분 — types 참조)·fiscal_period 아님(신고 컨텍스트).
+# period_start NULL(instant)은 '__NA__' 로 합쳐 그룹(NULL!=NULL 회피). 정정공시는 disclosed_at
+# 다르므로 별 그룹(중복 아님) — 같은 키 반복만 오염으로 카운트.
 _FIN_SQL_DUPLICATES: Final = (
     f"SELECT coalesce(sum(c - 1), 0) FROM (SELECT count(*) c {_FIN_FROM} "  # noqa: S608
-    "GROUP BY cik, concept, fiscal_period, disclosed_at HAVING count(*) > 1)"
+    "GROUP BY cik, concept, coalesce(CAST(period_start AS VARCHAR), '__NA__'), "
+    "period_end, disclosed_at HAVING count(*) > 1)"
 )
 
 
@@ -703,6 +706,7 @@ def _financial_arrow_schema() -> pa.Schema:
             pa.field("cik", pa.string(), nullable=False),
             pa.field("concept", pa.string(), nullable=False),
             pa.field("fiscal_period", pa.string(), nullable=False),
+            pa.field("period_start", pa.date32(), nullable=True),  # duration 시작·instant=null
             pa.field("period_end", pa.date32(), nullable=False),
             pa.field("disclosed_at", pa.date32(), nullable=False),
             pa.field(
@@ -722,6 +726,7 @@ def _facts_to_table(
         "cik": [f.cik for f in facts],
         "concept": [f.concept for f in facts],
         "fiscal_period": [f.fiscal_period for f in facts],
+        "period_start": [f.period_start for f in facts],
         "period_end": [f.period_end for f in facts],
         "disclosed_at": [f.disclosed_at for f in facts],
         "value": [
@@ -786,8 +791,12 @@ def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
         period_end = row["period_end"]
         disclosed_at = row["disclosed_at"]
         value = row["value"]
+        period_start = row["period_start"]  # nullable — instant 개념은 None
         if not isinstance(period_end, date) or not isinstance(disclosed_at, date):
             msg = f"financial_fact 날짜 형식 오류(cik={row['cik']!r})"
+            raise StorageError(msg)
+        if period_start is not None and not isinstance(period_start, date):
+            msg = f"financial_fact period_start 형식 오류(cik={row['cik']!r}): {period_start!r}"
             raise StorageError(msg)
         if not isinstance(value, Decimal):
             msg = f"financial_fact value 형식 오류(cik={row['cik']!r}): {value!r}"
@@ -800,6 +809,7 @@ def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
                 period_end=period_end,
                 disclosed_at=disclosed_at,
                 value=value,
+                period_start=period_start,
             )
         )
     return out

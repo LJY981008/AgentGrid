@@ -60,6 +60,7 @@ _FINANCIALS_CHECKPOINT_NAME: Final = "financials_checkpoint.jsonl"
 _MIN_FISCAL_YEAR: Final = 2009  # XBRL 의무화 — 이전 재무는 sparse·불신(생존편향 시작점)
 _DEFAULT_TIMEOUT: Final = 30.0
 _FORBIDDEN_STATUS: Final = 403
+_NOT_FOUND_STATUS: Final = 404  # companyfacts 없음(XBRL 미신고) — 영구·재시도 무의미
 
 # ADR-005 슬라이스 concept — (taxonomy, concept bare tag).
 # ROE=NetIncome/Equity · P/B 분모=Equity/shares.
@@ -305,6 +306,7 @@ def _build_fact(raw: object, *, cik: str, concept: str) -> FinancialFact | None:
     val = raw.get("val")
     fy = raw.get("fy")
     fp = raw.get("fp")
+    start = raw.get("start")  # duration 개념(NetIncomeLoss)만 존재 — instant 는 없음
     if not isinstance(end, str) or not isinstance(filed, str):
         return None
     if not isinstance(fp, str) or not isinstance(fy, int) or isinstance(fy, bool):
@@ -314,6 +316,7 @@ def _build_fact(raw: object, *, cik: str, concept: str) -> FinancialFact | None:
     try:
         period_end = date.fromisoformat(end)
         disclosed_at = date.fromisoformat(filed)
+        period_start = date.fromisoformat(start) if isinstance(start, str) else None
         value = Decimal(str(val))
     except (ValueError, InvalidOperation):
         return None
@@ -324,6 +327,7 @@ def _build_fact(raw: object, *, cik: str, concept: str) -> FinancialFact | None:
         period_end=period_end,
         disclosed_at=disclosed_at,
         value=value,
+        period_start=period_start,
     )
 
 
@@ -336,6 +340,7 @@ def store_financials(facts: list[FinancialFact], base_dir: Path) -> Path:
             "cik": f.cik,
             "concept": f.concept,
             "fiscal_period": f.fiscal_period,
+            "period_start": f.period_start.isoformat() if f.period_start is not None else None,
             "period_end": f.period_end.isoformat(),
             "disclosed_at": f.disclosed_at.isoformat(),
             "value": str(f.value),
@@ -374,6 +379,10 @@ def load_financials(base_dir: Path) -> list[FinancialFact]:
             msg = f"EDGAR financials.json 항목이 dict 아님: {item!r}"
             raise EdgarError(msg)
         try:
+            raw_start = item.get("period_start")  # optional — instant 개념은 None/부재
+            period_start = (
+                date.fromisoformat(raw_start) if isinstance(raw_start, str) else None
+            )
             facts.append(
                 FinancialFact(
                     cik=_req_str(item, "cik"),
@@ -382,6 +391,7 @@ def load_financials(base_dir: Path) -> list[FinancialFact]:
                     period_end=date.fromisoformat(_req_str(item, "period_end")),
                     disclosed_at=date.fromisoformat(_req_str(item, "disclosed_at")),
                     value=Decimal(_req_str(item, "value")),
+                    period_start=period_start,
                 )
             )
         except (ValueError, InvalidOperation) as exc:
@@ -444,9 +454,16 @@ def backfill_financials(
         fetched += 1
         try:
             facts = fetch_companyfacts(cik, identity, client=client)
-        except EdgarError as exc:
+        except EdgarResponseError as exc:
+            if exc.status_code == _NOT_FOUND_STATUS:
+                checkpoint.mark(cik, "empty")  # companyfacts 없음(XBRL 미신고·영구) — 재시도 무의미
+            else:
+                logger.warning("companyfacts fetch 실패(cik=%s): %r", cik, exc)
+                checkpoint.mark(cik, "failed")  # 일시 오류(5xx 등) — 재실행 재시도
+            continue
+        except EdgarError as exc:  # IdentityError 등 — 재시도 대상
             logger.warning("companyfacts fetch 실패(cik=%s): %r", cik, exc)
-            checkpoint.mark(cik, "failed")  # 재실행 시 재시도(done/empty 만 skip)
+            checkpoint.mark(cik, "failed")
             continue
         recent = [f for f in facts if _fiscal_year(f) >= min_fiscal_year]
         if recent:

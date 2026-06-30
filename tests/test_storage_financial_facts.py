@@ -28,8 +28,18 @@ def _fact(
     period_end: tuple[int, int, int],
     filed: tuple[int, int, int],
     val: str,
+    *,
+    start: tuple[int, int, int] | None = None,
 ) -> FinancialFact:
-    return FinancialFact(cik, concept, fp, date(*period_end), date(*filed), Decimal(val))
+    return FinancialFact(
+        cik,
+        concept,
+        fp,
+        date(*period_end),
+        date(*filed),
+        Decimal(val),
+        period_start=date(*start) if start is not None else None,
+    )
 
 
 def test_write_load_roundtrip_preserves_fields_and_negative(tmp_path: Path) -> None:
@@ -71,6 +81,48 @@ def test_verify_detects_duplicate_natural_key(tmp_path: Path) -> None:
     write_financial_facts([dup, dup], tmp_path, source="sec-edgar", ingested_at=_STAMP)
     report = verify_financial_facts(tmp_path)
     assert report.duplicate_count >= 1
+    assert not report.passed
+
+
+def test_verify_same_fiscal_period_diff_period_end_not_dup(tmp_path: Path) -> None:
+    # 자연키=period_end(fy-fp 아님). 같은 fiscal_period라도 period_end 다르면 distinct.
+    facts = [
+        _fact("0000000001", "StockholdersEquity", "2011-Q1", (2010, 5, 31), (2010, 9, 23), "746"),
+        _fact("0000000001", "StockholdersEquity", "2011-Q1", (2010, 8, 31), (2010, 9, 23), "760"),
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    report = verify_financial_facts(tmp_path)
+    assert report.row_count == 2
+    assert report.duplicate_count == 0  # period_end 다름 → 중복 아님
+    assert report.passed
+
+
+def test_duration_same_end_diff_start_roundtrip_and_not_dup(tmp_path: Path) -> None:
+    # NetIncomeLoss duration: 같은 end·다른 start(FY vs Q4) = distinct. period_start 왕복+비중복.
+    facts = [
+        _fact("0000000001", "NetIncomeLoss", "2010-Q2", (2008, 12, 31), (2010, 2, 8), "1623",
+              start=(2008, 1, 1)),  # FY2008
+        _fact("0000000001", "NetIncomeLoss", "2010-Q2", (2008, 12, 31), (2010, 2, 8), "578",
+              start=(2008, 10, 1)),  # Q4 2008
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    loaded = load_financial_facts(tmp_path)
+    starts = sorted(str(f.period_start) for f in loaded)
+    assert starts == ["2008-01-01", "2008-10-01"]  # period_start 왕복 보존
+    report = verify_financial_facts(tmp_path)
+    assert report.duplicate_count == 0  # start 다름 → 중복 아님
+    assert report.passed
+
+
+def test_verify_same_period_end_and_disclosed_is_duplicate(tmp_path: Path) -> None:
+    # 같은 (cik,concept,period_end,disclosed_at)·다른 value = 진짜 오염(같은 신고가 한 기간 두 값).
+    facts = [
+        _fact("0000000001", "StockholdersEquity", "2011-FY", (2011, 12, 31), (2012, 2, 1), "100"),
+        _fact("0000000001", "StockholdersEquity", "2011-FY", (2011, 12, 31), (2012, 2, 1), "200"),
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    report = verify_financial_facts(tmp_path)
+    assert report.duplicate_count == 1
     assert not report.passed
 
 

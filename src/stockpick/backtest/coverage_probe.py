@@ -67,7 +67,13 @@ def probe_coverage(
     top_decile_by_as_of: Mapping[date, set[str]] | None = None,
 ) -> CoverageProbeReport:
     """fold별 ROE 산출율 + 결측 4분류 + MNAR. 순수(라이브 0·결정적). 상세=모듈 docstring."""
-    facts_ciks = {fact.cik for fact in facts}
+    # cik 인덱싱(성능 BLOCKING): financial_factors/latest_as_of 는 cik 필터로 전체 facts 선형스캔 →
+    # 순진 호출은 O(resolved_ciks × 전체 facts)/fold(만-cik×수십만 facts = 타임아웃). cik 별 facts
+    # 부분집합으로만 산출하면 O(전체 facts)/fold. (결과 불변 — 같은 latest_as_of 선택.)
+    facts_by_cik: dict[str, list[FinancialFact]] = {}
+    for fact in facts:
+        facts_by_cik.setdefault(fact.cik, []).append(fact)
+    facts_ciks = set(facts_by_cik)
     folds: list[FoldCoverage] = []
     total_members = 0
     total_roe = 0
@@ -76,8 +82,11 @@ def probe_coverage(
         members = sorted(universe.constituents(as_of=as_of))
         cik_of = {ticker: identity.cik_for(ticker, on=as_of) for ticker in members}
         resolved_ciks = {cik for cik in cik_of.values() if cik}
-        scores = financial_factors(facts, ciks=resolved_ciks, as_of=as_of)
-        roe_ciks = {cik for cik, score in scores.items() if score.roe is not None}
+        roe_ciks = {
+            cik
+            for cik in resolved_ciks & facts_ciks
+            if financial_factors(facts_by_cik[cik], ciks=(cik,), as_of=as_of)[cik].roe is not None
+        }
 
         roe_computable = miss_del = miss_non = miss_facts = miss_roe = 0
         for ticker in members:

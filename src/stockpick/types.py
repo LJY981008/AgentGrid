@@ -97,11 +97,14 @@ class TopEntry:
 class FinancialFact:
     """SEC EDGAR XBRL 재무 단일 fact — companyfacts 직접 파싱 산출(#재무-1, ADR-005).
 
-    M1 §3 financial 설계의 코드화 + concept 차원 추가. 자연키 =
-    (cik, concept, fiscal_period, disclosed_at) — 정정공시(amendment)는 같은 회계기간을
-    다른 disclosed_at 으로 갖는 **별 행**(원본 보존). PIT(룩어헤드 BLOCKING): 시점 t 결정엔
-    `disclosed_at <= t` 인 fact 만 — fiscal_period 말(period_end)이 아니라 공시일
-    (EDGAR `filed`)이 기준(재무는 분기말 후 수주~수개월 뒤 공시 — end 기준이면 미래 누설).
+    M1 §3 financial 설계의 코드화 + concept 차원 추가. **자연키 = (cik, concept, period_start,
+    period_end, disclosed_at)** — 정정공시(amendment)는 같은 기간을 다른 disclosed_at 으로 갖는
+    **별 행**(원본 보존). ⚠️ **period_start 필수(키)**: NetIncomeLoss 등 *duration* 개념은 같은
+    `end`라도 `start` 다르면 다른 값(실측: end 2008-12-31 에 FY[start 1/1]=16.2억·Q4[start 10/1]=
+    5.8억) — start 없이 dedup 하면 FY/분기 오인. instant 개념(StockholdersEquity·shares)은
+    period_start=None(시점값). ⚠️ **fiscal_period(fy-fp)는 키 아님**: XBRL `fy/fp`는 *신고
+    컨텍스트*(한 신고가 여러 기간 담음) — 기간 식별은 period_start+period_end. PIT(룩어헤드
+    BLOCKING): 시점 t 결정엔 `disclosed_at <= t` 인 fact 만 — 공시일(EDGAR `filed`)이 기준.
 
     명세 = `docs/apis/sec-edgar/companyfacts.json`(진실 원천). concept = us-gaap/dei 태그
     bare name(예 "StockholdersEquity"·"NetIncomeLoss"·"EntityCommonStockSharesOutstanding").
@@ -114,3 +117,5 @@ class FinancialFact:
     period_end: date  # 회계기간 말(EDGAR `end`) — 기간 최신성 정렬 기준(PIT 게이트 아님)
     disclosed_at: date  # EDGAR `filed`(공시일) — PIT 게이트(disclosed_at<=as_of 룩어헤드 차단)
     value: Decimal
+    period_start: date | None = None  # EDGAR `start`(duration 시작) — instant 개념은 None. 자연키
+
