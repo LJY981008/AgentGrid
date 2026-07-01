@@ -11,7 +11,11 @@ from decimal import Decimal
 
 import pytest
 
-from stockpick.backtest.coverage_probe import probe_coverage
+from stockpick.backtest.coverage_probe import (
+    probe_coverage,
+    probe_multimatch,
+    probe_survivors,
+)
 from stockpick.types import FinancialFact
 
 
@@ -109,3 +113,76 @@ def test_probe_empty_members_zero_rate() -> None:
     assert report.folds[0].members == 0
     assert report.folds[0].coverage_rate == 0.0
     assert report.overall_rate == 0.0
+
+
+# ── P4 (b)(a): probe_survivors / probe_multimatch ───────────────────────────
+
+
+class _RaisingResolver:
+    """다중매칭 ticker 는 ValueError(PitIdentity 계열)·그 외 맵(미해소="")."""
+
+    def __init__(self, cik_map: dict[str, str], *, ambiguous: set[str]) -> None:
+        self._cik = cik_map
+        self._ambiguous = ambiguous
+
+    def cik_for(self, ticker: str, *, on: date) -> str:  # noqa: ARG002
+        if ticker in self._ambiguous:
+            msg = f"다중매칭: {ticker}"
+            raise ValueError(msg)
+        return self._cik.get(ticker, "")
+
+
+def test_probe_survivors_counts_profitable_only() -> None:
+    # 생존 = filter_by_roe 통과(흑자·PIT) — COVERED(ROE 0.2) 만. ROE_GAP(equity0)·미해소·facts0 배제.
+    universe, resolver, facts = _scenario()
+    folds = probe_survivors(
+        [date(2020, 6, 1)],
+        universe=universe,
+        identity=resolver,
+        facts=facts,
+        min_roe=Decimal("0"),
+        max_age_days=None,
+    )
+    assert len(folds) == 1
+    assert folds[0].members == 5
+    assert folds[0].survivors == 1  # COVERED 만 흑자 생존
+    assert folds[0].survivor_rate == pytest.approx(0.2)
+
+
+def test_probe_survivors_min_roe_threshold() -> None:
+    # min_roe 상향(0.5)이면 COVERED(0.2)도 탈락 → 생존 0(측정만·R1).
+    universe, resolver, facts = _scenario()
+    folds = probe_survivors(
+        [date(2020, 6, 1)],
+        universe=universe,
+        identity=resolver,
+        facts=facts,
+        min_roe=Decimal("0.5"),
+        max_age_days=None,
+    )
+    assert folds[0].survivors == 0
+
+
+def test_probe_multimatch_counts_ambiguous_and_resolution() -> None:
+    # DELISTED_NOCIK 를 다중매칭으로 강제 → multimatch 1. resolved 3(cik 있음)·unresolved 1(ACTIVE_NOCIK).
+    members = {"COVERED", "DELISTED_NOCIK", "ACTIVE_NOCIK", "FACTS_GAP", "ROE_GAP"}
+    universe = _FakeUniverse(members, {"DELISTED_NOCIK": date(2018, 1, 1)})
+    resolver = _RaisingResolver(
+        {"COVERED": "0000000001", "FACTS_GAP": "0000000004", "ROE_GAP": "0000000005"},
+        ambiguous={"DELISTED_NOCIK"},
+    )
+    folds = probe_multimatch([date(2020, 6, 1)], universe=universe, identity=resolver)
+    assert len(folds) == 1
+    mf = folds[0]
+    assert mf.members == 5
+    assert mf.multimatch == 1  # DELISTED_NOCIK 모호식별
+    assert mf.resolved == 3  # COVERED·FACTS_GAP·ROE_GAP
+    assert mf.unresolved == 1  # ACTIVE_NOCIK("")
+
+
+def test_probe_multimatch_zero_when_clean() -> None:
+    universe, resolver, facts = _scenario()  # _FakeResolver 는 raise 안 함
+    folds = probe_multimatch([date(2020, 6, 1)], universe=universe, identity=resolver)
+    assert folds[0].multimatch == 0
+    assert folds[0].resolved == 3
+    assert folds[0].unresolved == 2
