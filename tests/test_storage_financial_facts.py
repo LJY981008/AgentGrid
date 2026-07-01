@@ -63,6 +63,22 @@ def test_load_empty_when_absent(tmp_path: Path) -> None:
     assert load_financial_facts(tmp_path) == []
 
 
+def test_write_load_high_scale_shares_quantized(tmp_path: Path) -> None:
+    # EntityCommonStockSharesOutstanding 소수 주식수(실측 cik 0000916457: 105.159666·scale 6+)
+    # → 크래시 없이 scale 6 quantize. 재무값=ROE/PB 비율 입력·scale 6 초과 무의미(가격과 달리 허용).
+    facts = [
+        _fact("0000000001", "EntityCommonStockSharesOutstanding", "2024-FY",
+              (2024, 12, 31), (2025, 2, 1), "105.159666"),
+        _fact("0000000002", "EntityCommonStockSharesOutstanding", "2024-FY",
+              (2024, 12, 31), (2025, 2, 1), "105.15966789"),  # scale 8 → HALF_UP round
+    ]
+    write_financial_facts(facts, tmp_path, source="sec-edgar", ingested_at=_STAMP)
+    loaded = {f.cik: f.value for f in load_financial_facts(tmp_path)}
+    assert loaded["0000000001"] == Decimal("105.159666")  # scale 6 보존
+    assert loaded["0000000002"] == Decimal("105.159668")  # scale 8 → 6 반올림(HALF_UP)
+    assert verify_financial_facts(tmp_path).passed
+
+
 def test_write_per_cik_overwrite_idempotent(tmp_path: Path) -> None:
     # 같은 cik 재적재(resume 재시도) → 파티션 덮어쓰기·중복 0(companyfacts 는 cik 단위 완전 fetch).
     facts = [_fact("0000000001", "NetIncomeLoss", "2024-FY", (2024, 12, 31), (2025, 1, 15), "200")]

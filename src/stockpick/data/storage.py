@@ -667,10 +667,13 @@ def load_trade_date_bounds(base_dir: Path) -> dict[str, tuple[date, date]]:
 # ---------------------------------------------------------------------------
 
 _FINANCIAL_DATASET_NAME: Final = "financial_fact"
-# 재무값 정밀도 — 금액(달러)·주식수는 정수 위주(scale 0~2). scale 4 여유·precision 38(10^34 수용).
-# 초과 시 _check_scale 가 PrecisionError(조용한 반올림 금지·BLOCKING).
+# 재무값 정밀도 — 금액(달러)은 정수, but **EntityCommonStockSharesOutstanding 은 소수 주식수**
+# (실측 cik 0000916457: 105.159666·scale 6). ⚠️ 재무값은 ROE/P·B **비율 입력**이라 가격과 달리
+# scale 6 초과 정밀도는 무의미(105M 주식수의 1e-6 = 무시가능) → 거부 대신 scale 6 **quantize**.
+# (daily_bar 가격은 수익률 왜곡 BLOCKING 이라 strict·재무는 비율 입력이라 반올림 허용.)
 _FIN_VALUE_PRECISION: Final = 38
-_FIN_VALUE_SCALE: Final = 4
+_FIN_VALUE_SCALE: Final = 6
+_FIN_QUANTUM: Final = Decimal(1).scaleb(-_FIN_VALUE_SCALE)  # 0.000001 — value quantize 단위
 
 _FIN_FROM: Final = "FROM read_parquet($glob)"
 _FIN_SQL_ROW_COUNT: Final = f"SELECT count(*) {_FIN_FROM}"  # noqa: S608
@@ -730,8 +733,7 @@ def _facts_to_table(
         "period_end": [f.period_end for f in facts],
         "disclosed_at": [f.disclosed_at for f in facts],
         "value": [
-            _check_scale(f.value, scale=_FIN_VALUE_SCALE, column="value", ticker=f.cik)
-            for f in facts
+            f.value.quantize(_FIN_QUANTUM, rounding=ROUND_HALF_UP) for f in facts
         ],
         "source": [source] * len(facts),
         "ingested_at": [ingested_at] * len(facts),
