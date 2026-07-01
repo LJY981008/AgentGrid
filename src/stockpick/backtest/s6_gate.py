@@ -830,6 +830,7 @@ def main(argv: list[str] | None = None) -> int:
     `python -m stockpick.backtest.s6_gate`. base_dir=STOCKPICK_DATA_DIR(기본 data/parquet).
     """
     import argparse
+    from datetime import date
 
     from ..data import configure_logging
     from .adapters import (
@@ -853,6 +854,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--skip-verify", action="store_true", help="G-7 verify 생략(스모크용·verify_passed=False)"
+    )
+    # B pre-registration — 재무 하드필터 룰 게이트(off=momentum canonical·기본). 동결 파라미터를
+    # signature 에 반영해 momentum 판정과 분리(다른 룰 정체성). start 는 재무 커버리지(XBRL 2012+)에
+    # 맞춰 재정(momentum 은 2000~, ROE 는 2000~2011 커버 ~0% → 빈 포트라 별도 window 명시 필수).
+    parser.add_argument(
+        "--apply-roe-filter",
+        action="store_true",
+        help="B — ROE>min 흑자 하드필터 룰 게이트(financial_fact 적재 전제·off=momentum)",
+    )
+    parser.add_argument("--min-roe", type=str, default="0", help="흑자 하한(ROE>min·기본 0)")
+    parser.add_argument(
+        "--roe-max-age-days", type=int, default=None, help="재무 recency 상한(일·기본 무제한)"
+    )
+    parser.add_argument(
+        "--start",
+        type=str,
+        default=None,
+        help="게이트 window 시작(YYYY-MM-DD·ROE 는 재무 커버 시작에 맞춤·기본=정규 동결)",
     )
     args = parser.parse_args(argv)
 
@@ -887,7 +906,27 @@ def main(argv: list[str] | None = None) -> int:
         # ADR-010 동결 정규 decile config(기간 2000~2026·lookback 252·top decile·B1 단일 출처).
         # start=days[0] 주입 금지 — 동결 기간을 써야 walk_forward 가 pre-2000(생존편향)을 필터·
         # signature 가 route/ranking 과 일치(정규값 발산=영원히 false 함정 방지).
-        config = canonical_gate_config()
+        # B(--apply-roe-filter): 재무 하드필터 룰 — start 를 재무 커버 시작에 맞춰 재정(2000~2011
+        # 커버 ~0%=빈 포트 회피). apply_roe_filter/min_roe/roe_max_age_days 는 signature 에 반영.
+        b_start = date.fromisoformat(args.start) if args.start else None
+        config = canonical_gate_config(
+            start=b_start,
+            apply_roe_filter=args.apply_roe_filter,
+            min_roe=Decimal(args.min_roe),
+            roe_max_age_days=args.roe_max_age_days,
+        )
+        financial_facts: list[FinancialFact] | None = None
+        if args.apply_roe_filter:
+            from ..rules._financials import load_financial_facts
+
+            financial_facts = load_financial_facts(base_dir)
+            logger.info(
+                "B 재무 하드필터 게이트: fact=%d, min_roe>%s, max_age=%s, start=%s",
+                len(financial_facts),
+                args.min_roe,
+                args.roe_max_age_days,
+                config.start,
+            )
         pct = config.portfolio_pct
         strategy = (
             TopDecileEqualWeight(pct=pct, min_holdings=config.decile_min_holdings)
@@ -912,6 +951,7 @@ def main(argv: list[str] | None = None) -> int:
                 liquidity_port=liquidity,
                 delisted_ratio=delisted_ratio,
                 verify_passed=verify_passed,
+                financial_facts=financial_facts,
                 n_folds=args.n_folds,
             )
         finally:
