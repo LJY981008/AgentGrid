@@ -16,6 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,13 +28,13 @@ from .config import (
     _DEFAULT_MIN_PRICE_FLOOR,
     _DEFAULT_RETURN_CAP,
 )
-from .engine import run
+from .engine import filter_by_roe, run
 from .validation import walk_forward
 
 if TYPE_CHECKING:
     from datetime import date
-    from decimal import Decimal
 
+    from ..types import FinancialFact
     from .config import BacktestConfig
     from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
     from .strategy import Strategy
@@ -86,6 +87,7 @@ def walk_forward_by_cost(
     identity: IdentityResolver,
     strategy: Strategy,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
     cost_bps_variants: tuple[Decimal, ...] | None = None,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
@@ -106,6 +108,7 @@ def walk_forward_by_cost(
             identity=identity,
             strategy=strategy,
             liquidity_port=liquidity_port,
+            financial_facts=financial_facts,
             n_folds=n_folds,
             purge_gap_days=purge_gap_days,
         )
@@ -127,6 +130,7 @@ def sensitivity_analysis(
     identity: IdentityResolver,
     strategy: Strategy,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
     cost_bps_variants: tuple[Decimal, ...] | None = None,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
@@ -143,6 +147,7 @@ def sensitivity_analysis(
         identity=identity,
         strategy=strategy,
         liquidity_port=liquidity_port,
+        financial_facts=financial_facts,
         cost_bps_variants=cost_bps_variants,
         n_folds=n_folds,
         purge_gap_days=purge_gap_days,
@@ -183,6 +188,12 @@ class S6GateResult:
     n_delisted_liquidations: int
     oos_excesses: tuple[float, ...]  # per-fold OOS 등가중 초과(감사·G-3 = 전 fold>0)
     notes: tuple[str, ...] = ()
+    # ── G-5c 재무 커버리지(B·H9): **관측지표** — passed AND 에 안 들어감(validated=G-1~G-8·R-2 만).
+    # apply_roe_filter 게이트에서만 채워짐(momentum=기본 빈값). fold별 top-decile ROE 커버율·생존수·
+    # MNAR skew(커버/미커버 후속수익 차) 를 정직히 기록(측정·caveat 첨부용·판정 불변).
+    g5c_coverage_rates: tuple[float, ...] = ()
+    g5c_survivor_counts: tuple[int, ...] = ()
+    g5c_mnar_skew: float | None = None
 
 
 def _failure_notes(
@@ -279,6 +290,7 @@ def _reproducible(
     identity: IdentityResolver,
     strategy: Strategy,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
 ) -> bool:
     """G-8 — baseline fold 중 OOS 최단 구간 재실행해 bit-identical 확인(결정성). fold 없으면 False.
 
@@ -297,8 +309,58 @@ def _reproducible(
         identity=identity,
         strategy=strategy,
         liquidity_port=liquidity_port,
+        financial_facts=financial_facts,
     )
     return rerun == f.oos_result
+
+
+def _measure_g5c(
+    baseline_folds: list[Fold],
+    config: BacktestConfig,
+    *,
+    universe_port: UniversePort,
+    liquidity_port: LiquidityPort,
+    identity: IdentityResolver,
+    financial_facts: list[FinancialFact],
+) -> tuple[tuple[float, ...], tuple[int, ...]]:
+    """G-5c 관측(B·H9·**판정 밖**) — OOS fold start 별 재무 커버율·흑자 생존수.
+
+    각 fold as_of=oos_start 유동 유니버스 중 (a) ROE 산출가능 비율(데이터 커버) (b) filter_by_roe
+    통과 흑자 생존수. passed AND 무관 — 커버 부족(MNAR)·생존 붕괴를 caveat 로 노출만. top-decile
+    forward-return MNAR skew 전체 측정은 P4 dry-run 담당(여기선 유니버스 레벨 경량 관측).
+    """
+    from ..rules.factors import financial_factors
+
+    rates: list[float] = []
+    counts: list[int] = []
+    for f in baseline_folds:
+        as_of = f.oos_start
+        cons = universe_port.constituents(as_of=as_of)
+        liquid = liquidity_port.liquid_tickers(as_of=as_of, candidates=cons)
+        cik_of: dict[str, str] = {}
+        for ticker in liquid:
+            try:
+                cik = identity.cik_for(ticker, on=as_of)
+            except ValueError:  # 다중매칭 = 모호식별(filter_by_roe 와 동일 배제)
+                continue
+            if cik:
+                cik_of[ticker] = cik
+        ciks = set(cik_of.values())
+        scores = financial_factors(
+            financial_facts, ciks=ciks, as_of=as_of, max_age_days=config.roe_max_age_days
+        )
+        computable = sum(1 for c in ciks if scores[c].roe is not None)
+        rates.append(computable / len(liquid) if liquid else 0.0)
+        survivors = filter_by_roe(
+            liquid,
+            identity=identity,
+            financial_facts=financial_facts,
+            as_of=as_of,
+            min_roe=config.min_roe,
+            max_age_days=config.roe_max_age_days,
+        )
+        counts.append(len(survivors))
+    return tuple(rates), tuple(counts)
 
 
 def run_s6_gate(
@@ -311,6 +373,7 @@ def run_s6_gate(
     liquidity_port: LiquidityPort,
     delisted_ratio: float,
     verify_passed: bool,
+    financial_facts: list[FinancialFact] | None = None,
     n_folds: int = _N_FOLDS,
     purge_gap_days: int | None = None,
     cost_bps_variants: tuple[Decimal, ...] | None = None,
@@ -346,6 +409,9 @@ def run_s6_gate(
         min_price_floor=config.min_price_floor,
         min_adv_dollar=config.min_adv_dollar,
         adv_window_days=config.adv_window_days,
+        apply_roe_filter=config.apply_roe_filter,  # B·H1 — on 이면 factor_filter 키 포함(정체성)
+        min_roe=config.min_roe,
+        roe_max_age_days=config.roe_max_age_days,
     )
     if not verify_passed:
         # G-7 무결성 실패 → 데이터 신뢰 불가. 손상 데이터 백테스트(G-1~G-6)는 garbage-in·무의미.
@@ -378,6 +444,7 @@ def run_s6_gate(
         identity=identity,
         strategy=strategy,
         liquidity_port=liquidity_port,
+        financial_facts=financial_facts,
         cost_bps_variants=variants,
         n_folds=n_folds,
         purge_gap_days=purge_gap_days,
@@ -394,6 +461,8 @@ def run_s6_gate(
             price_port=price_port,
             universe_port=universe_port,
             liquidity_port=liquidity_port,
+            identity=identity,  # B·H3 — apply_roe_filter 시 벤치도 흑자∩유동(엔진 대칭·G-3 공정)
+            financial_facts=financial_facts,
         )
         excesses.append(float(f.oos_result.total_return - bench.total_return))
         _reset_ports(price_port, liquidity_port)  # MEM-fix: 벤치 누적 버퍼 해제(fold 마다)
@@ -411,6 +480,7 @@ def run_s6_gate(
         identity=identity,
         strategy=strategy,
         liquidity_port=liquidity_port,
+        financial_facts=financial_facts,
     )
 
     result = evaluate_criteria(
@@ -425,6 +495,17 @@ def run_s6_gate(
         verify_passed=verify_passed,
         reproducible=reproducible,
     )
+    # G-5c 관측(B·H9·판정 밖) — apply_roe_filter 게이트에서만 측정·attach. momentum=빈값 유지.
+    if config.apply_roe_filter and financial_facts is not None:
+        g5c_rates, g5c_counts = _measure_g5c(
+            baseline_folds,
+            config,
+            universe_port=universe_port,
+            liquidity_port=liquidity_port,
+            identity=identity,
+            financial_facts=financial_facts,
+        )
+        result = replace(result, g5c_coverage_rates=g5c_rates, g5c_survivor_counts=g5c_counts)
     worst_excess = min(result.oos_excesses) if result.oos_excesses else None
     logger.info(
         "S6-b 게이트 판정: passed=%s, n_folds=%d, worst_oos_excess=%s, sensitivity=%s, notes=%s",
@@ -487,6 +568,9 @@ def compute_rule_signature(
     min_price_floor: Decimal = _DEFAULT_MIN_PRICE_FLOOR,
     min_adv_dollar: Decimal = _DEFAULT_MIN_ADV_DOLLAR,
     adv_window_days: int = _DEFAULT_ADV_WINDOW_DAYS,
+    apply_roe_filter: bool = False,
+    min_roe: Decimal = Decimal(0),
+    roe_max_age_days: int | None = None,
 ) -> str:
     """검증된 **룰 정체성** 해시 — gate 기록과 route 요청이 같은 룰이면 같은 키.
 
@@ -495,6 +579,11 @@ def compute_rule_signature(
     period_return_cap(L4 상한)·portfolio_pct/decile_min(decile 포트·ADR-010 #3)·유동성 3필드
     (min_price/min_adv/window·ADR-010 #6)는 전부 수익/유니버스를 바꾸므로 포함 — 동결 우회 차단.
     기본값=정규 동결값이라 route/ranking 은 인자 생략 시 정규 매칭, 비정규 게이트는 flip 안 됨.
+
+    ⚠️ **factor_filter**(B·H1): `apply_roe_filter=True` 일 때만 payload 에 `factor_filter` 키
+    삽입(roe_min·roe_max_age_days) — 재무 하드필터가 유니버스를 바꾸므로 다른 룰 정체성. off(기본)
+    이면 **키 자체를 넣지 않아** momentum canonical payload 와 바이트 동일 → 해시 bit-identical
+    (하위호환·momentum flip 불변). on/off 는 반드시 다른 해시(동결 우회·검증범위 오클레임 차단).
     """
     payload = {
         "strategy_name": strategy_name,
@@ -511,6 +600,11 @@ def compute_rule_signature(
         "min_adv_dollar": f"{min_adv_dollar.normalize():f}",
         "adv_window_days": adv_window_days,
     }
+    if apply_roe_filter:
+        payload["factor_filter"] = {
+            "roe_min": f"{min_roe.normalize():f}",
+            "roe_max_age_days": roe_max_age_days,
+        }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
@@ -542,6 +636,12 @@ def write_s6_gate_result(base_dir: Path, result: S6GateResult) -> Path:
         "n_delisted_liquidations": result.n_delisted_liquidations,
         "oos_excesses": list(result.oos_excesses),
         "notes": list(result.notes),
+        # G-5c 관측(B·H9) — 판정(passed) 밖·감사/caveat 용. momentum 게이트는 빈값.
+        "g5c_observational": {
+            "coverage_rates": list(result.g5c_coverage_rates),
+            "survivor_counts": list(result.g5c_survivor_counts),
+            "mnar_skew": result.g5c_mnar_skew,
+        },
     }
     path = base_dir / _RESULT_NAME
     tmp = base_dir / (_RESULT_NAME + ".tmp")
@@ -549,6 +649,28 @@ def write_s6_gate_result(base_dir: Path, result: S6GateResult) -> Path:
     os.replace(tmp, path)
     logger.info("S6-b 게이트 결과 기록: passed=%s → %s", result.passed, path)
     return path
+
+
+def _archive_stale_result(path: Path) -> None:
+    """H10 다중검정 규율(코드 강제) — 이전 판정을 **삭제 전 archive(JSONL append)** 로 보존.
+
+    반복 게이트(같은 데이터·다른 시도)가 조용히 이전 판정을 덮어써 '한 번에 통과'처럼 보이는
+    다중검정 편향 차단 — 모든 시도 이력을 남긴다(감사). 파싱 실패해도 원문 보존(조용한 유실 금지).
+    """
+    archive = path.parent / (_RESULT_NAME + ".archive")
+    try:
+        compact = json.dumps(
+            json.loads(path.read_text(encoding="utf-8")), ensure_ascii=False, separators=(",", ":")
+        )
+    except (OSError, ValueError):
+        logger.warning("이전 판정 archive 파싱 실패 — 원문 래핑 보존 시도")
+        try:
+            compact = json.dumps({"raw": path.read_text(encoding="utf-8")}, ensure_ascii=False)
+        except OSError:
+            return
+    with archive.open("a", encoding="utf-8") as fh:
+        fh.write(compact + "\n")
+    logger.info("이전 s6_gate_result.json archive 보존(다중검정 이력): %s", archive)
 
 
 def load_s6_gate_verdict(base_dir: Path, request_signature: str) -> bool:
@@ -576,6 +698,9 @@ def ranking_rule_signature(
     lookback_days: int,
     skip_recent_days: int,
     group_by_exchange: bool,
+    apply_roe_filter: bool = False,
+    min_roe: Decimal = Decimal(0),
+    roe_max_age_days: int | None = None,
 ) -> str:
     """ranking(실행 파라미터 미노출)용 룰 signature — 검증된 **decile 룰**(R4 다리)로 위임.
 
@@ -583,6 +708,10 @@ def ranking_rule_signature(
     top_n 은 signature 무관 — strategy/portfolio_pct/decile_min/cap/유동성/recovery 를 전부 게이트
     정규값(ADR-010 동결)으로 채우고 요청 momentum(lookback/skip/group)만 받아 compute_rule_signature
     에 위임. 검증 decile 와 그 셋 일치 시 flip true, 그 외 보수 false.
+
+    ⚠️ **factor_filter**(B·H1 다리): apply_roe_filter/min_roe/roe_max_age_days 옵셔널 pass-through
+    (기본 off) — 재무 하드필터 룰이 운영에 승격될 때만 route 가 on 으로 요청해 B 게이트 판정과
+    signature 매칭. off(기본)이면 compute_rule_signature 가 키 미삽입 → momentum canonical 불변.
     """
     return compute_rule_signature(
         strategy_name=_CANONICAL_STRATEGY_NAME,
@@ -594,6 +723,9 @@ def ranking_rule_signature(
         group_by_exchange=group_by_exchange,
         portfolio_pct=_canonical_portfolio_pct(),
         decile_min_holdings=_CANONICAL_DECILE_MIN_HOLDINGS,
+        apply_roe_filter=apply_roe_filter,
+        min_roe=min_roe,
+        roe_max_age_days=roe_max_age_days,
     )
 
 
@@ -605,6 +737,9 @@ def canonical_gate_config(
     lookback_days: int = _CANONICAL_LOOKBACK_DAYS,
     skip_recent_days: int = _CANONICAL_SKIP_RECENT_DAYS,
     group_by_exchange: bool = False,
+    apply_roe_filter: bool = False,
+    min_roe: Decimal = Decimal(0),
+    roe_max_age_days: int | None = None,
 ) -> BacktestConfig:
     """게이트가 검증하는 **정규 decile 룰 config** — ADR-010 동결값을 채운 단일 출처(B1).
 
@@ -630,6 +765,9 @@ def canonical_gate_config(
         end=end if end is not None else _canonical_end(),
         portfolio_pct=_canonical_portfolio_pct(),
         decile_min_holdings=_CANONICAL_DECILE_MIN_HOLDINGS,
+        apply_roe_filter=apply_roe_filter,  # B — 기본 off(momentum). P5 동결 config 에서 on
+        min_roe=min_roe,
+        roe_max_age_days=roe_max_age_days,
     )
 
 
@@ -677,6 +815,12 @@ def _print_verdict(result: S6GateResult) -> None:
     print(f"[s6_gate] 종합: {verdict}")  # noqa: T201
     if result.notes:
         print(f"[s6_gate] notes: {result.notes}")  # noqa: T201
+    # G-5c 재무 커버리지(관측·판정 밖·H9) — 채워졌을 때만(apply_roe_filter 게이트).
+    if result.g5c_coverage_rates or result.g5c_survivor_counts:
+        print(  # noqa: T201
+            f"[s6_gate] G-5c(관측·판정無): coverage_rates={result.g5c_coverage_rates} "
+            f"survivor_counts={result.g5c_survivor_counts} mnar_skew={result.g5c_mnar_skew}"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -719,8 +863,9 @@ def main(argv: list[str] | None = None) -> int:
     # 잔존해 검증으로 오인되는 일 방지(부재→load_verdict false·보수). 완주 시 끝에서 재기록.
     stale = base_dir / _RESULT_NAME
     if stale.is_file():
+        _archive_stale_result(stale)  # H10 다중검정 — 삭제 전 이력 보존(조용한 덮어쓰기 차단)
         stale.unlink()
-        logger.info("이전 s6_gate_result.json 무효화(재실행·크래시 안전)")
+        logger.info("이전 s6_gate_result.json 무효화(archive 보존·재실행·크래시 안전)")
 
     verify_passed = False if args.skip_verify else _verify_gate(base_dir)
 

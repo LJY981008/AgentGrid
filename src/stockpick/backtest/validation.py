@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from datetime import date
 
+    from ..types import FinancialFact
     from .config import BacktestConfig
     from .metrics import BacktestResult
     from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
@@ -91,6 +92,7 @@ def walk_forward(
     identity: IdentityResolver,
     strategy: Strategy,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
     n_folds: int = 3,
     purge_gap_days: int | None = None,
 ) -> list[Fold]:
@@ -138,6 +140,7 @@ def walk_forward(
             identity=identity,
             strategy=strategy,
             liquidity_port=liquidity_port,
+            financial_facts=financial_facts,
         )
         # MEM-fix: 긴 IS run 누적 버퍼/단편화를 OOS 전 해제(DuckDB 포트만·Fake no-op·결과 불변).
         _reset_ports(price_port, liquidity_port)
@@ -148,6 +151,7 @@ def walk_forward(
             identity=identity,
             strategy=strategy,
             liquidity_port=liquidity_port,
+            financial_facts=financial_facts,
         )
         _reset_ports(price_port, liquidity_port)  # fold 경계 — 다음 fold/비용 변동 전 누적 0
         guard = decay_ratio(
