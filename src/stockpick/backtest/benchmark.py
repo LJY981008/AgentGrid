@@ -20,9 +20,10 @@ from .profile_types import timed
 if TYPE_CHECKING:
     from datetime import date
 
+    from ..types import FinancialFact
     from .config import BacktestConfig
     from .metrics import BacktestResult
-    from .ports import LiquidityPort, PriceSeriesPort, UniversePort
+    from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
     from .profile_types import PhaseTimer
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,8 @@ def equal_weight_universe(
     price_port: PriceSeriesPort,
     universe_port: UniversePort,
     liquidity_port: LiquidityPort,
+    identity: IdentityResolver | None = None,
+    financial_facts: list[FinancialFact] | None = None,
     profile: PhaseTimer | None = None,
 ) -> BacktestResult:
     """매 리밸 as_of=t 거래가능·**유동** 종목 전체를 등가중 보유 → 벤치 자산곡선. 룰과 동일 회계.
@@ -81,6 +84,19 @@ def equal_weight_universe(
             profile.tick_rebalance()
         tradable = universe_port.constituents(as_of=t)
         tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)  # 엔진과 대칭
+        # B·H3 벤치 대칭: apply_roe_filter 시 엔진과 **동일** filter_by_roe → 벤치=흑자∩유동 등가중
+        # (= 순수 ROE 베이스라인). G-3 excess = momentum 증분(ROE 프리미엄 위·H2 귀인). off=미필터.
+        if config.apply_roe_filter and financial_facts is not None and identity is not None:
+            from .engine import filter_by_roe
+
+            tradable = filter_by_roe(
+                tradable,
+                identity=identity,
+                financial_facts=financial_facts,
+                as_of=t,
+                min_roe=config.min_roe,
+                max_age_days=config.roe_max_age_days,
+            )
         # 멤버십만 필요(가격 미사용) — load_range PricePoint 물질화 회피·키집합 동치(Task7 finding).
         with timed(profile, "members"):
             members = price_port.tickers_with_data(

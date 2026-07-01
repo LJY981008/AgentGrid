@@ -52,6 +52,12 @@ class BacktestConfig:
     # 둘 다 fingerprint + compute_rule_signature 포함(동결 우회 차단·top_n 과 다른 룰 정체성).
     portfolio_pct: Decimal | None = None
     decile_min_holdings: int = 20
+    # 재무 하드필터(B·방식 C). apply_roe_filter 시 **ROE→momentum 순서** — liquidity 직후 흑자
+    # (ROE>min_roe·동일 FY·filed≤t·recency≤roe_max_age_days) 종목만 남기고 momentum decile.
+    # on 일 때만 compute_rule_signature 포함(off=momentum canonical bit-identical·동결 우회 차단).
+    apply_roe_filter: bool = False
+    min_roe: Decimal = Decimal(0)
+    roe_max_age_days: int | None = None
 
     def __post_init__(self) -> None:
         # 조용한 오설정 금지(명시 실패). cap<=0 은 모든 수익 음수 뭉갬·유동성 임계 음수=무의미.
@@ -63,6 +69,13 @@ class BacktestConfig:
             raise ValueError(msg)
         if self.decile_min_holdings <= 0:
             msg = f"decile_min_holdings 는 양수여야 함(현재 {self.decile_min_holdings})"
+            raise ValueError(msg)
+        if (
+            self.apply_roe_filter
+            and self.roe_max_age_days is not None
+            and self.roe_max_age_days <= 0
+        ):
+            msg = f"roe_max_age_days 는 양수여야 함(현재 {self.roe_max_age_days})"
             raise ValueError(msg)
         if self.min_price_floor <= 0:
             msg = f"min_price_floor 는 양수여야 함(현재 {self.min_price_floor})"

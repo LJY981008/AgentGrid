@@ -15,7 +15,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from ..rules.factors import momentum_universe
+from ..rules.factors import financial_factors, momentum_universe
 from ..rules.ranking import rank_by_momentum
 from . import calendar, costs
 from .metrics import compute_metrics
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from datetime import date
 
     from ..rules._scan import PricePoint
-    from ..types import Exchange, TopEntry
+    from ..types import Exchange, FinancialFact, TopEntry
     from .config import BacktestConfig
     from .metrics import BacktestResult
     from .ports import IdentityResolver, LiquidityPort, PriceSeriesPort, UniversePort
@@ -50,6 +50,7 @@ def run(
     identity: IdentityResolver,
     strategy: Strategy,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
     profile: PhaseTimer | None = None,
 ) -> BacktestResult:
     """리밸 루프 → 자산곡선 → BacktestResult. 데이터량 무관(같은 코드, 더 많은 데이터).
@@ -87,7 +88,8 @@ def run(
             profile.tick_rebalance()  # 라이브 진행 곡선(계측만·결과 무관)
         with timed(profile, "rank"):
             ranked = _rank_at(
-                config, price_port, universe_port, identity, exchanges, t, liquidity_port
+                config, price_port, universe_port, identity, exchanges, t, liquidity_port,
+                financial_facts=financial_facts,
             )
         weights = strategy.weights(ranked, as_of=t)
         key_to_ticker = {(e.cik or e.ticker): e.ticker for e in ranked}
@@ -157,6 +159,45 @@ def run(
     )
 
 
+def filter_by_roe(
+    candidates: set[str],
+    *,
+    identity: IdentityResolver,
+    financial_facts: list[FinancialFact],
+    as_of: date,
+    min_roe: Decimal,
+    max_age_days: int | None,
+) -> set[str]:
+    """후보 ticker 중 **ROE>min_roe(흑자·PIT)** 인 것만 (B·방식 C·ROE→momentum 순서·H7).
+
+    ticker→cik 해소(다중매칭=배제+카운트·raise 아님·H — 게이트 crash 방지) → financial_factors ROE
+    (동일 FY·filed≤t·recency≤max_age) → ROE 산출가능 ∧ >min_roe 인 cik 의 ticker 만. 미해소 cik·무
+    ROE=배제(결측 명시 배제·중립채움 금지). 룩어헤드/생존편향은 financial_factors·identity 가 보장.
+    ⚠️ engine `_rank_at` 과 benchmark `equal_weight_universe` 가 **공유**(H3 대칭).
+    """
+    cik_of: dict[str, str] = {}
+    dropped_multi = 0
+    for ticker in candidates:
+        try:
+            cik = identity.cik_for(ticker, on=as_of)
+        except ValueError:  # ticker_history 다중매칭 = 모호한 식별 → 배제(게이트 crash 방지)
+            dropped_multi += 1
+            continue
+        if cik:
+            cik_of[ticker] = cik
+    if dropped_multi:
+        logger.warning("ROE 필터 다중매칭 배제: %d종목(as_of=%s)", dropped_multi, as_of)
+    scores = financial_factors(
+        financial_facts, ciks=set(cik_of.values()), as_of=as_of, max_age_days=max_age_days
+    )
+    survivors: set[str] = set()
+    for ticker, cik in cik_of.items():
+        roe = scores[cik].roe
+        if roe is not None and roe > min_roe:
+            survivors.add(ticker)
+    return survivors
+
+
 def _rank_at(
     config: BacktestConfig,
     price_port: PriceSeriesPort,
@@ -165,6 +206,7 @@ def _rank_at(
     exchanges: Mapping[str, Exchange],
     t: date,
     liquidity_port: LiquidityPort,
+    financial_facts: list[FinancialFact] | None = None,
 ) -> list[TopEntry]:
     """as_of=t 랭킹. survivorship: constituents(as_of=t) 교집합(가격파일 존재 아님). cik enrich.
 
@@ -183,6 +225,17 @@ def _rank_at(
     """
     tradable = universe_port.constituents(as_of=t)
     tradable &= liquidity_port.liquid_tickers(as_of=t, candidates=tradable)
+    # B·방식 C(ROE→momentum): liquidity 직후·momentum 전 흑자 필터로 유니버스 축소. off(기본)=
+    # 현 흐름 bit-identical(필터 미호출). 벤치도 동일 filter_by_roe 공유(H3 대칭).
+    if config.apply_roe_filter and financial_facts is not None:
+        tradable = filter_by_roe(
+            tradable,
+            identity=identity,
+            financial_facts=financial_facts,
+            as_of=t,
+            min_roe=config.min_roe,
+            max_age_days=config.roe_max_age_days,
+        )
     if isinstance(price_port, MomentumScorePort):
         # SQL 부분 푸시다운(ADR-007) — 끝점 2점만 스캔(1억행 풀로드 회피).
         # load_range+momentum_universe 와 bit-identical(windowed wn·Task2/5 봉인·윈도우 동일 출처).
