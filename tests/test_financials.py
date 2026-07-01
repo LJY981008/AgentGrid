@@ -61,6 +61,31 @@ def test_latest_as_of_excludes_future_disclosure_lookahead() -> None:
     assert sel.fiscal_period == "2023-FY"  # 미래 공시 누설 차단(period_end 아니라 filed 기준)
 
 
+def test_latest_as_of_max_age_excludes_stale() -> None:
+    # STALE 상한(H5): 폐지직전 신고 중단 기업의 2~5년전 흑자가 '최신'으로 선택되는 것 차단.
+    stale = [_fact("StockholdersEquity", "2019-FY", (2019, 12, 31), (2020, 1, 1), "100")]
+    # disclosed 2020-01-01·as_of 2024-01-01(≈1461일) > max_age 548 → 제외.
+    assert (
+        latest_as_of(
+            stale, concept="StockholdersEquity", cik=_CIK, as_of=date(2024, 1, 1), max_age_days=548
+        )
+        is None
+    )
+    # 상한 없으면(기본) 그대로 선택(하위호환).
+    assert (
+        latest_as_of(stale, concept="StockholdersEquity", cik=_CIK, as_of=date(2024, 1, 1))
+        is not None
+    )
+    # 경계 내(disclosed 2023-09-01·≈122일)는 유지.
+    fresh = [_fact("StockholdersEquity", "2023-FY", (2023, 6, 30), (2023, 9, 1), "200")]
+    assert (
+        latest_as_of(
+            fresh, concept="StockholdersEquity", cik=_CIK, as_of=date(2024, 1, 1), max_age_days=548
+        )
+        is not None
+    )
+
+
 def test_latest_as_of_amendment_prefers_later_disclosure() -> None:
     # 같은 회계기간(2023-FY) 원본·정정(10-K/A): period_end 동일 → disclosed_at 늦은 정정값 사용.
     facts = [

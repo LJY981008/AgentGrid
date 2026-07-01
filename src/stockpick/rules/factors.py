@@ -265,6 +265,7 @@ def financial_factors(
     ciks: Iterable[str],
     as_of: date,
     price_by_cik: dict[str, Decimal] | None = None,
+    max_age_days: int | None = None,
 ) -> dict[str, FinancialScore]:
     """cik 별 재무 팩터(ROE·P/B) 산출. 순수 계산(facts·price 입력, 네트워크 없음)·PIT.
 
@@ -272,20 +273,33 @@ def financial_factors(
       - equity = 최신 연간 StockholdersEquity (annual_only — ROE/BVPS 기준)
       - net_income = 최신 연간 NetIncomeLoss (annual_only)
       - shares = 최신 EntityCommonStockSharesOutstanding (annual_only=False — 최신 가용)
-    ROE = net_income/equity (equity>0), P/B = price*shares/equity (price·equity>0·shares>0).
-    분모<=0·결측·가격 결측 → 해당 값 None. price_by_cik 없거나 cik 미포함 → pb=None.
-    미해소 cik 도 맵에 남긴다(전부 None — 랭킹이 "산출 불가"를 알게, 조용한 누락 금지).
+    ROE = net_income/equity, P/B = price*shares/equity. **ROE 산출 조건(B·H8)**: equity·net_income
+    이 **동일 회계연도(period_end 일치)** ∧ **equity>0**(자본잠식 배제 — 음 equity 우량주도 배제·
+    설계 명문) ∧ 결측 아님. period_end 불일치(equity FY24·income FY23 등)=ROE None(왜곡 방지).
+    **max_age_days**(H5·STALE 상한): 지정 시 disclosed_at 가 as_of 로부터 그 일수 이내인 fact 만
+    (폐지직전 stale 흑자 차단). 분모<=0·결측·가격 결측·FY불일치·stale → 해당 값 None. 미해소 cik 도
+    맵에 남긴다(전부 None — 랭킹이 "산출 불가"를 알게, 조용한 누락 금지).
     """
     prices = price_by_cik or {}
+    # 성능(H6·BLOCKING): cik별 1회 인덱싱 → latest_as_of 가 전체 facts(만-cik 2.68M) 대신 해당 cik
+    # 부분집합만 스캔. 순진 호출은 O(ciks × 전체 facts)/리밸 = 게이트 OOM/타임아웃. (결과 불변.)
+    facts_by_cik: dict[str, list[FinancialFact]] = {}
+    for fact in facts:
+        facts_by_cik.setdefault(fact.cik, []).append(fact)
     result: dict[str, FinancialScore] = {}
     for cik in ciks:
+        cik_facts = facts_by_cik.get(cik, [])
         equity_fact = latest_as_of(
-            facts, concept=_CONCEPT_EQUITY, cik=cik, as_of=as_of, annual_only=True
+            cik_facts, concept=_CONCEPT_EQUITY, cik=cik, as_of=as_of, annual_only=True,
+            max_age_days=max_age_days,
         )
         income_fact = latest_as_of(
-            facts, concept=_CONCEPT_NET_INCOME, cik=cik, as_of=as_of, annual_only=True
+            cik_facts, concept=_CONCEPT_NET_INCOME, cik=cik, as_of=as_of, annual_only=True,
+            max_age_days=max_age_days,
         )
-        shares_fact = latest_as_of(facts, concept=_CONCEPT_SHARES, cik=cik, as_of=as_of)
+        shares_fact = latest_as_of(
+            cik_facts, concept=_CONCEPT_SHARES, cik=cik, as_of=as_of, max_age_days=max_age_days
+        )
         price = prices.get(cik)
 
         equity = equity_fact.value if equity_fact is not None else None
@@ -293,7 +307,13 @@ def financial_factors(
         shares = shares_fact.value if shares_fact is not None else None
 
         roe: Decimal | None = None
-        if equity is not None and equity > 0 and net_income is not None:
+        # 동일 FY(period_end 일치) 강제 — 서로 다른 회계연도 조합은 흑자/적자 판정 왜곡(H8).
+        same_fy = (
+            equity_fact is not None
+            and income_fact is not None
+            and equity_fact.period_end == income_fact.period_end
+        )
+        if same_fy and equity is not None and equity > 0 and net_income is not None:
             roe = net_income / equity
 
         pb: Decimal | None = None

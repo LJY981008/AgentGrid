@@ -56,6 +56,7 @@ def latest_as_of(
     cik: str,
     as_of: date,
     annual_only: bool = False,
+    max_age_days: int | None = None,
 ) -> FinancialFact | None:
     """PIT 선택: `disclosed_at <= as_of` 인 (cik, concept) fact 중 회계기간 최신 1건.
 
@@ -63,6 +64,10 @@ def latest_as_of(
     공시일 기준(공시 시차로 미래 누설 차단). 회계기간 최신 = max(period_end); 동률(정정공시)이면
     disclosed_at 최신(amendment 우선, 원본은 보존되나 최신값 사용). annual_only 면 연간(10-K,
     fiscal_period "-FY")만 — 분기 제외(연간 ROE 기준). 해당 fact 없으면 None.
+
+    ⚠️ **max_age_days**(STALE 상한·H5): 지정 시 `(as_of - disclosed_at).days <= max_age_days`
+    인 fact 만 — 폐지직전 신고를 멈춘 부실기업의 2~5년 전 흑자 ROE 가 '최신'으로 선택돼 필터를
+    통과하는 stale-data 편향 차단(룩어헤드 아님·과거 정보의 과도한 신뢰 방지). None(기본)=상한 없음.
     """
     eligible = [
         f
@@ -71,6 +76,7 @@ def latest_as_of(
         and f.concept == concept
         and f.disclosed_at <= as_of
         and (not annual_only or f.fiscal_period.endswith(_ANNUAL_SUFFIX))
+        and (max_age_days is None or (as_of - f.disclosed_at).days <= max_age_days)
     ]
     if not eligible:
         return None

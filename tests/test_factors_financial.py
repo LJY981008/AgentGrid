@@ -72,6 +72,29 @@ def test_financial_factors_nonpositive_equity_none() -> None:
     assert s.pb is None
 
 
+def test_financial_factors_fy_mismatch_no_roe() -> None:
+    # H8: equity 최신=FY2024·income 최신=FY2023 → 다른 FY → ROE None(왜곡 방지).
+    facts = [
+        _fact("StockholdersEquity", "2024-FY", "1000", filed=(2025, 2, 1)),
+        _fact("StockholdersEquity", "2023-FY", "900", filed=(2024, 2, 1)),
+        _fact("NetIncomeLoss", "2023-FY", "180", filed=(2024, 2, 1)),  # income 최신=FY2023
+    ]
+    s = financial_factors(facts, ciks=[_CIK], as_of=date(2025, 3, 1))[_CIK]
+    assert s.roe is None  # equity FY2024 vs income FY2023 불일치 → ROE 미산출
+
+
+def test_financial_factors_max_age_stale_no_roe() -> None:
+    # H5: 4년 전 흑자만 있는 cik → max_age_days 초과 → equity/income stale 배제 → ROE None.
+    facts = [
+        _fact("StockholdersEquity", "2019-FY", "1000", filed=(2020, 2, 1)),
+        _fact("NetIncomeLoss", "2019-FY", "200", filed=(2020, 2, 1)),
+    ]
+    s = financial_factors(facts, ciks=[_CIK], as_of=date(2024, 3, 1), max_age_days=548)[_CIK]
+    assert s.roe is None  # stale(≈4년) 배제
+    s2 = financial_factors(facts, ciks=[_CIK], as_of=date(2024, 3, 1))[_CIK]
+    assert s2.roe == Decimal("0.2")  # max_age 없으면 산출(하위호환)
+
+
 def test_financial_factors_missing_price_no_pb_but_roe() -> None:
     s = financial_factors(_full_facts(), ciks=[_CIK], as_of=date(2025, 3, 1))[_CIK]  # price 없음
     assert s.roe == Decimal("0.2")
