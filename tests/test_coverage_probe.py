@@ -133,7 +133,7 @@ class _RaisingResolver:
 
 
 def test_probe_survivors_counts_profitable_only() -> None:
-    # 생존 = filter_by_roe 통과(흑자·PIT) — COVERED(ROE 0.2) 만. ROE_GAP(equity0)·미해소·facts0 배제.
+    # 생존 = filter_by_roe 통과(흑자·PIT) — COVERED 만. ROE_GAP(equity0)·미해소·facts0 배제.
     universe, resolver, facts = _scenario()
     folds = probe_survivors(
         [date(2020, 6, 1)],
@@ -164,7 +164,7 @@ def test_probe_survivors_min_roe_threshold() -> None:
 
 
 def test_probe_multimatch_counts_ambiguous_and_resolution() -> None:
-    # DELISTED_NOCIK 를 다중매칭으로 강제 → multimatch 1. resolved 3(cik 있음)·unresolved 1(ACTIVE_NOCIK).
+    # DELISTED_NOCIK 다중매칭 강제 → multimatch 1·resolved 3·unresolved 1(ACTIVE_NOCIK).
     members = {"COVERED", "DELISTED_NOCIK", "ACTIVE_NOCIK", "FACTS_GAP", "ROE_GAP"}
     universe = _FakeUniverse(members, {"DELISTED_NOCIK": date(2018, 1, 1)})
     resolver = _RaisingResolver(
