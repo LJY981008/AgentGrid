@@ -6,3 +6,4 @@
 - [DuckDB native peak 정적분석](duckdb-native-peak-analysis.md) — 백테스트 12.8GB native(window CTE 물질화·fetchall·threads 미설정) 가설 (2026-06-24)
 - [EODHD $1M sentinel drop 정밀술어](eodhd-sentinel-1m-drop.md) — round(adjusted,2)=1000000.00 행단위(732,989행/793종목)·legit 무손실·종목drop 금지·3겹 필요 (2026-06-24)
 - [EODHD adj_factor 임계 정밀](eodhd-adjfactor-threshold.md) — adj_factor 단독임계 위험(legit 거듭역분할 max 29k)·결합조건도 오제거·근원=sentinel÷close·close<=0.0005 페니floor 안전신호 (2026-06-24)
+- [추적루프 스키마 검토](tracking-loop-schema-review.md) — REVISE-GO 5 blocking: SPY 부재 실측·이월×SELL 모순·분할/배당 혼입·stock_id FK·soft-void (2026-07-07)
