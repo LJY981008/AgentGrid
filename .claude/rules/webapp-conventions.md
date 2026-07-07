@@ -5,7 +5,7 @@ paths: ["webapp/**"]
 
 # Web App (PWA) Conventions — M3 활성 (실측 2026-06-17)
 
-> 웹앱은 M3 부터 구현됨. 스택 확정·구조는 아래 실측 반영. 5화면 전부 구현 — `BacktestPage`는 `/api/backtest` 소비·Recharts 자산곡선(골격·미검증경고 상시).
+> 웹앱은 M3 부터 구현됨. 스택 확정·구조는 아래 실측 반영. 6화면 구현 — `BacktestPage`(Recharts 자산곡선·미검증경고 상시)·**`TrackingPage`(M4 월 라운드 운용기록 — 폼 패턴 첫 도입)**.
 
 ## 방향 (stock-1st_plan §7)
 
@@ -24,7 +24,7 @@ paths: ["webapp/**"]
 | 경로 | 역할 |
 |---|---|
 | `src/api/{client,endpoints,types,useApi}.ts` | API 클라이언트. `types.ts` = `src/stockpick/api/models.py` **1:1 미러**(단일 출처는 서버) |
-| `src/pages/` | `Dashboard`(랭킹·홈) · `Data`(수집 트리거) · `Universe`(종목 목록) · `Learning`(docs/learning 렌더) · `Backtest`(자산곡선 Recharts·지표·벤치·미검증경고) · `NotFound` |
+| `src/pages/` | `Dashboard`(랭킹·홈) · **`Tracking`(M4 라운드·거래 폼 2단계 확인·티커 선택형·4계열 성과·마감 회고 — 수량/금액은 Decimal 문자열 전송)** · `Data`(수집 트리거) · `Universe`(종목 목록) · `Learning`(docs/learning 렌더) · `Backtest`(자산곡선 Recharts) · `NotFound` |
 | `src/components/` | `Layout` · `common/{Badge,StateViews,UnvalidatedWarning}` · `ranking/RankingTable` · `learning/{TopicTree,MarkdownView}` |
 | `vite.config.ts` | dev proxy `/api`·`/learning-assets` → `VITE_DEV_API_TARGET`(컨테이너 app:8000) + vite-plugin-pwa |
 
@@ -37,7 +37,8 @@ paths: ["webapp/**"]
 - 학습 이미지: 상대경로 → `/learning-assets/...` 재작성(`MarkdownView` urlTransform). 절대 URL 미변경. `loading=lazy`
 - API 베이스·키는 env(`VITE_DEV_API_TARGET`). 하드코딩 금지. 키·토큰을 프론트 번들에 넣지 않음
 - 타입 안전: `tsconfig strict`. `any` 회피 — 서버 계약을 `types.ts` 로 정확히 미러
-- 빌드 캐시(`*.tsbuildinfo`)·`node_modules`·`dist`·PWA 생성물(`sw.js`·`workbox-*`)은 커밋 금지(`webapp/.gitignore`)
+- 빌드 캐시(`*.tsbuildinfo`)·`node_modules`·`dist`·PWA 생성물(`sw.js`·`workbox-*`)은 커밋 금지(`webapp/.gitignore`). dist/node_modules 는 compose **익명볼륨 마스킹**(호스트 레거시 root 소유 잔재가 virtiofs 에서 조작 불가 — 빌드 EACCES 방지)
+- 폼 패턴(M4 도입): 파괴적/금전 입력은 **2단계 확인**·티커는 자유입력 금지(선택형)·서버 422/409 메시지를 그대로 표시(프론트 검증은 UX 보조 — 진짜 가드는 서버)
 
 ## 검증
 
