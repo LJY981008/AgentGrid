@@ -385,6 +385,51 @@ class EodhdSource:
             result.append(item)
         return result
 
+    def fetch_splits(
+        self,
+        ticker: str,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list[tuple[date, Decimal]]:
+        """분할 이력 — `GET /splits/{SYMBOL}.US` → (effective_on, ratio=신주/구주) 오름차순.
+
+        명세 docs/apis/eodhd/corporate-actions-splits-dividends.json — split 은
+        "4.000000/1.000000" **분수 문자열**('/' 분해 필요·명세 caveat). 2-for-1 → 2,
+        1:10 역분할 → 0.1. 파싱 실패·비양수 = 명시 실패(추측 금지). 추적 루프(M4)의
+        SPLIT 원장 소스 — adj_factor(분할+배당 혼합)를 수량 보정에 오용하지 않기 위한
+        분리 이벤트(스펙 §3.1). 토큰은 _fetch_json 단일 지점 주입(비노출 규약 동일).
+        """
+        from decimal import InvalidOperation
+
+        symbol = _to_symbol(ticker)
+        params: dict[str, str] = {"fmt": "json"}
+        if start is not None:
+            params["from"] = start.isoformat()
+        if end is not None:
+            params["to"] = end.isoformat()
+        rows = self._get_json_array(f"/splits/{symbol}", params=params, context=symbol)
+        out: list[tuple[date, Decimal]] = []
+        for row in rows:
+            effective_on = _parse_date(row.get("date"))
+            raw_split = row.get("split")
+            if effective_on is None or not isinstance(raw_split, str) or "/" not in raw_split:
+                msg = f"split 행 파싱 불가: context={symbol}, row={row!r}"
+                raise ValueError(msg)
+            num_s, _, den_s = raw_split.partition("/")
+            try:
+                num, den = Decimal(num_s), Decimal(den_s)
+            except InvalidOperation as exc:
+                msg = f"split 분수 파싱 불가: context={symbol}, split={raw_split!r}"
+                raise ValueError(msg) from exc
+            if num <= 0 or den <= 0:
+                msg = f"split 분수 비양수: context={symbol}, split={raw_split!r}"
+                raise ValueError(msg)
+            out.append((effective_on, num / den))
+        out.sort(key=lambda item: item[0])
+        logger.info("분할 이력 수집: symbol=%s, %d건", symbol, len(out))
+        return out
+
     def fetch_id_mapping(self, symbol: str) -> str | None:
         """ID-Mapping(ticker→CIK) — `symbol` 의 SEC CIK(10자리 zero-pad) 또는 None.
 
