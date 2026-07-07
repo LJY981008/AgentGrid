@@ -49,6 +49,23 @@ def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
     return facts
 
 
+def load_financial_facts_for(base_dir: Path, ciks: set[str]) -> list[FinancialFact]:
+    """지정 cik 재무 fact 만 로드(랭킹 enrich 타깃·전체 수백만 행 회피). Parquet per-cik 우선.
+
+    Parquet(A3) 있으면 `<CIK>.parquet` 직독(소수 파일), 부재(파일럿 JSON)면 전체 JSON 로드 후
+    ciks 필터. 빈 ciks = 빈 리스트. PIT 선택은 `latest_as_of` 가 별도(여기선 로드만).
+    """
+    if not ciks:
+        return []
+    from ..data.storage import load_financial_facts_for as _load_parquet_for
+
+    facts = _load_parquet_for(base_dir, ciks)
+    if facts:
+        return facts
+    # 파일럿 JSON 폴백(작음) — 전체 로드 후 ciks 필터.
+    return [f for f in load_financials(base_dir) if f.cik in ciks]
+
+
 def latest_as_of(
     facts: Iterable[FinancialFact],
     *,

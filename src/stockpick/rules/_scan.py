@@ -83,6 +83,15 @@ _SQL_CLOSE_AS_OF: Final = (  # noqa: S608
     f"SELECT ticker, arg_max(close, trade_date) {_FROM} "
     f"WHERE trade_date <= $as_of GROUP BY ticker ORDER BY ticker"
 )
+# ticker 필터판(타깃) — 소수 종목(랭킹 enrich)만. 전 트리 arg_max 대신 해당 ticker 행만 스캔.
+_SQL_CLOSE_AS_OF_T: Final = (  # noqa: S608
+    f"SELECT ticker, arg_max(close, trade_date) {_FROM} "
+    f"WHERE ticker = ANY($tickers) AND trade_date <= $as_of GROUP BY ticker ORDER BY ticker"
+)
+_SQL_CLOSE_ALL_T: Final = (  # noqa: S608
+    f"SELECT ticker, arg_max(close, trade_date) {_FROM} "
+    f"WHERE ticker = ANY($tickers) GROUP BY ticker ORDER BY ticker"
+)
 _SQL_CLOSE_ALL: Final = (  # noqa: S608
     f"SELECT ticker, arg_max(close, trade_date) {_FROM} GROUP BY ticker ORDER BY ticker"
 )
@@ -152,14 +161,19 @@ def load_adjusted_series(
     return series
 
 
-def load_close_as_of(base_dir: Path, *, as_of: date | None = None) -> dict[str, Decimal]:
+def load_close_as_of(
+    base_dir: Path, *, as_of: date | None = None, tickers: set[str] | None = None
+) -> dict[str, Decimal]:
     """Parquet 트리 → {ticker: as_of 이하 최신 거래일의 raw close}. P/B 분자(명목 시장가)용.
 
     ⚠️ raw close(미수정) 반환 — 수정주가(adjusted) 아님. P/B = 시장가/BVPS 는 **명목가** 기준이라야
     명목 장부가(equity/shares)와 일관(adjusted 는 back-adjust 라 명목 P/B 왜곡). 룩어헤드
     1차 가드: `trade_date <= as_of` 의 최신(arg_max(close, trade_date)). as_of=None 이면 전체 최신.
-    빈 트리면 빈 맵(조용한 추측 채움 금지). 모듈 경계: 읽기 전용 스캔.
+    빈 트리면 빈 맵(조용한 추측 채움 금지). `tickers` 지정 시 그 종목만(랭킹 enrich·풀스캔 회피).
+    모듈 경계: 읽기 전용 스캔.
     """
+    if tickers is not None and not tickers:
+        return {}  # 타깃 빈 집합 — 스캔 불필요
     dataset_root = base_dir / _DATASET_NAME
     files = sorted(str(p) for p in dataset_root.rglob("*.parquet"))
     if not files:
@@ -170,7 +184,13 @@ def load_close_as_of(base_dir: Path, *, as_of: date | None = None) -> dict[str, 
 
     glob = f"{dataset_root}/**/*.parquet"
     params: dict[str, object] = {"glob": glob}
-    if as_of is not None:
+    if tickers is not None:
+        # 타깃(소수 종목·랭킹 enrich) — 전 트리 arg_max(수만 종목·수GB) 회피.
+        params["tickers"] = sorted(tickers)
+        sql = _SQL_CLOSE_AS_OF_T if as_of is not None else _SQL_CLOSE_ALL_T
+        if as_of is not None:
+            params["as_of"] = as_of
+    elif as_of is not None:
         sql = _SQL_CLOSE_AS_OF
         params["as_of"] = as_of
     else:

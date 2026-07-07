@@ -810,6 +810,30 @@ def load_financial_facts(base_dir: Path) -> list[FinancialFact]:
     files = sorted(str(p) for p in dataset_root.glob("*.parquet"))
     if not files:
         return []
+    return _facts_from_files(files)
+
+
+def load_financial_facts_for(base_dir: Path, ciks: set[str]) -> list[FinancialFact]:
+    """지정 cik 의 financial_fact 만 로드(per-cik 파일 `<CIK>.parquet` 직독) — 랭킹 enrich 타깃.
+
+    전체 로드(load_financial_facts·수백만 행·수GB)를 피한다. 파일 부재 cik 은 조용히 건너뜀
+    (미백필·비신고 — 결측 명시는 상위 factors 가 None 처리). 빈 ciks = 빈 리스트.
+    """
+    if not ciks:
+        return []
+    dataset_root = base_dir / _FINANCIAL_DATASET_NAME
+    files = [
+        str(dataset_root / f"{cik}.parquet")
+        for cik in sorted(ciks)
+        if (dataset_root / f"{cik}.parquet").is_file()
+    ]
+    if not files:
+        return []
+    return _facts_from_files(files)
+
+
+def _facts_from_files(files: list[str]) -> list[FinancialFact]:
+    """financial_fact Parquet 파일 목록 → list[FinancialFact](행 형식 검증·공용 코어)."""
     table = pa.concat_tables([pq.read_table(f) for f in files])  # type: ignore[no-untyped-call]
     out: list[FinancialFact] = []
     for row in table.to_pylist():

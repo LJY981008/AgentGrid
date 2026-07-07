@@ -110,7 +110,11 @@ def create_round(
             status_code=422, detail="랭킹 산출 불가(데이터 없음) — 수집 먼저(/api/ingest)"
         )
     anchor_as_of = ranking.meta.as_of
-    raw_close = load_close_as_of(base_dir, as_of=anchor_as_of)
+    # anchor_close 는 top20 + 이월 포지션 티커만 필요 — 전 트리(수만 종목·수GB) 스캔 회피(OOM).
+    trades = repo.list_trades()
+    flows = repo.list_cash_flows()
+    needed_tickers = {e.ticker for e in ranking.entries} | {t.ticker for t in trades}
+    raw_close = load_close_as_of(base_dir, as_of=anchor_as_of, tickers=needed_tickers)
     snapshot = tuple(
         SnapshotEntry(
             cik=e.cik,
@@ -124,8 +128,6 @@ def create_round(
         for e in ranking.entries
     )
     # carry-in — 전역 원장 재생 현재 포지션(open 시점 동결·리포팅 앵커). 첫 라운드 = 빈.
-    trades = repo.list_trades()
-    flows = repo.list_cash_flows()
     carry: tuple[CarryInPosition, ...] = ()
     if trades:
         splits = repo.list_splits({t.ticker for t in trades})
