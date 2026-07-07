@@ -22,12 +22,19 @@ if TYPE_CHECKING:
 class InMemoryRoundRepository:
     """dict 기반 — id 자동 증가·open 유일·soft-void·splits 멱등(계약 동형)."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        stock_ids: dict[str, int] | None = None,
+        delisted: set[str] | None = None,
+    ) -> None:
         self._rounds: dict[int, PortfolioRound] = {}
         self._trades: dict[int, Trade] = {}
         self._flows: dict[int, CashFlow] = {}
         self._splits: dict[tuple[str, object], SplitEvent] = {}
         self._next_id = 1
+        self._stock_ids = dict(stock_ids or {})
+        self._delisted = set(delisted or set())
 
     def _new_id(self) -> int:
         nid = self._next_id
@@ -120,6 +127,14 @@ class InMemoryRoundRepository:
     def list_cash_flows(self, *, include_voided: bool = False) -> list[CashFlow]:
         flows = [f for f in self._flows.values() if include_voided or f.voided_at is None]
         return sorted(flows, key=lambda f: (f.flowed_on, f.id or 0))
+
+    # -- stock 마스터 참조 --
+
+    def stock_id_for(self, ticker: str) -> int | None:
+        return self._stock_ids.get(ticker)
+
+    def delisted_tickers(self, tickers: set[str]) -> set[str]:
+        return tickers & self._delisted
 
     # -- splits --
 

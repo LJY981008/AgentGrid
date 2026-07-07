@@ -25,7 +25,13 @@ from ..data.eodhd import EodhdSource
 from ..data.source import DataSource
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    import psycopg
+    from psycopg.rows import TupleRow
+
     from ..backtest.ports import IdentityResolver
+    from ..tracking.repo import RoundRepository
 
 _DEFAULT_DATA_DIR = "data/parquet"
 _DEFAULT_LEARNING_DIR = "docs/learning"
@@ -72,3 +78,32 @@ def get_identity_resolver(base_dir: Path = Depends(get_base_dir)) -> IdentityRes
     base_dir 별 캐시).
     """
     return _resolver_for(base_dir)
+
+
+def get_conn() -> Iterator[psycopg.Connection[TupleRow]]:
+    """요청 단위 PG 커넥션 — 성공 commit·예외 rollback·항상 close(레포 첫 DB Depends).
+
+    repo(PgRoundRepository)는 커밋하지 않는다(호출부 소유 규약) — 이 제너레이터가 요청
+    경계에서 단일 커밋/롤백을 소유해 부분 커밋(반쪽 상태)을 차단한다. 테스트는 상위
+    get_round_repo 를 InMemory 로 오버라이드해 이 함수를 아예 타지 않는다(라이브 0).
+    """
+    from ..data import db
+
+    conn = db.connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_round_repo(
+    conn: psycopg.Connection[TupleRow] = Depends(get_conn),
+) -> RoundRepository:
+    """추적 라운드 저장소 DI — 기본 PG 구현. 테스트는 InMemoryRoundRepository 오버라이드."""
+    from ..tracking.repo import PgRoundRepository
+
+    return PgRoundRepository(conn)

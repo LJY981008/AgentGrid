@@ -97,14 +97,14 @@ def repo(request: pytest.FixtureRequest) -> RoundRepository:
     _STOCK_IDS.clear()
     if request.param == "memory":
         _STOCK_IDS.update({"AAA": 1, "BBB": 2, "CCC": 3})
-        return InMemoryRoundRepository()
+        return InMemoryRoundRepository(stock_ids=dict(_STOCK_IDS), delisted={"CCC"})
     conn: psycopg.Connection[TupleRow] = request.getfixturevalue("pg_conn")
     with conn.cursor() as cur:  # trade.stock_id FK 충족용 최소 마스터
         for t in ("AAA", "BBB", "CCC"):
             cur.execute(
-                "INSERT INTO stock (ticker, name, exchange, source, ingested_at) "
-                "VALUES (%s, %s, 'NASDAQ', 'test', %s) RETURNING id",
-                (t, t, _STAMP),
+                "INSERT INTO stock (ticker, name, exchange, source, ingested_at, listing_status) "
+                "VALUES (%s, %s, 'NASDAQ', 'test', %s, %s) RETURNING id",
+                (t, t, _STAMP, "delisted" if t == "CCC" else "active"),
             )
             row = cur.fetchone()
             assert row is not None
@@ -207,3 +207,9 @@ def test_upsert_splits_idempotent(repo: RoundRepository) -> None:
     assert set(splits) == {"AAA"}
     assert len(splits["AAA"]) == 1
     assert splits["AAA"][0].ratio == Decimal("4")
+
+
+def test_stock_id_and_delisted_lookup(repo: RoundRepository) -> None:
+    assert repo.stock_id_for("AAA") == _STOCK_IDS["AAA"]
+    assert repo.stock_id_for("NOPE") is None
+    assert repo.delisted_tickers({"AAA", "CCC", "ZZZ"}) == {"CCC"}

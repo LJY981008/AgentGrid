@@ -12,7 +12,9 @@ shortfall_tickers (ticker, expected, actual) 튜플 → 명시적 객체).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -255,3 +257,169 @@ class LearningContent(BaseModel):
     path: str  # 요청 경로(상대)
     dir: str  # 이 문서가 속한 디렉토리(상대) — 프론트가 상대 이미지 URL 재작성에 사용
     content: str  # 마크다운 원문(렌더는 프론트 책임)
+
+
+# ── 추적·보정 루프(M4) — 라운드·거래·성과 계약(스펙 §6) ─────────────────────
+# 돈 필드는 API 표시용 float 변환(계산·영속은 Decimal — tracking/repo 책임). 동결 스냅샷은
+# repo 가 Decimal→str 로 저장(정밀도 보존). return_convention 필수 = 무표기 척도 혼합 차단.
+
+
+class SnapshotEntryModel(BaseModel):
+    """라운드 생성 시점 Top20 1행(동결 표시용)."""
+
+    cik: str
+    ticker: str
+    exchange: str
+    rank: int
+    score: float
+    factors: dict[str, float] = Field(default_factory=dict)
+    anchor_close: float | None = None
+
+
+class CarryInModel(BaseModel):
+    ticker: str
+    quantity: float
+    anchor_close: float | None = None
+
+
+class RetrospectiveModel(BaseModel):
+    """구조화 회고(close 필수) — outcome 아닌 process 채점 유도 3필드."""
+
+    judgment_good: str = Field(min_length=5, description="잘한 판단(근거 포함)")
+    judgment_bad: str = Field(min_length=5, description="잘못한 판단(근거 포함)")
+    rule_change: str = Field(min_length=2, description="다음 라운드 규칙 변경(없으면 '없음')")
+
+
+class RoundCreateRequest(BaseModel):
+    label: str = Field(min_length=1, description="라운드 라벨(예: 2026-07·UNIQUE)")
+    as_of: date | None = Field(default=None, description="스냅샷 평가 시점(미지정=최신 거래일)")
+
+
+class Top5Request(BaseModel):
+    memo: str = Field(min_length=5, description="Claude 토의 요약(선정 근거)")
+    top5: list[str] = Field(min_length=1, max_length=5, description="확정 종목(⊆ Top20)")
+
+
+class TradeCreateRequest(BaseModel):
+    ticker: str = Field(min_length=1)
+    side: Literal["BUY", "SELL"]
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(gt=0)
+    fee: Decimal = Field(default=Decimal(0), ge=0)
+    executed_on: date
+    note: str | None = None
+
+
+class CashFlowCreateRequest(BaseModel):
+    amount: Decimal = Field(description="입금 +, 출금 −(0 금지)")
+    flowed_on: date
+    note: str | None = None
+
+
+class VoidRequest(BaseModel):
+    reason: str = Field(min_length=2, description="void 사유(감사 추적)")
+
+
+class TradeModel(BaseModel):
+    id: int
+    round_id: int
+    ticker: str
+    side: str
+    quantity: float
+    price: float
+    fee: float
+    executed_on: date
+    note: str | None = None
+    voided_at: datetime | None = None
+    void_reason: str | None = None
+
+
+class CashFlowModel(BaseModel):
+    id: int
+    round_id: int
+    amount: float
+    flowed_on: date
+    note: str | None = None
+    voided_at: datetime | None = None
+
+
+class RoundModel(BaseModel):
+    """라운드 상세 — 스냅샷·validated 맥락 동결 표시(당시 값·미래 룰 검증과 무관)."""
+
+    id: int
+    label: str
+    status: str
+    opened_on: date
+    anchor_as_of: date
+    rule_signature: str
+    validated: bool
+    warning: str
+    top20: list[SnapshotEntryModel]
+    carry_in: list[CarryInModel] = Field(default_factory=list)
+    discussion_memo: str | None = None
+    top5: list[str] = Field(default_factory=list)
+    retrospective: RetrospectiveModel | None = None
+    closed_at: datetime | None = None
+    trades: list[TradeModel] = Field(default_factory=list)
+    cash_flows: list[CashFlowModel] = Field(default_factory=list)
+
+
+class RoundListItem(BaseModel):
+    id: int
+    label: str
+    status: str
+    opened_on: date
+    closed_at: datetime | None = None
+
+
+class PerfPoint(BaseModel):
+    day: date
+    value: float
+
+
+class SeriesPerfModel(BaseModel):
+    cumulative_return: float
+    max_drawdown: float
+    index: list[PerfPoint] = Field(default_factory=list)
+    unmeasurable: list[str] = Field(default_factory=list)
+
+
+class ContributionModel(BaseModel):
+    ticker: str
+    pnl: float
+
+
+class SlippageModel(BaseModel):
+    trade_id: int | None
+    ticker: str
+    side: str
+    exec_price: float
+    day_close: float | None
+    cost_pct: float | None
+
+
+class PerformanceResponse(BaseModel):
+    """4계열+파생 — 전 계열 price return(배당 미반영) 명시·공통 as-of 절단·판정유보 라벨."""
+
+    as_of: date
+    stale: bool
+    return_convention: Literal["price"]
+    actual: SeriesPerfModel
+    top5_model: SeriesPerfModel
+    top20_model: SeriesPerfModel
+    spy: SeriesPerfModel
+    selection_effect: float
+    execution_effect: float
+    contributions: list[ContributionModel]
+    slippages: list[SlippageModel]
+    hit_rate: float | None
+    n_picks_cumulative: int
+    verdict_deferred: bool
+    liquidated: list[str] = Field(default_factory=list)
+    validated: bool
+    warning: str
+
+
+class BenchmarkSyncResponse(BaseModel):
+    price_rows: int
+    split_events: int

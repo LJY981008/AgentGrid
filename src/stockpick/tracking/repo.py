@@ -79,6 +79,10 @@ class RoundRepository(Protocol):
 
     def upsert_splits(self, events: Sequence[SplitEvent]) -> int: ...
 
+    def stock_id_for(self, ticker: str) -> int | None: ...
+
+    def delisted_tickers(self, tickers: set[str]) -> set[str]: ...
+
     def list_splits(self, tickers: set[str]) -> dict[str, list[SplitEvent]]: ...
 
 
@@ -409,6 +413,31 @@ class PgRoundRepository:
             )
             rows = cur.fetchall()
         return [self._row_to_flow(row) for row in rows]
+
+    # -- stock 마스터 참조(FK 해소·폐지 판정) --
+
+    def stock_id_for(self, ticker: str) -> int | None:
+        """ticker → stock.id(FK 해소). 다중 행(재상장 등)은 active 우선·최신 id. 부재=None."""
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM stock WHERE ticker = %s "
+                "ORDER BY (listing_status = 'active') DESC, id DESC LIMIT 1",
+                (ticker,),
+            )
+            row = cur.fetchone()
+        return None if row is None else int(row[0])
+
+    def delisted_tickers(self, tickers: set[str]) -> set[str]:
+        """주어진 집합 중 폐지(listing_status='delisted') 종목 — 성과 as-of·청산 규약 입력."""
+        if not tickers:
+            return set()
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT ticker FROM stock WHERE ticker = ANY(%s) AND listing_status = 'delisted'",
+                (sorted(tickers),),
+            )
+            rows = cur.fetchall()
+        return {str(row[0]) for row in rows}
 
     # -- splits --
 
