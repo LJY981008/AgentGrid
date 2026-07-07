@@ -204,3 +204,143 @@ export interface LearningContent {
   dir: string; // 문서가 속한 디렉토리(상대) — 상대 이미지 URL 재작성 기준
   content: string; // 마크다운 원문(렌더는 프론트)
 }
+
+// --- tracking (M4 추적·보정 루프 — models.py 추적 계약 1:1) ---
+export interface SnapshotEntry {
+  cik: string;
+  ticker: string;
+  exchange: string;
+  rank: number;
+  score: number;
+  factors: Record<string, number>;
+  anchor_close: number | null;
+}
+
+export interface CarryIn {
+  ticker: string;
+  quantity: number;
+  anchor_close: number | null;
+}
+
+export interface Retrospective {
+  judgment_good: string;
+  judgment_bad: string;
+  rule_change: string;
+}
+
+export interface TradeItem {
+  id: number;
+  round_id: number;
+  ticker: string;
+  side: string; // "BUY" | "SELL"
+  quantity: number;
+  price: number;
+  fee: number;
+  executed_on: IsoDate;
+  note: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+}
+
+export interface CashFlowItem {
+  id: number;
+  round_id: number;
+  amount: number;
+  flowed_on: IsoDate;
+  note: string | null;
+  voided_at: string | null;
+}
+
+export interface Round {
+  id: number;
+  label: string;
+  status: string; // "open" | "closed"
+  opened_on: IsoDate;
+  anchor_as_of: IsoDate;
+  rule_signature: string;
+  validated: boolean; // 생성 시점 동결 값(과거 라운드 라벨 불변)
+  warning: string;
+  top20: SnapshotEntry[];
+  carry_in: CarryIn[];
+  discussion_memo: string | null;
+  top5: string[];
+  retrospective: Retrospective | null;
+  closed_at: string | null;
+  trades: TradeItem[];
+  cash_flows: CashFlowItem[];
+}
+
+export interface RoundListItem {
+  id: number;
+  label: string;
+  status: string;
+  opened_on: IsoDate;
+  closed_at: string | null;
+}
+
+export interface PerfPoint {
+  day: IsoDate;
+  value: number;
+}
+
+export interface SeriesPerf {
+  cumulative_return: number;
+  max_drawdown: number;
+  index: PerfPoint[];
+  unmeasurable: string[];
+}
+
+export interface Contribution {
+  ticker: string;
+  pnl: number;
+}
+
+export interface SlippageItem {
+  trade_id: number | null;
+  ticker: string;
+  side: string;
+  exec_price: number;
+  day_close: number | null;
+  cost_pct: number | null;
+}
+
+export interface Performance {
+  as_of: IsoDate;
+  stale: boolean;
+  return_convention: "price"; // 배당 미반영(전 계열 통일) — 화면에 명시
+  actual: SeriesPerf;
+  top5_model: SeriesPerf;
+  top20_model: SeriesPerf;
+  spy: SeriesPerf;
+  selection_effect: number;
+  execution_effect: number;
+  contributions: Contribution[];
+  slippages: SlippageItem[];
+  hit_rate: number | null;
+  n_picks_cumulative: number;
+  verdict_deferred: boolean; // 누적 pick N<20 — 판정 유보 라벨 고정
+  liquidated: string[];
+  validated: boolean;
+  warning: string;
+}
+
+export interface BenchmarkSyncResult {
+  price_rows: number;
+  split_events: number;
+}
+
+export interface TradeCreate {
+  ticker: string;
+  side: "BUY" | "SELL";
+  quantity: string; // Decimal 문자열(정밀도 — 서버 pydantic 이 파싱)
+  price: string;
+  fee?: string;
+  executed_on: IsoDate;
+  note?: string | null;
+}
+
+export interface CashFlowCreate {
+  amount: string; // 입금 +, 출금 −
+  flowed_on: IsoDate;
+  note?: string | null;
+}

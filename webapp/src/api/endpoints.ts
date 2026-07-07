@@ -9,14 +9,23 @@ import { apiRequest } from "./client";
 import type {
   BacktestQuery,
   BacktestResponse,
+  BenchmarkSyncResult,
+  CashFlowCreate,
+  CashFlowItem,
   DatasetSummary,
   HealthResponse,
   IngestRequest,
   IngestResult,
   LearningContent,
   LearningTree,
+  Performance,
   RankingQuery,
   RankingResponse,
+  Retrospective,
+  Round,
+  RoundListItem,
+  TradeCreate,
+  TradeItem,
 } from "./types";
 
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
@@ -76,4 +85,71 @@ export function getLearningTree(signal?: AbortSignal): Promise<LearningTree> {
 
 export function getLearningContent(path: string, signal?: AbortSignal): Promise<LearningContent> {
   return apiRequest<LearningContent>("/api/learning/content", { query: { path }, signal });
+}
+
+// --- tracking (M4 추적·보정 루프) ---
+
+export function getRounds(signal?: AbortSignal): Promise<RoundListItem[]> {
+  return apiRequest<RoundListItem[]>("/api/rounds", { signal });
+}
+
+export function getRound(id: number, signal?: AbortSignal): Promise<Round> {
+  return apiRequest<Round>(`/api/rounds/${id}`, { signal });
+}
+
+export function postRound(label: string, signal?: AbortSignal): Promise<Round> {
+  return apiRequest<Round>("/api/rounds", { method: "POST", body: { label }, signal });
+}
+
+export function patchTop5(
+  id: number,
+  memo: string,
+  top5: string[],
+  signal?: AbortSignal,
+): Promise<Round> {
+  return apiRequest<Round>(`/api/rounds/${id}`, { method: "PATCH", body: { memo, top5 }, signal });
+}
+
+export function postTrade(id: number, body: TradeCreate, signal?: AbortSignal): Promise<TradeItem> {
+  return apiRequest<TradeItem>(`/api/rounds/${id}/trades`, { method: "POST", body, signal });
+}
+
+export function postCashFlow(
+  id: number,
+  body: CashFlowCreate,
+  signal?: AbortSignal,
+): Promise<CashFlowItem> {
+  return apiRequest<CashFlowItem>(`/api/rounds/${id}/cash-flows`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+export function postVoidTrade(
+  tradeId: number,
+  reason: string,
+  signal?: AbortSignal,
+): Promise<TradeItem> {
+  return apiRequest<TradeItem>(`/api/trades/${tradeId}/void`, {
+    method: "POST",
+    body: { reason },
+    signal,
+  });
+}
+
+export function getPerformance(id: number, signal?: AbortSignal): Promise<Performance> {
+  return apiRequest<Performance>(`/api/rounds/${id}/performance`, { signal });
+}
+
+export function postCloseRound(
+  id: number,
+  retro: Retrospective,
+  signal?: AbortSignal,
+): Promise<Round> {
+  return apiRequest<Round>(`/api/rounds/${id}/close`, { method: "POST", body: retro, signal });
+}
+
+export function postBenchmarkSync(signal?: AbortSignal): Promise<BenchmarkSyncResult> {
+  return apiRequest<BenchmarkSyncResult>("/api/benchmark/sync", { method: "POST", signal });
 }

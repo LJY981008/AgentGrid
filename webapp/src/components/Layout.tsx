@@ -16,6 +16,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { to: "/", label: "랭킹", icon: "📊", end: true },
+  { to: "/tracking", label: "추적", icon: "💼" },
   { to: "/data", label: "데이터", icon: "🗄️" },
   { to: "/universe", label: "종목", icon: "📜" },
   { to: "/learn", label: "학습", icon: "📚" },

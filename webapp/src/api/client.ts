@@ -52,7 +52,7 @@ async function extractErrorMessage(res: Response): Promise<string> {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH";
   /** POST 본문(JSON 직렬화). */
   body?: unknown;
   /** 쿼리 파라미터. undefined/null 값은 생략. */
