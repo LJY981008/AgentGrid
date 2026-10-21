@@ -13,7 +13,7 @@ dependencies = [
     "prometheus-fastapi-instrumentator>=8,<9",
     "psycopg[binary]>=3.3.4",
     "pyarrow>=24.0.0",
-    "uvicorn[standard]>=0.49.0",
+    "uvicorn[standard]>=0.50.0",
 ]
 
 # 개발 도구는 PEP 735 dependency-group(uv 네이티브) — `uv sync` 가 기본 설치.
