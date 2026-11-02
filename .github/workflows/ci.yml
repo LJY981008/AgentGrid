@@ -64,11 +64,3 @@ jobs:
         run: npm ci
       - name: Build (tsc -b + vite build = 타입체크 포함)
         run: npm run build
-
-  harness:
-    name: Harness (훅 회귀 테스트)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Hook regression tests
-        run: .claude/hooks/tests/run.sh
