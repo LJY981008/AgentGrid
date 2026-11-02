@@ -21,6 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   2. 커밋 (한글 메시지, 서명/Co-Authored-By 금지)
   3. **작업 요약 리포트 출력** (5단: 원인/분석/대응/이유/결과&지표 — 정량 테이블, 문서 파일 생성 금지)
   4. **여기서 멈춤** (push 는 사용자 요청 시에만 — 기본 브랜치 **main**)
+- **커밋 태그**: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`
 
 ---
 
@@ -33,6 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **외부 데이터 API 코드** (Tiingo·EODHD 등) | [.claude/rules/api-spec-reference.md](.claude/rules/api-spec-reference.md) + [docs/apis/](docs/apis/) | 캡처된 JSON 명세가 진실원천(엔드포인트·필드 환각 금지). 없으면 tech-researcher 재캡처(eodhd-spec-capture/tiingo-spec-capture). claude-api 스킬은 LLM 호출 시 |
 | 버그·테스트/수집/백테스트 실패 | [debugging-discipline](.claude/skills/debugging-discipline/SKILL.md) | 추측 금지 + **이상결과 3분류**(버그/룩어헤드/생존편향) |
 | 기획 작업 | `docs/plans/` (현황: [PLAN_STATUS.md](docs/plans/PLAN_STATUS.md)) | product-planner. 기준선 = stock-1st_plan |
+| 스키마 변경 | **alembic 마이그레이션으로만** (`migrations/versions/` — [ADR-006](docs/decisions/ADR-006-PG스키마-alembic-첫실사용.md) 첫 실사용·`docker compose exec app alembic upgrade head`) | 직접 DDL 금지. PG18 기능은 raw SQL(op.execute) |
 
 ---
 
