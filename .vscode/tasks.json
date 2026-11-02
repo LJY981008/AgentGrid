@@ -36,13 +36,6 @@
       "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
-    },
-    {
-      "label": "hooks: 회귀 테스트",
-      "type": "shell",
-      "command": ".claude/hooks/tests/run.sh",
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": []
     }
   ]
 }
